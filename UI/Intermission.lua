@@ -300,6 +300,22 @@ function UI.IntermissionDeclare(declaration)
         UI.Print("Declaration refusee : " .. tostring(err))
         return
     end
+    -- On PUBLIE la decision horodatee dans les SavedVariables : le kit de
+    -- diagnostic (GideonDiagAddon) la lit ensuite, sans aucune saisie de chat
+    -- pendant le combat et sans communication inter-addons.
+    local db = _G.GideonRaidDB
+    if type(db) == "table" then
+        local clock
+        if type(date) == "function" then
+            clock = date("%Y-%m-%d %H:%M:%S")
+        end
+        ns.Config.recordDecision(db, {
+            composition = state.declaration,
+            at = (type(time) == "function") and time() or nil,
+            clock = clock,
+            source = "coach-panel",
+        })
+    end
     UI.IntermissionRefresh()
 end
 

@@ -77,6 +77,40 @@ function Config.getAssignment()
     return ns.Pairing.validateAssignment(db.assignment)
 end
 
+--- Publie la DERNIERE decision du joueur (clic sur un bouton de composition)
+--- dans les SavedVariables. C'est CE CHAMP que le kit de diagnostic
+--- (GideonDiagAddon) lit pour horodater le choix SANS aucune saisie de chat :
+--- on publie une donnee, on n'envoie AUCUN message (aucune communication
+--- inter-addons, interdite en instance).
+---
+--- Forme publiee : db.intermission.lastDecision =
+---   { composition = "3V1R", at = <epoch client>, clock = "YYYY-MM-DD HH:MM:SS",
+---     source = "coach-panel" }
+--- L'horodatage vient de la couche UI (elle seule a le droit d'appeler time()).
+--- @param db table SavedVariables
+--- @param record table { composition, at, clock, source }
+--- @return table|nil entree publiee (nil si la composition est refusee)
+function Config.recordDecision(db, record)
+    if type(db) ~= "table" or type(record) ~= "table" then
+        return nil
+    end
+    local key = ns.Intermission.normalizeDeclaration(record.composition)
+    if key == nil then
+        return nil
+    end
+    if type(db.intermission) ~= "table" then
+        db.intermission = Config.defaultIntermission()
+    end
+    local entry = {
+        composition = key,
+        at = tonumber(record.at),
+        clock = record.clock,
+        source = tostring(record.source or "coach-panel"),
+    }
+    db.intermission.lastDecision = entry
+    return entry
+end
+
 --- Resolution PURE de la configuration du module : borne, filtre les types
 --- incoherents, ne garde jamais une valeur impossible a rendre.
 --- @param raw table|nil contenu brut de GideonRaidDB.intermission

@@ -135,6 +135,15 @@ function stub.install()
     _G.UnitName = function()
         return "Testeur"
     end
+    -- Horloge cliente : c'est CE couple (time, date) que la couche UI utilise
+    -- pour publier la decision du joueur dans les SavedVariables (le kit de
+    -- diagnostic la relit ensuite). Core/ n'y touche jamais.
+    _G.time = function()
+        return 1758500000
+    end
+    _G.date = function()
+        return "2026-09-22 21:00:00"
+    end
     _G.C_Timer = {
         -- Appeles avec un point (C_Timer.NewTicker(duree, callback)) : pas de self.
         NewTicker = function(interval, fn)

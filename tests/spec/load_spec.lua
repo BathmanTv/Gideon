@@ -126,6 +126,28 @@ describe("chargement de l'addon", function()
         assert.matches("3V1R", panel.buttons[3]:GetText())
     end)
 
+    it("publie la decision du joueur dans les SavedVariables (lue par le kit diag)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[3]:Click() -- 3V1R
+        local decision = _G.GideonRaidDB.intermission.lastDecision
+        assert.is_not_nil(decision)
+        assert.equals("3V1R", decision.composition)
+        assert.equals(1758500000, decision.at)
+        assert.equals("2026-09-22 21:00:00", decision.clock)
+        assert.equals("coach-panel", decision.source)
+    end)
+
+    it("une declaration ambigue n'est ni acceptee ni publiee (aucune saisie de chat)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter 1")
+        local messages = table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
+        assert.matches("ambigu", messages)
+        assert.is_nil(_G.GideonRaidDB.intermission.lastDecision)
+    end)
+
     it("le ticker fait basculer la salle en obscurci apres 3 s", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START")

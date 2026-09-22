@@ -17,6 +17,10 @@ read_globals = {
     "UnitName", "GetLocale",
     -- Divers
     "C_Timer",
+    -- Horloge CLIENTE : utilisee UNIQUEMENT par UI/ pour horodater la decision
+    -- publiee dans les SavedVariables (le kit de diagnostic la relit). Core/ n'y
+    -- touche jamais (logique pure).
+    "time", "date",
 }
 
 files["tools/pairing_cli.lua"] = {
