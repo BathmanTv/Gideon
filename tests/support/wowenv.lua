@@ -31,6 +31,31 @@ function wowenv.loadCore()
     local ns = wowenv.newNamespace()
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
+    wowenv.load("Core/Intermission.lua", ns)
+    return ns
+end
+
+--- Liste les fichiers .lua du .toc, dans l'ordre de chargement du client.
+--- Garantit que lire le .toc et charger l'addon donnent le meme resultat.
+function wowenv.tocFiles(tocPath)
+    local path = tocPath or "GideonRaid.toc"
+    local out = {}
+    for line in io.lines(ROOT .. path) do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        if trimmed ~= "" and not trimmed:match("^#") then
+            out[#out + 1] = trimmed:gsub("\\", "/")
+        end
+    end
+    return out
+end
+
+--- Charge TOUS les fichiers lua listes dans le .toc, dans l'ordre du .toc.
+--- C'est ce chargement qui prouve qu'un fichier oublie/renomme fait echouer la CI.
+function wowenv.loadAddon(tocPath)
+    local ns = wowenv.newNamespace()
+    for _, rel in ipairs(wowenv.tocFiles(tocPath)) do
+        wowenv.load(rel, ns)
+    end
     return ns
 end
 

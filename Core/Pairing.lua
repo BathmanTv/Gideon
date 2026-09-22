@@ -175,5 +175,12 @@ function Pairing.validateAssignment(block)
         end
         clean[#clean + 1] = { a = pair.a, b = pair.b }
     end
-    return { pairs = clean, schema = tonumber(block.schema) or 1 }
+    local out = { pairs = clean, schema = tonumber(block.schema) or 1 }
+    -- Champ OPTIONNEL `plan` (role / position par joueur) : il est repris tel quel
+    -- et valide par Intermission.validatePlan / buildPlan (voir la doc du module).
+    -- On ne le filtre pas ici pour ne pas dupliquer le contrat a deux endroits.
+    if type(block.plan) == "table" then
+        out.plan = block.plan
+    end
+    return out
 end
