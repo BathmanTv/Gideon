@@ -7,7 +7,8 @@
     Interdictions 12.x (voir docs/CONVENTIONS.md) :
       - ne jamais lire UnitAura / UnitHealth / UnitPower d'une autre unite et
         faire un test dessus en combat : la valeur peut etre SECRETE.
-      - ne jamais enregistrer COMBAT_LOG_EVENT (erreur immediate en 12.0).
+      - ne jamais enregistrer un evenement de JOURNAL DE COMBAT (erreur immediate
+        en 12.x, voir docs/CONVENTIONS.md section 1.2).
       - ne jamais envoyer de message addon -> addon en instance.
     Les donnees affichees ici viennent EXCLUSIVEMENT de GideonRaidDB (ecrites
     hors jeu par GIDEON) ou de la saisie manuelle du joueur.
@@ -25,7 +26,7 @@ local function ensurePanel()
         return panel
     end
     panel = CreateFrame("Frame", "GideonRaidPanel", UIParent, "BackdropTemplate")
-    panel:SetSize(280, 220)
+    panel:SetSize(300, 260)
     panel:SetPoint("CENTER")
     panel:SetMovable(true)
     panel:EnableMouse(true)
@@ -77,11 +78,20 @@ function UI.Toggle()
 end
 
 --- Reconstruit l'affichage a partir des seules donnees non secretes.
+--- Le contenu (partenaire, roles, positions, paires) est calcule par
+--- Core/Intermission.buildPlan : cette couche ne fait que rendre des lignes.
 function UI.Refresh()
     local p = ensurePanel()
+    --- Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
+    --- Contrainte : on ne lit que le NOM de sa propre unite ("player"), jamais
+    --- une valeur d'unite (sante, aura, ressource) qui pourrait etre secrete.
     local me = UnitName("player")
     local lines = {}
     local assignment, err = ns.Config.getAssignment()
+
+    if _G.GideonRaidDB and type(_G.GideonRaidDB.scale) == "number" then
+        p:SetScale(_G.GideonRaidDB.scale)
+    end
 
     if not assignment then
         lines[#lines + 1] = "Aucune assignation GIDEON."
@@ -90,16 +100,13 @@ function UI.Refresh()
         lines[#lines + 1] = "Demande a GIDEON :"
         lines[#lines + 1] = "!g roster assign"
     else
-        local partner = ns.Pairing.findPartner(assignment, me)
-        if partner then
-            lines[#lines + 1] = "Ton partenaire : |cffffd200" .. partner .. "|r"
+        local plan, planErr = ns.Intermission.buildPlan(assignment, me)
+        if not plan then
+            lines[#lines + 1] = "|cffff5555Plan illisible|r (" .. tostring(planErr) .. ")"
         else
-            lines[#lines + 1] = "|cffff5555Tu n'as pas de partenaire.|r"
-        end
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = "Paires (" .. #assignment.pairs .. ") :"
-        for i, pair in ipairs(assignment.pairs) do
-            lines[#lines + 1] = string.format("  %d. %s - %s", i, pair.a, pair.b)
+            for _, line in ipairs(plan.lines) do
+                lines[#lines + 1] = line
+            end
         end
     end
 

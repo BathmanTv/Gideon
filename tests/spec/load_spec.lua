@@ -1,7 +1,11 @@
 --[[--------------------------------------------------------------------------
     tests/spec/load_spec.lua   (busted)
-    ETAPE 2 du plan de test : l'addon se charge sans erreur, dans l'ordre du
-    .toc, et les evenements ADDON_LOADED / PLAYER_LOGIN ne levent pas.
+    ETAPE 2 du plan de test : l'addon se charge sans erreur, DANS L'ORDRE DU .TOC,
+    et les evenements ADDON_LOADED / PLAYER_LOGIN / ENCOUNTER_START ne levent pas.
+
+    Le chargement passe par wowenv.loadAddon() : la liste des fichiers vient du
+    .toc lui-meme, donc un fichier oublie, renomme ou mal ordonne fait echouer ce
+    fichier de test (c'est le bug n°1 des addons).
 ----------------------------------------------------------------------------]]
 local stub = require("tests.support.wowapi_stub")
 local wowenv = require("tests.support.wowenv")
@@ -14,19 +18,26 @@ describe("chargement de l'addon", function()
         _G.GideonRaidDB = nil
         _G.GideonRaidCharDB = nil
         _G.GideonRaidPanel = nil
+        _G.GideonRaidIntermissionPanel = nil
+        _G.SlashCmdList = nil
         stub.install()
 
-        -- Reproduit l'ordre du .toc.
-        ns = wowenv.newNamespace()
-        wowenv.load("GideonRaid.lua", ns)
-        wowenv.load("Core/Config.lua", ns)
-        wowenv.load("Core/Pairing.lua", ns)
-        wowenv.load("UI/Panel.lua", ns)
+        -- Meme ordre que le client : celui du .toc.
+        ns = wowenv.loadAddon()
+    end)
+
+    it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
+        local files = wowenv.tocFiles()
+        assert.are.equal(6, #files)
+        assert.are.equal("GideonRaid.lua", files[1])
+        assert.are.equal("Core/Config.lua", files[2])
+        assert.are.equal("UI/Intermission.lua", files[6])
     end)
 
     it("expose toutes les couches attendues", function()
         assert.is_table(ns.Pairing)
         assert.is_table(ns.Config)
+        assert.is_table(ns.Intermission)
         assert.is_table(ns.UI)
         assert.is_table(ns.GR)
     end)
@@ -36,6 +47,7 @@ describe("chargement de l'addon", function()
         assert.is_table(_G.GideonRaidDB)
         assert.is_true(_G.GideonRaidDB.enabled)
         assert.is_table(_G.GideonRaidCharDB)
+        assert.is_table(_G.GideonRaidDB.intermission)
     end)
 
     it("ADDON_LOADED ignore les autres addons", function()
@@ -49,22 +61,84 @@ describe("chargement de l'addon", function()
         assert.is_true(true)
     end)
 
-    it("PLAYER_LOGIN affiche le partenaire si l'assignation existe", function()
+    it("PLAYER_LOGIN affiche le plan si l'assignation existe", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidDB.assignment = {
             schema = 1,
             pairs = { { a = "Testeur", b = "Partenaire" } },
+            plan = {
+                { name = "Testeur", role = "2", position = "MIDDLE" },
+                { name = "Partenaire", role = "2", position = "MIDDLE" },
+            },
         }
         stub.mainFrame():Fire("PLAYER_LOGIN")
-        assert.matches("Partenaire", _G.GideonRaidPanel.body:GetText())
+        local text = _G.GideonRaidPanel.body:GetText()
+        assert.matches("Partenaire", text)
+        assert.matches("Ton partenaire", text)
+        assert.matches("MIDDLE", text)
+        assert.matches("2%+2", text)
     end)
 
     it("le slash handler repond et ne leve pas", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("show")
         _G.SlashCmdList["GIDEONRAID"]("status")
+        _G.SlashCmdList["GIDEONRAID"]("plan")
+        _G.SlashCmdList["GIDEONRAID"]("inter status")
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
         local msgs = _G.DEFAULT_CHAT_FRAME.messages
         assert.is_truthy(#msgs >= 1)
+    end)
+
+    it("ENCOUNTER_START lance l'intermission sans lire ses arguments", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START", 1234, "Entombed Sentinels", 16, 20)
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.matches("REGARDE", panel.headline:GetText())
+    end)
+
+    it("le clic sur un bouton du panneau affiche la consigne", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[2]:Click()
+        assert.matches("TU ES 2", panel.body:GetText())
+        assert.matches("MILIEU", panel.body:GetText())
+        assert.matches("C_Ping%.SendMacroPing", panel.macroBox:GetText())
+    end)
+
+    it("le ticker fait basculer la salle en obscurci apres 3 s", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.matches("REGARDE", panel.headline:GetText())
+        -- 35 ticks de 0,1 s = 3,5 s : au-dela de la fenetre de 3 s.
+        stub.fireTickers(35)
+        assert.matches("OBSCUR", panel.headline:GetText())
+    end)
+
+    it("ENCOUNTER_END ferme le panneau", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.mainFrame():Fire("ENCOUNTER_END")
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
+    end)
+
+    it("respecte la desactivation du module", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter off")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
+        local messages = _G.DEFAULT_CHAT_FRAME.messages
+        assert.matches("desactive", messages[#messages])
+    end)
+
+    it("le panneau reste lisible et n'affiche aucune valeur dynamique", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        local text = _G.GideonRaidIntermissionPanel.body:GetText()
+        assert.is_nil(string.find(text, "UnitHealth", 1, true))
+        assert.is_nil(string.find(text, "UnitAura", 1, true))
     end)
 end)

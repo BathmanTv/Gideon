@@ -1,0 +1,23 @@
+<!--
+  GideonRaid / Bindings.xml
+
+  Ref API 12.1.0 : https://warcraft.wiki.gg/wiki/Creating_key_bindings
+  Contraintes verifiees sur cette page :
+    - le client charge Bindings.xml AUTOMATIQUEMENT : le fichier ne doit PAS
+      etre liste dans GideonRaid.toc ;
+    - le corps d'une <Binding> est du Lua execute INSECUREMENT : il ne peut donc
+      PAS appeler une fonction #protected (C_Ping.SendMacroPing est #protected),
+      et il ne sert ici qu'a ouvrir le panneau d'intermission ;
+    - `header` resout le global BINDING_HEADER_GIDEONRAID et le libelle affiche
+      vient de BINDING_NAME_GIDEONRAID_INTERMISSION (definis dans GideonRaid.lua) ;
+    - aucune touche par defaut : le joueur assigne la sienne dans
+      Options > Raccourcis > GideonRaid (evite d'ecraser un raccourci existant).
+
+  A confirmer en jeu : l'apparition de la binding dans la liste des raccourcis
+  (fichier XML non testable hors du client).
+-->
+<Bindings>
+    <Binding name="GIDEONRAID_INTERMISSION" header="GIDEONRAID">
+        if GideonRaid and GideonRaid.UI and GideonRaid.UI.IntermissionToggle then GideonRaid.UI.IntermissionToggle() end
+    </Binding>
+</Bindings>

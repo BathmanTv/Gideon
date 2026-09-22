@@ -1,7 +1,7 @@
 ## Interface: 120100
 ## Title: GideonRaid
-## Notes: Aide a l'appariement des debuffs pendant les intermissions de raid. Integre au bot Discord GIDEON.
-## Notes-frFR: Aide a l'appariement des debuffs pendant les intermissions de raid.
+## Notes: Aide a l'appariement des debuffs et a l'intermission des Entombed Sentinels. Integre au bot Discord GIDEON.
+## Notes-frFR: Aide a l'appariement et a l'intermission (Entombed Sentinels). Ne lit aucune API de combat.
 ## Version: @project-version@
 ## Author: Guilde (via GIDEON)
 ## SavedVariables: GideonRaidDB
@@ -12,7 +12,11 @@
 ## X-Wago-ID: 0
 
 # Fichiers charges dans l'ordre. Separateur = backslash, jamais de slash.
+# Bindings.xml n'est PAS liste ici : le client le charge automatiquement
+# (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
 Core\Config.lua
 Core\Pairing.lua
+Core\Intermission.lua
 UI\Panel.lua
+UI\Intermission.lua
