@@ -90,14 +90,20 @@ GideonRaid.lua  Câblage : événements, slash commands. Dépend des deux.
 GideonRaid/                      <- RACINE DU DEPOT = RACINE DE L'ADDON
 ├── GideonRaid.toc               <- nom du fichier == dossier d'install == package-as
 ├── GideonRaid.lua               <- point d'entrée (événements, slash)
+├── Bindings.xml                 <- binding(s) du panneau d'intermission. Chargé
+│                                   AUTOMATIQUEMENT par le client : JAMAIS listé
+│                                   dans le .toc (voir §10)
 ├── Core/
 │   ├── Config.lua               <- defaults + SavedVariables
-│   └── Pairing.lua              <- moteur d'appariement (PUR)
+│   ├── Pairing.lua              <- moteur d'appariement (PUR)
+│   └── Intermission.lua         <- Intermission Coach (PUR)
 ├── UI/
-│   └── Panel.lua                <- rendu
+│   ├── Panel.lua                <- rendu
+│   └── Intermission.lua         <- rendu du panneau d'intermission
 ├── libs/                        <- libs embarquées (externals), jamais éditées
 ├── tests/
 │   ├── spec/*_spec.lua          <- busted
+│   ├── fixtures/                <- blocs SavedVariables de référence (contrat)
 │   └── support/                 <- harnais (wowenv, stub API)
 ├── tools/                       <- scripts hors addon (exclus du zip)
 ├── docs/
@@ -230,3 +236,28 @@ Une tâche n'est terminée que si, **et seulement si** :
 - « Réparer » un token malformé (nom d'addon, numéro d'Interface, ID de projet
   CurseForge) : si une valeur ne respecte pas le format attendu, s'arrêter et
   demander.
+
+---
+
+## 10. Règles spécifiques au module « Intermission Coach »
+
+1. **Aucun automatisme revendiqué.** Tout ce que l'addon affiche vient soit d'un
+   clic du joueur, soit d'un bloc préparé hors jeu. Interdiction d'écrire dans
+   l'UI, la doc ou un message de commit qu'une action est « automatique »
+   lorsqu'elle dépend d'une déclaration du joueur.
+2. **Aucun ping envoyé par l'addon.** `C_Ping.SendMacroPing` est `#protected` —
+   <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing> : l'addon **génère le
+   texte d'une macro**, le joueur la déclenche. Le corps d'une `Bindings.xml` est
+   exécuté *insecurely* (<https://warcraft.wiki.gg/wiki/Creating_key_bindings>) :
+   il ne peut pas non plus appeler cette fonction.
+3. **`Bindings.xml` n'est JAMAIS listé dans le `.toc`** : le client le charge
+   automatiquement. `tools/check_toc.py` continue de ne vérifier que les `.lua`
+   du `.toc`.
+4. **Aucune valeur d'API de combat dans le module** : ni aura, ni santé, ni
+   ressource, ni cible. Seuls entrent le nom de sa propre unité
+   (`UnitName("player")`) et les chaînes de `GideonRaidDB`.
+5. **Le temps est injecté.** `Core/Intermission.tick(state, dt)` reçoit un pas de
+   temps constant fourni par le câblage : aucun `GetTime()` dans `Core/`.
+6. **L'UI dit ce qui est impossible.** Le panneau affiche explicitement que
+   « qui a déclaré quoi » est inconnu et que le ping est le seul signal visible
+   par les autres joueurs.

@@ -7,7 +7,7 @@ LUACHECK ?= luacheck
 STYLUA ?= stylua
 PYTHON ?= python3
 
-.PHONY: check lint fmt fmt-check test toc cli clean
+.PHONY: check lint fmt fmt-check test toc cli inter plan clean
 
 ## Porte complete (CI locale). Aucune excuse pour commiter si ca echoue.
 check: fmt-check lint toc test
@@ -28,7 +28,7 @@ syntax:
 		echo "OK $$f"; \
 	done
 
-## ETAPE 1 : tests unitaires hors jeu (logique d'appariement)
+## ETAPE 1 : tests unitaires hors jeu (logique d'appariement + intermission)
 test:
 	$(BUSTED)
 
@@ -39,6 +39,14 @@ toc:
 ## ETAPE 4 : appariement d'un roster, executable par GIDEON
 cli:
 	$(LUA) tools/pairing_cli.lua < tools/sample_roster.csv
+
+## ETAPE 3 : apercu hors jeu de l'Intermission Coach (convention + macros)
+inter:
+	$(LUA) tools/intermission_cli.lua all
+
+## Vue pre-pull d'un joueur, a partir du bloc d'assignation de reference
+plan:
+	$(LUA) tools/intermission_cli.lua plan Velna
 
 clean:
 	rm -rf .release

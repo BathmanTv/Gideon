@@ -23,6 +23,10 @@ files["tools/pairing_cli.lua"] = {
     std = "+busted",
 }
 
+files["tools/intermission_cli.lua"] = {
+    std = "+busted",
+}
+
 files["tests/support/**"] = {
     std = "+busted",
     ignore = { "212", "431", "432" },

@@ -15,7 +15,7 @@ Addon WoW Midnight 12.1.0 (`## Interface: 120100`) : il **affiche** les paires d
 joueurs aux debuffs complémentaires calculées **hors jeu par le bot Discord
 GIDEON**, jamais calculées dans le client.
 
-## Les 6 règles qui font échouer une PR
+## Les 7 règles qui font échouer une PR
 
 1. **Aucune API de combat dans `Core/`.** `Core/` doit être du Lua 5.1 pur,
    exécutable par `lua5.1` sans le client. Un symbole WoW dans `Core/` = refus.
@@ -31,6 +31,10 @@ GIDEON**, jamais calculées dans le client.
 5. **Aucun calcul dans `UI/`.** Le rendu reçoit des valeurs déjà calculées.
 6. **`make check` doit sortir en 0.** stylua + luacheck (0 warning) + check_toc
    + busted (tous verts).
+7. **Rien n'est déclaré « automatique » s'il dépend du joueur.** Le module
+   *Intermission Coach* n'affiche que ce que le joueur déclare (clic) ou ce qui a
+   été préparé hors jeu ; `Bindings.xml` n'est **jamais** listé dans le `.toc`
+   (le client le charge seul). Voir `docs/CONVENTIONS.md` §10.
 
 ## Boucle de travail imposée
 
@@ -75,8 +79,12 @@ Ordre de travail pour une nouvelle fonctionnalité :
 |---|---|
 | Règles de code complètes | `docs/CONVENTIONS.md` |
 | Plan de test, jeux de données, résultats attendus | `docs/TESTPLAN.md` |
+| Module Entombed Sentinels (convention, macro, « à confirmer en jeu ») | `docs/INTERMISSION-COACH.md` |
 | Contexte 12.x et distribution | `README.md` |
 | Chargeur hors jeu (tests) | `tests/support/wowenv.lua` |
 | Stub API minimal | `tests/support/wowapi_stub.lua` |
 | Moteur d'appariement | `Core/Pairing.lua` |
+| Intermission Coach (logique pure) | `Core/Intermission.lua` |
+| Panneau d'intermission (rendu) | `UI/Intermission.lua` |
+| Bloc d'assignation de référence (contrat) | `tests/fixtures/assignment_sample.lua` |
 | Validateur de `.toc` | `tools/check_toc.py` |

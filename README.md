@@ -3,7 +3,9 @@
 Addon de guilde (World of Warcraft : Midnight, `## Interface: 120100`) qui aide à
 la mécanique d'**appariement de joueurs portant des debuffs complémentaires**
 pendant une intermission de raid, avec le bot Discord **GIDEON** comme source
-d'assignation.
+d'assignation, et qui embarque un second module : l'**Intermission Coach** du
+boss *Entombed Sentinels* (mythique) — voir
+[`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
 
 ---
 
@@ -65,27 +67,62 @@ même résultat, donc comparable par `diff`.
 
 ---
 
-## 3. Structure
+## 3. Intermission Coach — *Entombed Sentinels* (mythique)
+
+Pendant cette intermission, chaque joueur reçoit au-dessus de sa tête une
+combinaison d'orbes (« 1 » = 1 vert + 3 rouges, « 2 » = 2-2, « 3 » = 3 verts +
+1 rouge) ; **2+2 et 1+3 sauvent, 2+3 = 5 verts = mort**, et au bout de **3 s** la
+salle s'obscurcit : chacun ne voit plus que son propre numéro.
+
+L'addon ne peut lire **ni les indicateurs des autres, ni les siens** (valeurs
+secrètes) et ne peut **pas envoyer de ping** (`C_Ping.SendMacroPing` est
+`#protected` : macros uniquement). Le module fait donc ce qui reste possible :
+
+| Écran | Contenu | Source de la donnée |
+|---|---|---|
+| Panneau principal (`/gr`) | partenaire, rôle, position, paires | bloc `assignment` préparé hors jeu par GIDEON |
+| Panneau d'intermission (`/gr inter` ou binding) | rappel en très gros, compte à rebours 3 s, boutons `1 / 2 / 3` | clic du joueur |
+| Après le clic | consigne (position, couleur/token de ping, à qui se coller) + **macro de ping prête à copier** | convention figée dans `Core/Intermission.lua` |
+
+**Rien n'est automatique.** L'interface l'écrit explicitement : *qui a déclaré
+quoi est INCONNU* (aucun canal addon→addon en instance, l'UI est locale au
+client) ; **le ping est le seul signal visible par les autres joueurs**.
+
+```bash
+make inter    # convention + macros, hors jeu
+make plan     # vue pre-pull à partir de la fixture de contrat
+```
+
+Détail complet (convention, contrat `plan`, configuration, points « à confirmer
+en jeu ») : [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
+
+---
+
+## 4. Structure
 
 ```
 GideonRaid/            <- RACINE DU DEPOT = RACINE DE L'ADDON (obligatoire)
 ├── GideonRaid.toc
-├── GideonRaid.lua     <- câblage : ADDON_LOADED, PLAYER_LOGIN, /gr
+├── GideonRaid.lua     <- câblage : ADDON_LOADED, PLAYER_LOGIN, ENCOUNTER_*, /gr
+├── Bindings.xml       <- binding du panneau d'intermission (chargé automatiquement,
+│                         JAMAIS listé dans le .toc)
 ├── Core/              <- LOGIQUE PURE (zéro API WoW, testable)
 │   ├── Config.lua
-│   └── Pairing.lua
+│   ├── Pairing.lua
+│   └── Intermission.lua
 ├── UI/                <- RENDU (zéro calcul)
-│   └── Panel.lua
+│   ├── Panel.lua
+│   └── Intermission.lua
 ├── libs/              <- libs embarquées (externals)
-├── tests/             <- busted (exclu du zip)
+├── tests/             <- busted + fixtures (exclu du zip)
 ├── tools/             <- CLI + validateur .toc (exclu du zip)
-├── docs/              <- CONVENTIONS.md, TESTPLAN.md (exclu du zip)
+├── docs/              <- CONVENTIONS.md, TESTPLAN.md, INTERMISSION-COACH.md (exclu du zip)
 └── .pkgmeta .luacheckrc .busted stylua.toml Makefile .github/
 ```
 
 ---
 
-## 4. Commandes (porte de sortie unique : `make check`)
+## 5. Commandes (porte de sortie unique : `make check`)
 
 ```bash
 make check    # stylua --check + luacheck + check_toc + busted   <- OBLIGATOIRE
@@ -93,16 +130,18 @@ make syntax   # vérification syntaxique Lua 5.1 (runtime du client)
 make test     # tests unitaires hors jeu (busted)
 make toc      # cohérence du .toc
 make cli      # appariement du roster d'exemple
+make inter    # convention + macros de l'Intermission Coach (hors jeu)
+make plan     # vue pre-pull à partir de la fixture d'assignation
 make fmt      # reformatage automatique
 ```
 
-Résultat de référence sur le squelette :
+Résultat de référence (après le module Intermission Coach) :
 
 ```
 $ make check
-Total: 0 warnings / 0 errors in 9 files        # luacheck
-OK GideonRaid.toc                              # check_toc
-  17 successes / 0 failures / 0 errors         # busted
+Total: 0 warnings / 0 errors in 14 files        # luacheck
+OK GideonRaid.toc                              # check_toc  (6 fichiers)
+  71 successes / 0 failures / 0 errors         # busted
 ```
 
 ### Outillage (installé et vérifié sur le VPS le 22/09/2026, Debian 13)
@@ -120,7 +159,7 @@ Versions vérifiées : `Lua 5.1.5`, `Lua 5.4.7`, `LuaJIT 2.1`, `luarocks 3.8.0`,
 
 ---
 
-## 5. Distribution (guilde de ~25 joueurs) — recommandation
+## 6. Distribution (guilde de ~25 joueurs) — recommandation
 
 ### Ce qui est retenu : dépôt privé + release GitHub + relais par GIDEON
 
@@ -159,13 +198,16 @@ créer le dépôt GitHub et pousser un tag.
 
 ---
 
-## 6. Documentation
+## 7. Documentation
 
 - [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) — règles de code **obligatoires**
   pour les agents (structure, nommage, commentaires citant la source API,
   interdiction de dépendre d'une valeur secrète, séparation logique/rendu).
 - [`docs/TESTPLAN.md`](docs/TESTPLAN.md) — plan de test en 4 étapes, jeux de
   données et résultats attendus.
+- [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md) — module
+  *Entombed Sentinels* : mécanique, convention de ping, macro, contrat `plan`,
+  configuration et liste des points **à confirmer en jeu**.
 - [`docs/AGENT-RULES.md`](docs/AGENT-RULES.md) — ce que tout agent de code
   (Claude Code, Codex, OpenCode) doit lire avant de toucher à ce dépôt.
   *(Nommé ainsi car l'environnement bloque la création d'un `AGENTS.md` : créer

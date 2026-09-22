@@ -9,7 +9,8 @@ que 90 % du risque soit éliminé avant d'ouvrir le client.
 | Étape | Objet | Outil | Fréquence | Où |
 |---|---|---|---|---|
 | 1 | Logique d'appariement (pure) | busted + lua5.1 | à chaque commit | CI + local |
-| 2 | Chargement de l'addon (câblage, .toc) | busted + stub API | à chaque commit | CI + local |
+| 1b | Intermission Coach : convention des orbes + machine d'état (pure) | busted + lua5.1 | à chaque commit | CI + local |
+| 2 | Chargement de l'addon (câblage, .toc, événements) | busted + stub API | à chaque commit | CI + local |
 | 3 | Rendu et ergonomie en jeu | client de test | avant chaque patch | client WoW |
 | 4 | Intégration GIDEON bout en bout | CLI Lua + Discord | avant chaque raid | VPS + Discord |
 
@@ -23,8 +24,8 @@ Porte de sortie unique : **`make check`** (stylua + luacheck + toc + busted).
 l'API WoW. Il est donc exécutable par `lua5.1` et par `busted`, installés sur le
 VPS et sur le runner GitHub.
 
-**Fichier** : `tests/spec/pairing_spec.lua` (17 assertions = 17 tests au total
-avec `load_spec.lua`).
+**Fichier** : `tests/spec/pairing_spec.lua` (11 tests ; le total du dépôt est de
+**71 tests** avec `load_spec.lua` (13) et `intermission_spec.lua` (47)).
 
 **Lancement** :
 
@@ -80,7 +81,38 @@ exactement le même résultat, sur le client comme dans GIDEON.
 | `findPartner` | bilatéral + inconnu | `"B"`, `"A"`, `nil` |
 | `validateAssignment` | bloc GIDEON valide / malformé | filtré / rejeté |
 
-**Critère de passage** : `17 successes / 0 failures / 0 errors`.
+**Critère de passage** : `71 successes / 0 failures / 0 errors`.
+
+---
+
+## Étape 1b — Tests hors jeu de l'Intermission Coach (logique pure)
+
+**Objectif** : tout ce qui dépend d'une règle métier (convention des orbes,
+collisions, machine d'état de l'intermission, vue pré-pull, bornes de
+configuration) est testé **hors du client**, parce qu'en jeu il n'y a rien à
+observer : l'addon ne lit aucune API de combat.
+
+**Fichier** : `tests/spec/intermission_spec.lua` (47 tests).
+
+**Ce qui est vérifié :**
+
+| Famille | Cas |
+|---|---|
+| Convention | orbes de « 1 » / « 2 » / « 3 », positions GAUCHE / MILIEU / DROITE, pings ROUGE (`Warning`) / BLEU (`OnMyWay`) / VERT (`Assist`), copie non mutable, saisie normalisée |
+| Collisions | `2+2` OK, `1+3` OK dans les deux sens, `2+3` = 5 verts = mort, `1+1` et `3+3` refusés |
+| Macro | appel `C_Ping.SendMacroPing` par déclaration, jeton de cible, variante `/ping`, note « à confirmer », **absence de texte d'événement interdit** |
+| Timeline | valeurs par défaut (3 s), valeurs préparées, bornes (1–10 s, 3–120 s), `durée > visibilité` |
+| Machine d'état | `IDLE → VISIBLE (3 s) → DARK → DONE`, compte à rebours 3/2/1/0, déclaration pendant VISIBLE et DARK, refus avant démarrage et après la fin, `reset`, `dt` négatif/non numérique ignoré, déterminisme (mêmes entrées ⇒ même rapport) |
+| Vue pré-pull | partenaire, rôle, position, rencontre `2+2` OK / `2+3` MORT, paires triées par nom, plan absent, plan malformé, joueur absent, assignment invalide |
+| Configuration | defaults frais (pas d'alias entre comptes), bornes d'échelle et de durées, types incohérents ignorés |
+
+**Aperçu hors jeu** (vérifiable à la main, sans client) :
+
+```
+$ lua5.1 tools/intermission_cli.lua all      # convention + macros
+$ lua5.1 tools/intermission_cli.lua pair 2 3 # -> 2+3 : MORT (5 verts = 5g : MORT)
+$ lua5.1 tools/intermission_cli.lua plan Velna
+```
 
 ---
 
@@ -93,15 +125,30 @@ combat n'est mockée, car aucun fichier n'en appelle.
 
 **Fichier** : `tests/spec/load_spec.lua`.
 
+Le chargement se fait via `wowenv.loadAddon()`, qui **lit le `.toc`** et charge
+ses fichiers dans l'ordre : un fichier oublié, renommé ou mal ordonné fait
+échouer le test (c'est le bug n°1 des addons).
+
 Ce qui est vérifié :
 
-1. les 4 couches (`ns.Pairing`, `ns.Config`, `ns.UI`, `ns.GR`) sont exposées ;
-2. `ADDON_LOADED` sur `GideonRaid` initialise `GideonRaidDB` avec les defaults ;
+1. les 6 fichiers du `.toc` sont chargés dans l'ordre, et les 5 couches
+   (`ns.Pairing`, `ns.Config`, `ns.Intermission`, `ns.UI`, `ns.GR`) sont exposées ;
+2. `ADDON_LOADED` sur `GideonRaid` initialise `GideonRaidDB` avec les defaults
+   (dont `intermission`) ;
 3. `ADDON_LOADED` sur un **autre** addon ne touche pas aux SavedVariables ;
 4. `PLAYER_LOGIN` sans assignation ne lève pas ;
-5. `PLAYER_LOGIN` **avec** assignation affiche le bon partenaire dans le panneau ;
-6. le slash handler (`/gr show`, `/gr status`, commande inconnue) répond sans
-   lever.
+5. `PLAYER_LOGIN` **avec** assignation affiche le plan (partenaire, rôle,
+   position, rencontre `2+2`) dans le panneau ;
+6. le slash handler (`/gr show`, `/gr status`, `/gr plan`, `/gr inter status`,
+   commande inconnue) répond sans lever ;
+7. `ENCOUNTER_START` (avec ses arguments d'instance) ouvre le panneau
+   d'intermission sans qu'aucun argument soit lu ;
+8. un clic sur le bouton « 2 » affiche la consigne complète et la macro de ping ;
+9. le ticker fait basculer l'affichage en « salle obscurcie » 3 s après le début
+   (35 ticks de 0,1 s) ;
+10. `ENCOUNTER_END` ferme le panneau ;
+11. la désactivation (`/gr inter off`) est respectée ;
+12. le panneau n'affiche aucune valeur dynamique (aucun appel d'API de combat).
 
 **Vérification du `.toc`** (`tools/check_toc.py`, en CI) :
 
@@ -111,7 +158,7 @@ OK GideonRaid.toc
   Interface  : 120100
   Version    : @project-version@
   SavedVar   : GideonRaidDB
-  Fichiers   : 4
+  Fichiers   : 6
 ```
 
 Il vérifie : nom du `.toc` == `package-as`, `## Interface:` numérique et
@@ -198,10 +245,29 @@ change vite en pleine transition 12.x.
 - On ne teste pas l'*affichage correct de l'aura* de l'autre joueur : le client
   ne nous la donne pas.
 - On ne teste pas la synchronisation « en direct » : aucun canal addon→addon en
-  instance. La synchronisation est asynchrone **par conception** (GIDEON →
-  file → `/reload`).
+  instance. La synchronisation est asynchrone **par conception** (GIDEON → file
+  → `/reload`).
+- Pour l'intermission des *Entombed Sentinels* : on ne teste **pas** que l'addon
+  « connaît » l'orbes des autres joueurs — il ne les connaît pas et ne les
+  connaîtra jamais (valeurs secrètes). Le seul test possible est que **ce que le
+  joueur voit sur son écran** correspond à ce qu'il a déclaré.
 
-### 3.5 Environnement de test recommandé
+### 3.5 Protocole en jeu — Intermission Coach (à faire avant le premier pull)
+
+| # | Action | Attendu |
+|---|---|---|
+| 1 | `/gr` hors instance | « Ton partenaire : … » + liste des paires (bloc `assignment` préparé par GIDEON) |
+| 2 | `/gr plan` | le plan détaillé dans le chat (rôle, position, rencontre) |
+| 3 | `bindings` : Options > Raccourcis > GideonRaid, assigner une touche | la binding apparaît ; la touche ouvre/ferme le panneau |
+| 4 | Entrer sur *Entombed Sentinels*, pull le boss | le panneau s'ouvre seul sur `ENCOUNTER_START` (points 1 et 2 : **à confirmer**) |
+| 5 | Pendant les 3 s de visibilité | le rappel affiche « REGARDE AU-DESSUS DES TETES : 3 » puis 2, 1 |
+| 6 | Compter ses orbes, clique `1` / `2` / `3` | la consigne (position + couleur de ping) et la macro apparaissent |
+| 7 | Coller la macro dans une macro de jeu (60 s avant le pull) | le ping part avec la bonne couleur — **syntaxe à confirmer, c'est le point n°1 de la liste `docs/INTERMISSION-COACH.md` §9** |
+| 8 | Vérifier après 3 s | « SALLE OBSCURCIE » : le panneau reste lisible, aucun texte dynamique |
+| 9 | Fin du combat | `ENCOUNTER_END` ferme le panneau |
+| 10 | `/console scriptErrors 1` sur 10 min de raid | **aucune** erreur Lua (typiquement `attempt to compare a secret value` = régression bloquante) |
+
+### 3.6 Environnement de test recommandé
 
 Un seul joueur « cobaye » suffit : l'essentiel (lecture de `GideonRaidDB`,
 rendu) ne dépend d'aucun autre joueur. Les tests à 2+ joueurs seraient
@@ -228,9 +294,21 @@ GideonRaidDB = {
             { a = "Bathman", b = "Coren" },
             -- ...
         },
+        -- OPTIONNEL : plan prepare hors jeu (role / position par joueur).
+        -- `role` accepte la declaration "1" / "2" / "3" ou un role libre.
+        plan = {
+            { name = "Velna",   role = "2", position = "MIDDLE" },
+            { name = "Torgh",   role = "2", position = "MIDDLE" },
+            { name = "Bathman", role = "1", position = "LEFT"   },
+            { name = "Coren",   role = "3", position = "RIGHT"  },
+        },
     },
 }
 ```
+
+Fixture de contrat executable : `tests/fixtures/assignment_sample.lua`
+(utilisee par `tests/spec/intermission_spec.lua` et par
+`lua5.1 tools/intermission_cli.lua plan <Nom>`).
 
 - `schema` est **obligatoire** : si GIDEON passe à 2 et que l'addon est en 1,
   l'addon doit refuser le bloc (aujourd'hui `validateAssignment` l'accepte et le
@@ -278,10 +356,14 @@ déjà couvert à l'étape 1 et 2.
 |---|---|---|
 | Mauvais appariement | 1 | 17 tests, dataset de 20 joueurs |
 | Résultat non déterministe | 1 | test « insensible à l'ordre d'entrée » |
-| Fichier oublié dans le `.toc` | 2 | `check_toc.py` |
+| Convention des orbes / collisions fausses | 1b | 47 tests (2+2, 1+3, `2+3` = 5 verts) |
+| Compte à rebours / passage en salle obscurcie faux | 1b + 2 | machine d'état déterministe + ticker testé |
+| Macro de ping inutilisable ou mal ciblée | 1b + 3 | texte généré + protocole §3.5 point 7 (« à confirmer en jeu ») |
+| Déclarer une chose et afficher une autre | 1b + 2 | consigne issue de la même table que la macro |
+| Fichier oublié dans le `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
 | Erreur de syntaxe Lua 5.1 | 2 | `make syntax` |
 | Crash au login / mauvais événement | 2 | `load_spec.lua` |
-| Panneau illisible en raid | 3 | protocole manuel §3.2 |
-| Erreur secret value en combat | 3 | §3.0 + revue de code (conventions §1) |
-| Dérive du format GIDEON | 4 | test de contrat + round-trip |
+| Panneau illisible en raid | 3 | protocole manuel §3.2 et §3.5 |
+| Erreur secret value en combat | 3 | §3.0 + revue de code (conventions §1 et §10) |
+| Dérive du format GIDEON (paires **et** `plan`) | 4 | test de contrat + round-trip |
 | Version d'Interface obsolète | 2 | `check_toc.py` (seuil 120100) |
