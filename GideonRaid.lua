@@ -47,7 +47,11 @@ end
 
 local function slashHandler(cmd)
     cmd = (cmd or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-    local declaration = cmd:match("^inter%s+([123])$")
+    -- Declaration d'intermission : toute forme acceptee par Core (« 3V1R », « 2V2R »,
+    -- « 1V3R », « 3 verts », « 2 »). Les sous-commandes (start/stop/on/off/status/
+    -- macro/reset) sont traitees AVANT, donc tout le reste est une declaration.
+    -- « 1 » ou « 3 » SEUL est refuse par Core (ambigu) : il demandera la couleur.
+    local declaration = cmd:match("^inter%s+(.+)$")
     if cmd == "" or cmd == "show" then
         ns.UI.Toggle()
     elseif cmd == "reset" then
@@ -78,7 +82,7 @@ local function slashHandler(cmd)
     elseif declaration ~= nil then
         ns.UI.IntermissionDeclare(declaration)
     else
-        ns.UI.Print("Commandes : /gr | /gr plan | /gr status | /gr reset | /gr inter [start|stop|1|2|3|on|off|status|macro]")
+        ns.UI.Print("Commandes : /gr | /gr plan | /gr status | /gr reset | /gr inter [start|stop|on|off|status|macro|3V1R|2V2R|1V3R]")
     end
 end
 

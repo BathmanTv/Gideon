@@ -69,10 +69,15 @@ même résultat, donc comparable par `diff`.
 
 ## 3. Intermission Coach — *Entombed Sentinels* (mythique)
 
-Pendant cette intermission, chaque joueur reçoit au-dessus de sa tête une
-combinaison d'orbes (« 1 » = 1 vert + 3 rouges, « 2 » = 2-2, « 3 » = 3 verts +
-1 rouge) ; **2+2 et 1+3 sauvent, 2+3 = 5 verts = mort**, et au bout de **3 s** la
-salle s'obscurcit : chacun ne voit plus que son propre numéro.
+Pendant cette intermission, chaque joueur voit un **numéro** au-dessus de sa
+tête, mais **le numéro ne détermine pas les couleurs** : seul « **2** » est non
+ambigu (toujours 2 verts + 2 rouges) ; « **1** » et « **3** » peuvent être soit
+3 verts + 1 rouge, soit 1 vert + 3 rouges — c'est la **couleur des orbes** qui
+tranche. Il n'existe donc que **trois états réels** (`3V1R`, `2V2R`, `1V3R`) et la
+règle de survie est une **addition de couleurs** : la somme des deux joueurs doit
+faire **4 verts + 4 rouges** (`3V1R+1V3R` ou `2V2R+2V2R`). Toute autre
+combinaison tue ; `3V1R + 2V2R` = **5 verts** = le « 5g ». Au bout de **3 s** la
+salle s'obscurcit : chacun ne voit plus que ses propres orbes.
 
 L'addon ne peut lire **ni les indicateurs des autres, ni les siens** (valeurs
 secrètes) et ne peut **pas envoyer de ping** (`C_Ping.SendMacroPing` est
@@ -81,8 +86,8 @@ secrètes) et ne peut **pas envoyer de ping** (`C_Ping.SendMacroPing` est
 | Écran | Contenu | Source de la donnée |
 |---|---|---|
 | Panneau principal (`/gr`) | partenaire, rôle, position, paires | bloc `assignment` préparé hors jeu par GIDEON |
-| Panneau d'intermission (`/gr inter` ou binding) | rappel en très gros, compte à rebours 3 s, boutons `1 / 2 / 3` | clic du joueur |
-| Après le clic | consigne (position, couleur/token de ping, à qui se coller) + **macro de ping prête à copier** | convention figée dans `Core/Intermission.lua` |
+| Panneau d'intermission (`/gr inter` ou binding) | rappel en très gros, compte à rebours 3 s, **trois boutons nommés par la composition visible** (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, numéro en indice) | clic du joueur |
+| Après le clic | consigne (ce que tu as, ce que tu dois faire, état à rejoindre, couleur/token de ping) + **macro de ping prête à copier** | convention figée dans `Core/Intermission.lua` |
 
 **Rien n'est automatique.** L'interface l'écrit explicitement : *qui a déclaré
 quoi est INCONNU* (aucun canal addon→addon en instance, l'UI est locale au
@@ -135,13 +140,13 @@ make plan     # vue pre-pull à partir de la fixture d'assignation
 make fmt      # reformatage automatique
 ```
 
-Résultat de référence (après le module Intermission Coach) :
+Résultat de référence (après la correction du modèle de couleurs) :
 
 ```
 $ make check
-Total: 0 warnings / 0 errors in 14 files        # luacheck
+Total: 0 warnings / 0 errors in 15 files        # luacheck
 OK GideonRaid.toc                              # check_toc  (6 fichiers)
-  71 successes / 0 failures / 0 errors         # busted
+  88 successes / 0 failures / 0 errors         # busted
 ```
 
 ### Outillage (installé et vérifié sur le VPS le 22/09/2026, Debian 13)

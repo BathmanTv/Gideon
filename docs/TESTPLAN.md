@@ -87,30 +87,32 @@ exactement le même résultat, sur le client comme dans GIDEON.
 
 ## Étape 1b — Tests hors jeu de l'Intermission Coach (logique pure)
 
-**Objectif** : tout ce qui dépend d'une règle métier (convention des orbes,
+**Objectif** : tout ce qui dépend d'une règle métier (états de couleur,
 collisions, machine d'état de l'intermission, vue pré-pull, bornes de
 configuration) est testé **hors du client**, parce qu'en jeu il n'y a rien à
 observer : l'addon ne lit aucune API de combat.
 
-**Fichier** : `tests/spec/intermission_spec.lua` (47 tests).
+**Fichier** : `tests/spec/intermission_spec.lua` (59 tests).
 
 **Ce qui est vérifié :**
 
 | Famille | Cas |
 |---|---|
-| Convention | orbes de « 1 » / « 2 » / « 3 », positions GAUCHE / MILIEU / DROITE, pings ROUGE (`Warning`) / BLEU (`OnMyWay`) / VERT (`Assist`), copie non mutable, saisie normalisée |
-| Collisions | `2+2` OK, `1+3` OK dans les deux sens, `2+3` = 5 verts = mort, `1+1` et `3+3` refusés |
-| Macro | appel `C_Ping.SendMacroPing` par déclaration, jeton de cible, variante `/ping`, note « à confirmer », **absence de texte d'événement interdit** |
+| États de couleur | les trois états `1V3R` / `2V2R` / `3V1R` (libellé, verts ET rouges, numéros possibles, ping, complément, consigne), « 2 » seul non ambigu, « 1 »/« 3 » ambigus, ordre déterministe, copie non mutable |
+| Normalisation | `3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`, `vvrr`, `3 verts`, `1 vert 3 rouges`, couleur dominante seule (« vert », « majorité verte »), « 2 » accepté, **« 1 »/« 3 » seuls refusés avec message « ambigu »**, saisies vides/inconnues/inexploitables refusées |
+| Collisions | `3V1R+1V3R` OK dans les deux sens, `2V2R+2V2R` OK, `3V1R+2V2R` = 5 verts = mort, `1V3R+1V3R` et `3V1R+3V1R` refusés, comparaison sur un numéro ambigu refusée |
+| Macro | appel `C_Ping.SendMacroPing` par état (couleur dominante), jeton de cible, variante `/ping`, note « à confirmer », **absence de texte d'événement interdit**, aucune macro sur un numéro ambigu |
 | Timeline | valeurs par défaut (3 s), valeurs préparées, bornes (1–10 s, 3–120 s), `durée > visibilité` |
-| Machine d'état | `IDLE → VISIBLE (3 s) → DARK → DONE`, compte à rebours 3/2/1/0, déclaration pendant VISIBLE et DARK, refus avant démarrage et après la fin, `reset`, `dt` négatif/non numérique ignoré, déterminisme (mêmes entrées ⇒ même rapport) |
-| Vue pré-pull | partenaire, rôle, position, rencontre `2+2` OK / `2+3` MORT, paires triées par nom, plan absent, plan malformé, joueur absent, assignment invalide |
+| Machine d'état | `IDLE → VISIBLE (3 s) → DARK → DONE`, compte à rebours 3/2/1/0, déclaration pendant VISIBLE et DARK, refus avant démarrage, sur numéro ambigu et après la fin, `reset`, `dt` négatif/non numérique ignoré, déterminisme (mêmes entrées ⇒ même rapport) |
+| Vue pré-pull | partenaire, rôle (composition), position, rencontre `2V2R+2V2R` OK / `3V1R+2V2R` MORT / `1V3R+3V1R` OK / **non vérifiable si le rôle reste ambigu**, paires triées par nom et insensibles à l'ordre d'entrée, plan absent, plan malformé, joueur absent, assignment invalide |
 | Configuration | defaults frais (pas d'alias entre comptes), bornes d'échelle et de durées, types incohérents ignorés |
 
 **Aperçu hors jeu** (vérifiable à la main, sans client) :
 
 ```
-$ lua5.1 tools/intermission_cli.lua all      # convention + macros
-$ lua5.1 tools/intermission_cli.lua pair 2 3 # -> 2+3 : MORT (5 verts = 5g : MORT)
+$ lua5.1 tools/intermission_cli.lua all          # les 3 états + macros
+$ lua5.1 tools/intermission_cli.lua 1            # -> REFUS : numéro ambigu
+$ lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R # -> 3V1R+2V2R : MORT (5 verts = 5g)
 $ lua5.1 tools/intermission_cli.lua plan Velna
 ```
 
@@ -138,12 +140,13 @@ Ce qui est vérifié :
 3. `ADDON_LOADED` sur un **autre** addon ne touche pas aux SavedVariables ;
 4. `PLAYER_LOGIN` sans assignation ne lève pas ;
 5. `PLAYER_LOGIN` **avec** assignation affiche le plan (partenaire, rôle,
-   position, rencontre `2+2`) dans le panneau ;
+   position, rencontre `2V2R+2V2R`) dans le panneau ;
 6. le slash handler (`/gr show`, `/gr status`, `/gr plan`, `/gr inter status`,
    commande inconnue) répond sans lever ;
 7. `ENCOUNTER_START` (avec ses arguments d'instance) ouvre le panneau
    d'intermission sans qu'aucun argument soit lu ;
-8. un clic sur le bouton « 2 » affiche la consigne complète et la macro de ping ;
+8. les trois boutons portent la composition visible (numéro en indice) et un clic
+   sur un bouton affiche la consigne complète et la macro de ping ;
 9. le ticker fait basculer l'affichage en « salle obscurcie » 3 s après le début
    (35 ticks de 0,1 s) ;
 10. `ENCOUNTER_END` ferme le panneau ;
@@ -356,7 +359,7 @@ déjà couvert à l'étape 1 et 2.
 |---|---|---|
 | Mauvais appariement | 1 | 17 tests, dataset de 20 joueurs |
 | Résultat non déterministe | 1 | test « insensible à l'ordre d'entrée » |
-| Convention des orbes / collisions fausses | 1b | 47 tests (2+2, 1+3, `2+3` = 5 verts) |
+| Convention des orbes / collisions fausses | 1b | 59 tests (états 3V1R/2V2R/1V3R, `3V1R+1V3R` et `2V2R+2V2R` sûrs, `3V1R+2V2R` = 5 verts, numéro ambigu refusé) |
 | Compte à rebours / passage en salle obscurcie faux | 1b + 2 | machine d'état déterministe + ticker testé |
 | Macro de ping inutilisable ou mal ciblée | 1b + 3 | texte généré + protocole §3.5 point 7 (« à confirmer en jeu ») |
 | Déclarer une chose et afficher une autre | 1b + 2 | consigne issue de la même table que la macro |

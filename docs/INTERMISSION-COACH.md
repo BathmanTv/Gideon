@@ -12,30 +12,59 @@ Guide de référence :
 
 ## 1. La mécanique, telle qu'elle est implémentée
 
-- Pendant l'intermission, **chaque joueur reçoit au hasard une combinaison
-  d'orbes affichée au-dessus de sa tête** :
-  - `1 vert + 3 rouges` → déclarée « **1** »
-  - `2 verts + 2 rouges` → déclarée « **2** »
-  - `3 verts + 1 rouge` → déclarée « **3** »
-- **Combinaisons qui sauvent : 2+2 et 1+3.** Toute autre collision tue ;
-  `2+3` = 5 verts = « **5g** ».
-- Environ **3 s** après le début, le boss obscurcit la salle : **chaque joueur ne
-  voit plus que SON propre numéro**.
-- Stratégies de guilde : ping, orientation spatiale (gauche / milieu-sous le boss
-  / droite), ou `/say 1-2-3`.
+- Pendant l'intermission, **chaque joueur voit un NUMÉRO au-dessus de sa tête**,
+  mais **le numéro ne détermine PAS les couleurs** :
+  - « **2** » = **toujours 2 verts + 2 rouges** (`2V2R`) — le seul cas non ambigu ;
+  - « **1** » ou « **3** » = soit **3 verts + 1 rouge** (`3V1R`), soit **1 vert +
+    3 rouges** (`1V3R`) : c'est la **COULEUR des orbes** qui tranche, jamais le
+    numéro.
+  Il n'existe donc que **trois états réels** : `3V1R`, `2V2R`, `1V3R`.
+- **Règle de survie = addition de couleurs** : la somme des deux joueurs doit
+  faire **4 verts ET 4 rouges** (4V4R) :
+  - `3V1R + 1V3R` = 4V4R → **sûr** ;
+  - `2V2R + 2V2R` = 4V4R → **sûr** ;
+  - toute autre combinaison tue ; `3V1R + 2V2R` = **5 verts** = le « **5g** » du
+    guide ; `1V3R + 1V3R` = 2 verts + 6 rouges = mort aussi.
+- Environ **3 s** après le début, le boss obscurcit la salle : chaque joueur ne
+  voit plus que **ses propres orbes** (son numéro seul ne suffit pas).
 
-## 2. Convention implémentée (configurable dans le code, pas dans l'UI)
+> **Correction assumée.** Le modèle précédent liait `1 ↔ 1 vert + 3 rouges` et
+> `3 ↔ 3 verts + 1 rouge`, avec une position et un ping déduits du numéro :
+> c'était **faux** (les numéros 1 et 3 sont ambigus). Le module demande
+> désormais **la composition réellement vue** ; une déclaration réduite à
+> « 1 » ou « 3 » est **refusée** avec un message demandant la couleur dominante —
+> le code ne devine jamais.
 
-| Déclaration | Orbes | Position | Ping | Couleur | Consigne |
-|---|---|---|---|---|---|
-| « 1 » | 1 vert + 3 rouges | **GAUCHE** du boss | `Enum.PingSubjectType.Warning` | **ROUGE** | saute sur place, ping rouge, rejoint un 3 |
-| « 2 » | 2 verts + 2 rouges | **MILIEU / sous le boss** | `Enum.PingSubjectType.OnMyWay` | **BLEU** | cours sous le boss, ping bleu, rejoint un autre 2 |
-| « 3 » | 3 verts + 1 rouge | **DROITE** du boss | `Enum.PingSubjectType.Assist` | **VERT** | fonce sur un 1, ping vert |
+## 2. Les trois états (convention explicite et configurable)
 
-Les **couleurs** sont vérifiées sur la galerie du wiki
+Table `CONVENTION` de `Core/Intermission.lua` (source unique de vérité) :
+
+| État | Composition | Numéro(s) possible(s) | Position | Ping | Couleur | Doit être rejoint par |
+|---|---|---|---|---|---|---|
+| `1V3R` | 1 vert + 3 rouges | **1 ou 3** (ambigu) | **SUR PLACE**, là où tu es | `Enum.PingSubjectType.Warning` | **ROUGE** | `3V1R` |
+| `2V2R` | 2 verts + 2 rouges | **2** (non ambigu) | **MILIEU / sous le boss** | `Enum.PingSubjectType.OnMyWay` | **BLEU** | `2V2R` |
+| `3V1R` | 3 verts + 1 rouge | **1 ou 3** (ambigu) | **va te coller à un `1V3R`** | `Enum.PingSubjectType.Assist` | **VERT** | `1V3R` |
+
+Chaque état porte aussi : le libellé visuel (« 3 VERTS + 1 ROUGE »), le nombre de
+verts et de rouges (base du calcul de survie), la consigne opérationnelle, le
+texte du bouton (numéro en indice) et la règle de guilde rappelée pour ce numéro.
+
+**Ping** : convention du guide raidstrats, **par couleur dominante** — 3 verts →
+`Assist` (vert), 2-2 → `OnMyWay` (bleu), 3 rouges → `Warning` (rouge). Ces
+couleurs sont vérifiées sur la galerie du wiki
 (<https://warcraft.wiki.gg/wiki/Ping_System>) : `Warning` = panneau rouge,
-`OnMyWay` = flèche bleue, `Assist` = drapeau vert — ce qui correspond à la
-convention de guilde « vert = 3, bleu = 2, rouge = 1 ».
+`OnMyWay` = flèche bleue, `Assist` = drapeau vert.
+
+**Positions** : les lignes **positionnelles** du guide raidstrats se
+**contredisent** (elles donnent à la fois « 1 vert 3 rouges → gauche » et
+« 3 rouges 1 vert → droite »). Notre convention est donc **explicite et
+configurable**, et c'est la seule cohérente avec « la couleur tranche » : le
+point **fixe** est l'état à majorité **rouge** (`1V3R`, ping ROUGE), le
+**coureur** est l'état à majorité **verte** (`3V1R`, ping VERT), les `2V2R`
+vont au milieu. Convention de guilde par défaut, rappelée à l'écran pour chaque
+état : **« 2 » → milieu / sous le boss ; « 1 » → sur place + ping ; « 3 » →
+rejoint un « 1 » de couleur complémentaire**. Si la guilde change de convention,
+on modifie `CONVENTION` (et les tests) — jamais l'UI.
 
 ## 3. Ce que l'addon fait / ne peut PAS faire (à dire tel quel aux joueurs)
 
@@ -43,8 +72,12 @@ convention de guilde « vert = 3, bleu = 2, rouge = 1 ».
 
 - afficher le plan préparé hors jeu (partenaire, rôle, position, paires) ;
 - afficher un rappel en très gros de la convention au déclenchement ;
-- afficher 3 boutons `1 / 2 / 3` : le joueur clique ce qu'il voit au-dessus de sa
-  tête, et **la consigne correspondante apparaît immédiatement** ;
+- afficher 3 boutons nommés par la **composition visible** — `1 vert + 3 rouges`,
+  `2 verts + 2 rouges`, `3 verts + 1 rouge` — avec le **numéro en indice**
+  (« 1 ou 3 », « 2 ») : le joueur clique la composition, et **la consigne
+  correspondante apparaît immédiatement** (ce que tu as, ce que tu dois faire,
+  quel état rejoindre, le ping, et le rappel que « 1 » ou « 3 » seul ne suffit
+  pas) ;
 - afficher un **compte à rebours de 3 s** (fenêtre de visibilité) puis signaler
   la salle obscurcie ;
 - **générer la macro de ping** prête à coller, adaptée à la déclaration.
@@ -99,12 +132,14 @@ GideonRaidDB = {
             { a = "Velna",  b = "Torgh" },
             { a = "Bathman", b = "Coren" },
         },
-        -- OPTIONNEL : plan préparé hors jeu (rôle / position par joueur)
+        -- OPTIONNEL : plan préparé hors jeu (rôle / position par joueur).
+        -- `role` = COMPOSITION D'ORBES (« 3V1R », « 2V2R », « 1V3R », « 3 verts »),
+        -- jamais un numéro seul 1/3 (ambigu).
         plan = {
-            { name = "Velna",   role = "2", position = "MIDDLE" },
-            { name = "Torgh",   role = "2", position = "MIDDLE" },
-            { name = "Bathman", role = "1", position = "LEFT"   },
-            { name = "Coren",   role = "3", position = "RIGHT"  },
+            { name = "Velna",   role = "2V2R", position = "MIDDLE" },
+            { name = "Torgh",   role = "2V2R", position = "MIDDLE" },
+            { name = "Bathman", role = "1V3R", position = "HOLD"   },
+            { name = "Coren",   role = "3V1R", position = "PURSUE" },
         },
     },
 }
@@ -112,12 +147,15 @@ GideonRaidDB = {
 
 - `plan` est **facultatif** : sans lui, l'addon affiche seulement le partenaire
   et la liste des paires.
-- `role` accepte la déclaration préparée (`"1"`, `"2"`, `"3"`) **ou** un rôle de
-  raid libre (`"Tank"`, `"Heal"`) — dans ce dernier cas l'addon n'en déduit
-  aucune rencontre.
-- Si les deux rôles d'une paire sont des déclarations, l'addon affiche
-  `Rencontre 2+2 : OK` ou `Rencontre 2+3 : MORT (5 verts = 5g)` : c'est un
-  **contrôle du plan préparé**, pas une lecture en jeu.
+- `role` accepte la **composition d'orbes** (`"1V3R"`, `"2V2R"`, `"3V1R"`, ou une
+  forme tolérée comme `"3 verts"`) **ou** un rôle de raid libre (`"Tank"`,
+  `"Heal"`) — dans ce dernier cas l'addon n'en déduit aucune rencontre. Un
+  numéro seul `"1"` ou `"3"` est **ambigu** : l'addon l'écrit
+  (`Rencontre non verifiable : numero 1 ambigu…`) au lieu de le deviner.
+- Si les deux rôles d'une paire sont des compositions, l'addon affiche
+  `Rencontre 2V2R+2V2R : OK (combinaison sure (4 verts + 4 rouges))` ou
+  `Rencontre 3V1R+2V2R : MORT (5 verts = 5g : MORT)` : c'est un **contrôle du
+  plan préparé**, pas une lecture en jeu.
 - Une entrée de `plan` malformée est ignorée et comptée (« Plan : 1 entrée
   ignorée »), jamais un crash.
 - Fixture de contrat : `tests/fixtures/assignment_sample.lua`.
@@ -145,11 +183,15 @@ Dans `GideonRaidDB.intermission` (valeurs résolues et bornées par
 /gr plan                  plan détaillé dans le chat
 /gr inter                 affiche/masque le panneau d'intermission
 /gr inter start|stop      lance/arrête la timeline pré-calculée
-/gr inter 1 | 2 | 3       déclare ce que tu vois (raccourci clavier utile)
+/gr inter 3V1R            déclare ta COMPOSITION (aussi : 2V2R, 1V3R, « 3 verts »)
+/gr inter 2               seul le « 2 » est accepté comme numéro (non ambigu)
 /gr inter macro           affiche la macro de ping correspondante
 /gr inter on | off        active/désactive le module
 /gr inter status          état du module + timeline
 ```
+
+`/gr inter 1` ou `/gr inter 3` sont **refusés** avec un message demandant la
+couleur dominante : le module ne devine jamais la composition à partir du numéro.
 
 Une **binding** `GIDEONRAID_INTERMISSION` (sans touche par défaut) est déclarée
 dans `Bindings.xml` : à assigner dans *Options > Raccourcis > GideonRaid*.
@@ -160,28 +202,45 @@ et ne peut pas — ne doit pas — envoyer de ping.
 ## 8. Tests hors jeu
 
 ```bash
-busted                                    # 71 tests, dont 47 pour ce module
-lua5.1 tools/intermission_cli.lua all     # convention + macros
-lua5.1 tools/intermission_cli.lua pair 2 3
+busted                                    # 88 tests, dont 59 pour ce module
+lua5.1 tools/intermission_cli.lua all     # les 3 états + macros
+lua5.1 tools/intermission_cli.lua 3V1R    # un état
+lua5.1 tools/intermission_cli.lua 1       # -> REFUS : numéro ambigu
+lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R    # -> MORT (5 verts)
 lua5.1 tools/intermission_cli.lua plan Velna
 ```
 
 Couvert par `tests/spec/intermission_spec.lua` :
 
-- la convention (orbes, positions, pings, consignes) et son déterminisme ;
-- les collisions (`2+2`, `1+3` OK ; `2+3` = 5 verts ; `1+1`, `3+3`) ;
-- la génération de macro, y compris l'absence de texte d'événement interdit ;
+- les trois états de couleur (libellé, verts/rouges, numéros possibles, ping,
+  complément, consigne) et leur ordre déterministe ;
+- la normalisation tolérante (`3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`,
+  `vvrr`, `3 verts`, `1 vert 3 rouges`, « vert » = dominante), et le **refus
+  explicite** de « 1 » ou « 3 » seuls (message « ambigu », jamais de devinette) ;
+- les collisions par addition de couleurs : `3V1R+1V3R` sûr, `2V2R+2V2R` sûr,
+  `3V1R+2V2R` interdit (5 verts), `1V3R+1V3R` et `3V1R+3V1R` interdits ;
+- la génération de macro (par couleur dominante), l'absence de texte d'événement
+  interdit, et le refus de fabriquer une macro sur un numéro ambigu ;
 - la machine d'état : `IDLE → VISIBLE (3 s) → DARK → DONE`, déclaration avant
   démarrage / après la fin refusée, `reset`, `dt` négatif ignoré, déterminisme ;
 - la timeline préparée (bornes, `durée > visibilité`) ;
-- la vue pré-pull (partenaire, rôle, position, paires triées, plan malformé) ;
+- la vue pré-pull (partenaire, rôle, position, paires triées, plan malformé,
+  rencontre sûre / mortelle / **non vérifiable** quand un rôle reste ambigu) ;
 - la configuration (bornes, types incohérents, absence d'alias entre comptes).
 
 Couvert par `tests/spec/load_spec.lua` (chargement réel, ordre du `.toc`) :
-`ENCOUNTER_START` ouvre le panneau, le clic sur un bouton affiche la consigne,
-le ticker bascule en salle obscurcie après 3 s, `ENCOUNTER_END` ferme le
-panneau, la désactivation est respectée, le panneau n'affiche aucune valeur
-dynamique.
+`ENCOUNTER_START` ouvre le panneau, les trois boutons portent la composition et
+le numéro en indice, le clic sur un bouton affiche la consigne, le ticker bascule
+en salle obscurcie après 3 s, `ENCOUNTER_END` ferme le panneau, la désactivation
+est respectée, le panneau n'affiche aucune valeur dynamique.
+
+Couvert par `tests/spec/guard_spec.lua` (garde anti-API-interdite) : aucun
+fichier listé dans le `.toc` ne contient `COMBAT_LOG_EVENT`, `UnitAura`,
+`UnitBuff`, `UnitDebuff`, `UnitGUID`, `SendChatMessage`, `GetRaidRosterInfo`,
+`C_VoiceChat` hors commentaire ; `C_Ping` / `SendMacroPing` n'apparaissent
+**jamais comme appel** (seulement dans le **texte** de la macro, qui est du code
+sécurisé déclenché par le joueur) ; `Core/` reste sans `GetTime`,
+`math.random`, `CreateFrame`, `UnitName` ni `GideonRaidDB`.
 
 ## 9. À confirmer en jeu (liste honnête)
 
@@ -193,6 +252,11 @@ dynamique.
    défaut) — non vérifiable hors client.
 4. Durée exacte de l'intermission : `durationSeconds` est un défaut **à ajuster**
    après les premiers pulls.
-5. Convention de guilde définitive (ping vs `/say` vs position) : le tableau du
-   §2 est celui implémenté ; s'il change, changer `CONVENTION` dans
-   `Core/Intermission.lua` (et les tests) — jamais l'UI.
+5. Convention de guilde définitive (position, ping vs `/say`) : le tableau du
+   §2 et la table `CONVENTION` de `Core/Intermission.lua` sont la source unique ;
+   s'ils changent, changer `CONVENTION` (et les tests) — jamais l'UI. Les lignes
+   positionnelles du guide raidstrats se contredisant, notre choix (rouge =
+   point fixe, vert = coureur, 2-2 = milieu) est explicite et révisable.
+6. Lien entre le **numéro affiché** et la **marque** (Mark of Acid / Mark of
+   Blood) : mesuré en jeu par le kit de diagnostic `GideonDiagAddon`
+   (`/gdiagmark`), qui note désormais **numéro + composition** par intermission.

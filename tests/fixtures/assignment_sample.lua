@@ -7,8 +7,10 @@
     c'est voulu (test de contrat, docs/TESTPLAN.md etape 4).
 
     `plan` est OPTIONNEL : c'est le plan prepare hors jeu (role / position par
-    joueur). Les roles "1" / "2" / "3" sont ceux de la mecanique des orbes.
+    joueur). Le `role` porte la COMPOSITION D'ORBES (« 1V3R », « 2V2R », « 3V1R ») :
+    les numeros 1/3 sont AMBIGUS sur les couleurs, seul « 2 » ne l'est pas.
 ----------------------------------------------------------------------------]]
+--
 return {
     schema = 1,
     pairs = {
@@ -16,9 +18,9 @@ return {
         { a = "Velna", b = "Torgh" },
     },
     plan = {
-        { name = "Velna", role = "2", position = "MIDDLE" },
-        { name = "Torgh", role = "2", position = "MIDDLE" },
-        { name = "Bathman", role = "1", position = "LEFT" },
-        { name = "Coren", role = "3", position = "RIGHT" },
+        { name = "Velna", role = "2V2R", position = "MIDDLE" },
+        { name = "Torgh", role = "2V2R", position = "MIDDLE" },
+        { name = "Bathman", role = "1V3R", position = "HOLD" },
+        { name = "Coren", role = "3V1R", position = "PURSUE" },
     },
 }

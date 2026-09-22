@@ -59,7 +59,7 @@ local function ensurePanel()
     end
 
     local p = CreateFrame("Frame", "GideonRaidIntermissionPanel", UIParent, "BackdropTemplate")
-    p:SetSize(540, 360)
+    p:SetSize(560, 400)
     p:SetMovable(true)
     p:EnableMouse(true)
     p:RegisterForDrag("LeftButton")
@@ -97,26 +97,31 @@ local function ensurePanel()
     p.body:SetText("")
 
     p.buttons = {}
-    -- Trois boutons : le joueur clique ce qu'il voit au-dessus de sa tete.
-    for index = 1, #ns.Intermission.DECLARATIONS do
-        local declaration = ns.Intermission.DECLARATIONS[index]
+    -- Trois boutons : le joueur clique la COMPOSITION d'orbes qu'il voit au-dessus
+    -- de sa tete. Le libelle vient de Core (« 3 verts + 1 rouge / 3V1R /
+    -- numero : 1 ou 3 ») : la couche UI ne calcule rien.
+    -- Le numero n'est qu'un INDICE : 1 et 3 sont AMBIGUS sur la couleur, seul 2
+    -- est non ambigu (2 verts + 2 rouges).
+    for index = 1, #ns.Intermission.STATES do
+        local key = ns.Intermission.STATES[index]
+        local rec = ns.Intermission.getDeclaration(key)
         local button = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        button:SetSize(120, 44)
-        button:SetPoint("TOPLEFT", 24 + ((index - 1) * 132), -212)
-        button:SetText(declaration)
+        button:SetSize(168, 64)
+        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -208)
+        button:SetText(rec ~= nil and rec.buttonLabel or key)
         button:SetScript("OnClick", function()
-            UI.IntermissionDeclare(declaration)
+            UI.IntermissionDeclare(key)
         end)
         p.buttons[index] = button
     end
 
     p.macroLabel = p:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    p.macroLabel:SetPoint("TOPLEFT", 24, -268)
+    p.macroLabel:SetPoint("TOPLEFT", 24, -284)
     p.macroLabel:SetText("Macro de ping (clic = tout selectionner, puis Ctrl+C) :")
 
     p.macroBox = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
     p.macroBox:SetSize(492, 24)
-    p.macroBox:SetPoint("TOPLEFT", 24, -286)
+    p.macroBox:SetPoint("TOPLEFT", 24, -302)
     p.macroBox:SetAutoFocus(false)
     p.macroBox:SetText("")
     p.macroBox:SetTextInsets(6, 6, 0, 0)
@@ -128,7 +133,7 @@ local function ensurePanel()
     end)
 
     p.note = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    p.note:SetPoint("TOPLEFT", 24, -316)
+    p.note:SetPoint("TOPLEFT", 24, -334)
     p.note:SetWidth(492)
     p.note:SetJustifyH("LEFT")
     p.note:SetText("")
@@ -178,15 +183,16 @@ function UI.IntermissionRefresh()
     local snap = ns.Intermission.snapshot(state)
     p.headline:SetText(snap.headline)
     p.body:SetText(table.concat(snap.lines, "\n"))
-    for index, button in ipairs(p.buttons) do
+    for _, button in ipairs(p.buttons) do
+        -- Libelle deja pose a la creation (il vient de Core et ne change pas) :
+        -- ici on ne fait que montrer/masquer.
         button:SetShown(snap.showButtons)
-        button:SetText(ns.Intermission.DECLARATIONS[index])
     end
     p.macroBox:SetText(snap.macroPrimary or "")
     if snap.macroPrimary then
         p.note:SetText("Secours : " .. tostring(snap.macroFallback) .. " - " .. tostring(snap.macroNote))
     else
-        p.note:SetText("Clique 1, 2 ou 3 : la macro de ping correspondante apparait ici.")
+        p.note:SetText("Clique la COMPOSITION que tu vois (3 verts + 1 rouge, 2-2, 1 vert + 3 rouges) : la macro apparait ici.")
     end
     return snap
 end
@@ -277,7 +283,9 @@ function UI.IntermissionTick(dt)
     end
 end
 
---- Declaration du joueur (clic sur 1 / 2 / 3).
+--- Declaration du joueur : clic sur un bouton de COMPOSITION (3V1R / 2V2R /
+--- 1V3R). Un numero ambigu (« 1 » ou « 3 » seul) est refuse par Core avec un
+--- message demandant la couleur dominante.
 function UI.IntermissionDeclare(declaration)
     local c = config()
     if not c.enabled then
@@ -336,7 +344,7 @@ end
 function UI.IntermissionPrintMacro()
     local snap = ns.Intermission.snapshot(state)
     if not snap.macroPrimary then
-        UI.Print("Aucune macro : declare d'abord 1, 2 ou 3 (/gr inter 2).")
+        UI.Print("Aucune macro : declare d'abord ta composition (/gr inter 3V1R).")
         return
     end
     UI.Print("macro a coller : " .. snap.macroPrimary)

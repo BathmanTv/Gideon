@@ -67,8 +67,8 @@ describe("chargement de l'addon", function()
             schema = 1,
             pairs = { { a = "Testeur", b = "Partenaire" } },
             plan = {
-                { name = "Testeur", role = "2", position = "MIDDLE" },
-                { name = "Partenaire", role = "2", position = "MIDDLE" },
+                { name = "Testeur", role = "2V2R", position = "MIDDLE" },
+                { name = "Partenaire", role = "2V2R", position = "MIDDLE" },
             },
         }
         stub.mainFrame():Fire("PLAYER_LOGIN")
@@ -76,7 +76,7 @@ describe("chargement de l'addon", function()
         assert.matches("Partenaire", text)
         assert.matches("Ton partenaire", text)
         assert.matches("MIDDLE", text)
-        assert.matches("2%+2", text)
+        assert.matches("2V2R%+2V2R", text)
     end)
 
     it("le slash handler repond et ne leve pas", function()
@@ -102,10 +102,28 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START")
         local panel = _G.GideonRaidIntermissionPanel
+        -- Les boutons sont les TROIS etats de couleur, dans l'ordre deterministe
+        -- 1V3R / 2V2R / 3V1R : le bouton 2 est donc 2V2R.
+        assert.matches("2 verts %+ 2 rouges", panel.buttons[2]:GetText())
+        assert.matches("1 ou 3", panel.buttons[1]:GetText())
+        assert.matches("2 verts %+ 2 rouges", panel.buttons[2]:GetText())
+        assert.matches("1 ou 3", panel.buttons[3]:GetText())
         panel.buttons[2]:Click()
-        assert.matches("TU ES 2", panel.body:GetText())
-        assert.matches("MILIEU", panel.body:GetText())
+        local text = panel.body:GetText()
+        assert.matches("TU VOIS : 2 VERTS %+ 2 ROUGES", text)
+        assert.matches("MILIEU", text)
+        assert.matches("PING A ENVOYER : BLEU", text)
         assert.matches("C_Ping%.SendMacroPing", panel.macroBox:GetText())
+    end)
+
+    it("les trois boutons portent le numero affiche en indice", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.matches("1 vert %+ 3 rouges", panel.buttons[1]:GetText())
+        assert.matches("1V3R", panel.buttons[1]:GetText())
+        assert.matches("3 verts %+ 1 rouge", panel.buttons[3]:GetText())
+        assert.matches("3V1R", panel.buttons[3]:GetText())
     end)
 
     it("le ticker fait basculer la salle en obscurci apres 3 s", function()

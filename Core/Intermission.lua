@@ -8,15 +8,25 @@
     valeur d'unite, n'enregistre aucun evenement. Il tourne tel quel sous busted
     et sous lua5.1 hors du client.
 
-    MECANIQUE DE REFERENCE
+    MECANIQUE DE REFERENCE (modele CORRIGE, autoritaire)
     https://raidstrats.gg/guides/entombed-sentinels/mythic/phase/quick-overview
-      - a l'intermission, chaque joueur recoit une combinaison d'orbes indiquee
-        au-dessus de sa tete : 1 vert + 3 rouges (« 1 »), 2 verts + 2 rouges
-        (« 2 »), 3 verts + 1 rouge (« 3 ») ;
-      - les combinaisons qui sauvent sont 2+2 et 1+3 ; toute autre collision tue,
-        et 2+3 fait 5 verts (« 5g ») ;
+      - le NUMERO affiche au-dessus de la tete ne determine PAS les couleurs :
+          « 2 » = TOUJOURS 2 verts + 2 rouges, sans ambiguite ;
+          « 1 » ou « 3 » = soit 3 verts + 1 rouge, soit 1 vert + 3 rouges :
+          c'est la COULEUR des orbes qui tranche, jamais le numero.
+        Il n'existe donc que TROIS etats reels : 3V1R, 2V2R, 1V3R.
+      - la regle de survie est une ADDITION DE COULEURS : la somme des deux
+        joueurs doit faire 4 VERTS et 4 ROUGES. Appariements valides :
+        3V1R + 1V3R (= 4V4R) et 2V2R + 2V2R (= 4V4R). Toute autre combinaison
+        tue : 3V1R + 2V2R = 5 verts = le « 5g » du guide.
       - environ 3 s apres le debut, la salle est obscurcie : chaque joueur ne
-        voit plus que SON propre numero.
+        voit plus que SES propres orbes (son numero seul ne suffit pas).
+
+    REFUS DE L'ANCIEN MODELE : le code liait « 1 » a « 1 vert + 3 rouges » et
+    « 3 » a « 3 verts + 1 rouge », avec une position et un ping deduits du
+    numero. C'est FAUX : 1 et 3 sont ambigus sur les couleurs, seul 2 ne l'est
+    pas. Une declaration reduite a « 1 » ou « 3 » est donc REFUSEE avec un
+    message demandant la couleur dominante (jamais devinee).
 
     Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
     Source contrainte : "Combat API functions may now return secret values ...
@@ -39,7 +49,9 @@ local _, ns = ...
 local Intermission = {}
 ns.Intermission = Intermission
 
-Intermission.SCHEMA_VERSION = 1
+--- Version du modele d'intermission. 2 = modele par COULEURS (3V1R/2V2R/1V3R),
+--- les numeros 1/2/3 n'etant que des indices (1 et 3 ambigus).
+Intermission.SCHEMA_VERSION = 2
 
 --- Duree de la fenetre ou les indicateurs des autres joueurs sont visibles (guide).
 Intermission.VISIBILITY_SECONDS = 3
@@ -50,8 +62,13 @@ Intermission.DEFAULT_DURATION_SECONDS = 20
 --- Jeton de cible par defaut de la macro de ping (se ping soi-meme).
 Intermission.DEFAULT_TARGET_TOKEN = "player"
 
---- Ordre d'affichage des declarations : « 1 », « 2 », « 3 » (jamais pairs()).
-Intermission.DECLARATIONS = { "1", "2", "3" }
+--- Trois ETATS canoniques, ordre d'affichage DETERMINISTE (verts croissants,
+--- jamais pairs()) : 1V3R, 2V2R, 3V1R.
+Intermission.STATES = { "1V3R", "2V2R", "3V1R" }
+
+--- Alias historique : le module parlait de « declarations 1/2/3 ». Ce sont
+--- desormais des COMPOSITIONS d'orbes ; l'alias evite de casser les appelants.
+Intermission.DECLARATIONS = Intermission.STATES
 
 --- Phases de l'intermission.
 Intermission.PHASE = {
@@ -66,56 +83,104 @@ local PHASE_VISIBLE = Intermission.PHASE.VISIBLE
 local PHASE_DARK = Intermission.PHASE.DARK
 local PHASE_DONE = Intermission.PHASE.DONE
 
---[[ Convention preparee hors jeu (aucune lecture d'API en jeu).
+--[[ Les TROIS etats de couleur (aucune lecture d'API en jeu).
 
-     position   : la position spatiale a tenir (convention de guilde)
-     ping       : la valeur de Enum.PingSubjectType (voir la source API 12.1.0)
-     pingColor  : la couleur du ping, VERIFIEE sur les captures du wiki
-                  https://warcraft.wiki.gg/wiki/Ping_System (galerie) :
-                  Warning = rouge, OnMyWay = bleu, Assist = vert.
-                  La convention de la guilde est : vert = « 3 », bleu = « 2 »,
-                  rouge = « 1 ».
-     pingToken  : le jeton utilisable dans une macro /ping (variante a confirmer).
+     key            : cle courte utilisee partout (3V1R / 2V2R / 1V3R)
+     display        : libelle visuel (« 3 VERTS + 1 ROUGE »)
+     orbs / greens / reds : composition ; greens et reds sont la SEULE base de
+                      la regle de survie (somme 4 verts + 4 rouges = survie)
+     numbers        : numero(s) pouvant etre affiche(s) au-dessus de la tete
+     numberAmbiguous: true quand le numero ne permet PAS de connaitre la couleur
+     dominant       : couleur dominante (celle du ping)
+     position       : code de position ; positionLabel : texte affiche
+     ping           : valeur de Enum.PingSubjectType (source API 12.1.0)
+     pingToken      : jeton utilisable dans une macro /ping (a confirmer)
+     pingColor / pingColorHex : couleur du ping, VERIFIEE sur la galerie du wiki
+                      https://warcraft.wiki.gg/wiki/Ping_System :
+                      Warning = rouge, OnMyWay = bleu, Assist = vert.
+                      Convention du guide raidstrats, PAR COULEUR DOMINANTE :
+                      3 verts -> Assist (vert), 2-2 -> OnMyWay (bleu),
+                      3 rouges -> Warning (rouge).
+     action         : consigne operationnelle (ce que le joueur FAIT)
+     find           : quel etat peut le rejoindre + le calcul de somme
+     complement     : l'etat qui DOIT le rejoindre (4 verts + 4 rouges)
+     numberRule     : convention de guilde rappelee pour ce numero
+     buttonLabel    : libelle du bouton de declaration (composition, numero en
+                      indice). Calcule ICI : la couche UI ne calcule rien.
+
+     POSITIONS : les lignes positionnelles du guide se CONTREDISENT (elles
+     donnent a la fois « 1 vert 3 rouges -> gauche » et « 3 rouges 1 vert ->
+     droite »). Notre convention est donc EXPLICITE et CONFIGURABLE ici : par
+     defaut le point FIXE est l'etat a majorite ROUGE (1V3R, ping ROUGE) et le
+     COUREUR est l'etat a majorite VERTE (3V1R, ping VERT), les 2V2R allant au
+     milieu. C'est la seule convention coherente avec « la couleur tranche ».
 ]]
 local CONVENTION = {
-    ["1"] = {
-        n = "1",
+    ["1V3R"] = {
+        key = "1V3R",
+        display = "1 VERT + 3 ROUGES",
         orbs = "1 vert + 3 rouges",
         greens = 1,
-        position = "LEFT",
-        positionLabel = "GAUCHE du boss",
+        reds = 3,
+        numbers = { "1", "3" },
+        numberText = "1 ou 3",
+        numberAmbiguous = true,
+        dominant = "ROUGE (3 orbes sur 4)",
+        position = "HOLD",
+        positionLabel = "SUR PLACE, la ou tu es",
         ping = "Warning",
         pingToken = "Warning",
         pingColor = "ROUGE",
         pingColorHex = "|cffff4040",
-        action = "SAUTE SUR PLACE puis ping ROUGE.",
-        find = "Rejoins un joueur 3 (1+3 = sauf), jamais un 2.",
+        action = "RESTE SUR PLACE et ping ROUGE (Warning) pour etre localise : un joueur en 3V1R vient a toi.",
+        find = "Seul un 3V1R peut te rejoindre : 1+3 verts = 4 verts, 3+1 rouges = 4 rouges.",
+        complement = "3V1R",
+        numberRule = "convention de guilde : '1' = sur place + ping. C'est ta dominante ROUGE qui te fait reconnaitre.",
+        buttonLabel = "1 vert + 3 rouges\n1V3R\nnumero : 1 ou 3",
     },
-    ["2"] = {
-        n = "2",
+    ["2V2R"] = {
+        key = "2V2R",
+        display = "2 VERTS + 2 ROUGES",
         orbs = "2 verts + 2 rouges",
         greens = 2,
+        reds = 2,
+        numbers = { "2" },
+        numberText = "2",
+        numberAmbiguous = false,
+        dominant = "AUCUNE (2-2)",
         position = "MIDDLE",
         positionLabel = "MILIEU / SOUS LE BOSS",
         ping = "OnMyWay",
         pingToken = "OnMyWay",
         pingColor = "BLEU",
         pingColorHex = "|cff40a0ff",
-        action = "COURS SOUS LE BOSS et reste au milieu, puis ping BLEU.",
-        find = "Rejoins un autre 2 (2+2 = sauf).",
+        action = "COURS te placer sous le milieu / sous le boss, puis ping BLEU (OnMyWay).",
+        find = "Seul un autre 2V2R peut te rejoindre : 2+2 verts = 4 verts, 2+2 rouges = 4 rouges.",
+        complement = "2V2R",
+        numberRule = "le '2' est le SEUL numero non ambigu : 2 verts + 2 rouges, toujours.",
+        buttonLabel = "2 verts + 2 rouges\n2V2R\nnumero : 2 (non ambigu)",
     },
-    ["3"] = {
-        n = "3",
+    ["3V1R"] = {
+        key = "3V1R",
+        display = "3 VERTS + 1 ROUGE",
         orbs = "3 verts + 1 rouge",
         greens = 3,
-        position = "RIGHT",
-        positionLabel = "DROITE du boss",
+        reds = 1,
+        numbers = { "1", "3" },
+        numberText = "1 ou 3",
+        numberAmbiguous = true,
+        dominant = "VERT (3 orbes sur 4)",
+        position = "PURSUE",
+        positionLabel = "VA TE COLLER A UN ETAT 1V3R (3 ROUGES)",
         ping = "Assist",
         pingToken = "Assist",
         pingColor = "VERT",
         pingColorHex = "|cff40ff40",
-        action = "FONCE sur un joueur 1, puis ping VERT.",
-        find = "Trouve un joueur 1 (3+1 = sauf).",
+        action = "FONCE sur un joueur en 1V3R (3 ROUGES) : il reste sur place et t'attend.",
+        find = "Seul un 1V3R peut te rejoindre : 3+1 verts = 4 verts, 1+3 rouges = 4 rouges.",
+        complement = "1V3R",
+        numberRule = "convention de guilde : '3' = tu rejoins un '1' de couleur complementaire. Tes 3 verts disent LAQUELLE.",
+        buttonLabel = "3 verts + 1 rouge\n3V1R\nnumero : 1 ou 3",
     },
 }
 
@@ -123,9 +188,77 @@ local CONVENTION = {
 -- directement : getDeclaration() renvoie une copie.
 Intermission.CONVENTION = CONVENTION
 
-local D_PROMPT = "Compte TES orbes au-dessus de ta tete (1, 2 ou 3) et clique."
+local D_PROMPT = "Regarde la COULEUR de tes 4 orbes au-dessus de ta tete, puis clique la composition que tu vois."
+local D_AMBIGUITY = "1 ou 3 NE SUFFIT PAS : le numero ne dit pas la couleur. Seul le numero 2 est non ambigu (2 verts + 2 rouges)."
 local D_CAVEAT = "INCONNU : personne ne peut lire ton numero ni te dire qui a declare quoi."
 local D_CHANNEL = "Le seul signal visible par les autres joueurs : TON ping."
+
+--- Correspondance compter-de-verts -> etat canonique (aucun etat a 0 ou 4 verts).
+local GREENS_TO_STATE = { [1] = "1V3R", [2] = "2V2R", [3] = "3V1R" }
+
+--- Formes symboliques collees : « 3v1r », « 3 v 1 r » (une fois les espaces retires).
+local STATE_BY_SYMBOLS = { ["3v1r"] = "3V1R", ["2v2r"] = "2V2R", ["1v3r"] = "1V3R" }
+
+--- Numeros SEULS qui sont ambigus sur la couleur : refus explicite, jamais devine.
+local AMBIGUOUS_NUMBERS = { ["1"] = true, ["3"] = true }
+
+--- Mots acceptes pour chaque couleur (forme « v » / « r » comprise).
+local GREEN_WORDS = {
+    ["vert"] = true,
+    ["verts"] = true,
+    ["verte"] = true,
+    ["vertes"] = true,
+    ["green"] = true,
+    ["greens"] = true,
+    ["v"] = true,
+}
+local RED_WORDS = {
+    ["rouge"] = true,
+    ["rouges"] = true,
+    ["red"] = true,
+    ["reds"] = true,
+    ["r"] = true,
+}
+
+--- Remplacements UTF-8 -> ASCII, liste TRIEE (aucun pairs(), determinisme).
+--- Permet de taper « majorité verte » sans accents : la saisie reste toleree.
+local ACCENT_MAP = {
+    { "\195\168", "e" },
+    { "\195\169", "e" },
+    { "\195\170", "e" },
+    { "\195\167", "c" },
+    { "\195\174", "i" },
+    { "\195\180", "o" },
+    { "\195\185", "u" },
+    { "\195\187", "u" },
+    { "\195\160", "a" },
+    { "\195\162", "a" },
+}
+
+local function deaccent(text)
+    local out = text
+    for index = 1, #ACCENT_MAP do
+        out = out:gsub(ACCENT_MAP[index][1], ACCENT_MAP[index][2])
+    end
+    return out
+end
+
+local function flatten(raw)
+    local text = deaccent(tostring(raw)):lower()
+    -- espaces insecables + tous les separateurs usuels -> espace simple
+    text = text:gsub("[\194\160]", " ")
+    text = text:gsub("[%-_+/,;:%.]+", " ")
+    text = text:gsub("%s+", " ")
+    return text:gsub("^%s*(.-)%s*$", "%1")
+end
+
+local function ambiguousMessage(number)
+    return "numero "
+        .. number
+        .. " ambigu : le numero affiche ne dit PAS la couleur des orbes. "
+        .. "Dis ce que tu VOIS : 3 verts (etat 3V1R) ou 1 vert (etat 1V3R). "
+        .. "Seul le numero 2 est non ambigu (2V2R)."
+end
 
 local function round(n)
     return math.floor(n + 0.5)
@@ -146,10 +279,20 @@ local function clampInt(value, min, max)
 end
 
 local function copyRecord(rec)
+    local numbers = {}
+    for index = 1, #rec.numbers do
+        numbers[#numbers + 1] = rec.numbers[index]
+    end
     return {
-        n = rec.n,
+        key = rec.key,
+        display = rec.display,
         orbs = rec.orbs,
         greens = rec.greens,
+        reds = rec.reds,
+        numbers = numbers,
+        numberText = rec.numberText,
+        numberAmbiguous = rec.numberAmbiguous,
+        dominant = rec.dominant,
         position = rec.position,
         positionLabel = rec.positionLabel,
         ping = rec.ping,
@@ -158,40 +301,157 @@ local function copyRecord(rec)
         pingColorHex = rec.pingColorHex,
         action = rec.action,
         find = rec.find,
+        complement = rec.complement,
+        numberRule = rec.numberRule,
+        buttonLabel = rec.buttonLabel,
     }
 end
 
---- Normalise la saisie du joueur (« 2 », « 3 », 1, ...) en "1"|"2"|"3".
---- @return string|nil declaration, string|nil erreur
+--- « vvvr » / « vvrr » / « vrrr » : 4 lettres de couleur, on compte les verts.
+local function stateFromLetters(compact)
+    if #compact ~= 4 or compact:match("^[vr]+$") == nil then
+        return nil
+    end
+    local greens = 0
+    for index = 1, 4 do
+        if compact:sub(index, index) == "v" then
+            greens = greens + 1
+        end
+    end
+    return GREENS_TO_STATE[greens]
+end
+
+--- Compte les couleurs citees en texte : « 3 verts + 1 rouge », « vert-vert-vert-rouge ».
+--- `explicit` compte les couleurs precedees d'un nombre ; `words` le nombre total
+--- de mots de couleur (sert a distinguer « vert » seul = couleur dominante de
+--- « vert vert vert rouge » = 3 verts + 1 rouge).
+local function analyzeColors(flat)
+    local greens, reds, explicit, words = 0, 0, 0, 0
+    local hasGreenWord, hasRedWord = false, false
+    for number, word in flat:gmatch("(%d*)%s*([a-z]+)") do
+        local isGreen = GREEN_WORDS[word] ~= nil
+        local isRed = RED_WORDS[word] ~= nil
+        if isGreen or isRed then
+            local count = tonumber(number)
+            if count == nil then
+                count = 1
+            else
+                explicit = explicit + 1
+            end
+            words = words + 1
+            if isGreen then
+                greens = greens + count
+                hasGreenWord = true
+            else
+                reds = reds + count
+                hasRedWord = true
+            end
+        end
+    end
+    return {
+        greens = greens,
+        reds = reds,
+        explicit = explicit,
+        words = words,
+        hasGreenWord = hasGreenWord,
+        hasRedWord = hasRedWord,
+    }
+end
+
+--- Normalise la saisie du joueur en cle d'etat : « 3V1R » | « 2V2R » | « 1V3R ».
+---
+--- Formes acceptees (tolerantes : casse, espaces, accents, separateurs) :
+---   composition courte : « 3V1R », « 2V2R », « 1V3R » (y compris « 3 v 1 r ») ;
+---   lettres            : « vvvr », « vvrr », « vrrr », « vert-vert-vert-rouge » ;
+---   texte              : « 3 verts + 1 rouge », « 3 verts », « 1 vert 3 rouges » ;
+---   couleur dominante  : « vert » (= 3V1R), « rouge » (= 1V3R) ;
+---   numero seul        : « 2 » (= 2V2R, NON ambigu).
+---
+--- REFUS EXPLICITE : « 1 » et « 3 » SEULS sont AMBIGUS (le numero ne dit pas la
+--- couleur) -> (nil, message demandant la couleur dominante,
+--- { ambiguous = true, number = ... }). Le code ne devine JAMAIS la couleur.
+--- @return string|nil key, string|nil erreur, table|nil info
 function Intermission.normalizeDeclaration(raw)
     if type(raw) == "number" then
         raw = tostring(raw)
     end
     if type(raw) ~= "string" then
-        return nil, "declaration invalide (attendu 1, 2 ou 3)"
+        return nil, "declaration invalide (attendu une composition : 3V1R, 2V2R ou 1V3R)"
     end
-    local trimmed = raw:gsub("%s+", "")
-    if CONVENTION[trimmed] == nil then
-        if trimmed == "" then
-            return nil, "declaration vide (attendu 1, 2 ou 3)"
+    local flat = flatten(raw)
+    local compact = flat:gsub("%s+", "")
+    if compact == "" then
+        return nil, "declaration vide (attendu une composition : 3V1R, 2V2R ou 1V3R)"
+    end
+    if compact == "2" then
+        return "2V2R"
+    end
+    if AMBIGUOUS_NUMBERS[compact] then
+        return nil, ambiguousMessage(compact), { ambiguous = true, number = compact }
+    end
+    local bySymbol = STATE_BY_SYMBOLS[compact]
+    if bySymbol ~= nil then
+        return bySymbol
+    end
+    local byLetters = stateFromLetters(compact)
+    if byLetters ~= nil then
+        return byLetters
+    end
+
+    local colors = analyzeColors(flat)
+    -- Un SEUL mot de couleur sans nombre = la couleur dominante annoncee :
+    -- « vert » -> 3 verts, « rouge » -> 3 rouges (les seules compositions a
+    -- dominante sont 3-1).
+    if colors.words == 1 and colors.explicit == 0 then
+        if colors.hasGreenWord then
+            return "3V1R"
         end
-        return nil, "declaration inconnue : " .. trimmed
+        return "1V3R"
     end
-    return trimmed
+    local total = colors.greens + colors.reds
+    if total == 4 and colors.reds == 4 - colors.greens and GREENS_TO_STATE[colors.greens] ~= nil then
+        return GREENS_TO_STATE[colors.greens]
+    end
+    if total > 0 and colors.reds == 0 and GREENS_TO_STATE[colors.greens] ~= nil then
+        -- un seul compte donne : le reste se deduit (4 orbes au total)
+        return GREENS_TO_STATE[colors.greens]
+    end
+    if total > 0 then
+        return nil,
+            "composition non exploitable (" .. colors.greens .. " verts + " .. colors.reds .. " rouges) : dis la couleur dominante",
+            { ambiguous = true }
+    end
+    return nil, "declaration inconnue : " .. raw .. " (attendu 3V1R, 2V2R ou 1V3R)", { ambiguous = false }
 end
 
---- Retourne (copie de la convention, nil) ou (nil, erreur).
+--- Retourne (copie de l'etat canonique, nil) ou (nil, erreur, info).
+--- L'info porte { ambiguous = true } quand la saisie ne permettait PAS de
+--- connaitre la couleur : l'appelant doit alors DEMANDER la couleur dominante.
 function Intermission.getDeclaration(raw)
-    local n, err = Intermission.normalizeDeclaration(raw)
-    if n == nil then
+    local key, err, info = Intermission.normalizeDeclaration(raw)
+    if key == nil then
+        return nil, err, info
+    end
+    return copyRecord(CONVENTION[key])
+end
+
+--- L'etat qui DOIT rejoindre `raw` pour faire 4 verts + 4 rouges.
+--- @return string|nil key, string|nil erreur
+function Intermission.complementOf(raw)
+    local rec, err = Intermission.getDeclaration(raw)
+    if rec == nil then
         return nil, err
     end
-    return copyRecord(CONVENTION[n])
+    return rec.complement
 end
 
---- Verifie si deux declarations peuvent se rejoindre sans mourir.
---- Regle du guide : 2+2 et 1+3 sauvent ; le reste tue (2+3 = 5 verts = « 5g »).
---- @return table|nil result { ok, label, greens, reds, reason }, string|nil erreur
+--- Verifie si deux declarations peuvent se rejoindre SANS MOURIR.
+--- Regle (ADDITION de couleurs) : la somme doit faire 4 VERTS et 4 ROUGES.
+---   3V1R + 1V3R = 4V4R : sur ;
+---   2V2R + 2V2R = 4V4R : sur ;
+---   3V1R + 2V2R = 5 verts = « 5g » : mort ;
+---   1V3R + 1V3R = 2 verts + 6 rouges : mort.
+--- @return table|nil result { ok, label, greens, reds, reason, required }, string|nil erreur
 function Intermission.checkMeeting(rawA, rawB)
     local a, errA = Intermission.getDeclaration(rawA)
     if a == nil then
@@ -202,18 +462,18 @@ function Intermission.checkMeeting(rawA, rawB)
         return nil, errB
     end
     local greens = a.greens + b.greens
-    local reds = (4 - a.greens) + (4 - b.greens)
-    local label = a.n .. "+" .. b.n
-    local ok = (a.n == "2" and b.n == "2") or (a.n == "1" and b.n == "3") or (a.n == "3" and b.n == "1")
+    local reds = a.reds + b.reds
+    local label = a.key .. "+" .. b.key
+    local ok = (greens == 4 and reds == 4)
     local reason
     if ok then
         reason = "combinaison sure (" .. greens .. " verts + " .. reds .. " rouges)"
     elseif greens == 5 then
         reason = "5 verts = 5g : MORT"
     else
-        reason = "combinaison interdite (" .. greens .. " verts + " .. reds .. " rouges)"
+        reason = "combinaison interdite (" .. greens .. " verts + " .. reds .. " rouges) : il faut 4 verts ET 4 rouges"
     end
-    return { ok = ok, label = label, greens = greens, reds = reds, reason = reason }
+    return { ok = ok, label = label, greens = greens, reds = reds, reason = reason, required = a.complement }
 end
 
 --- Genere le texte de macro a coller (le joueur la declenche : une macro est du
@@ -323,7 +583,9 @@ function Intermission.tick(state, dt)
     return state
 end
 
---- Enregistre la declaration du joueur (clic sur 1, 2 ou 3).
+--- Enregistre la declaration du joueur : la COMPOSITION d'orbes qu'il voit
+--- (« 3V1R », « 2V2R », « 1V3R », ou une forme toleree comme « 3 verts »).
+--- Un numero seul « 1 » ou « 3 » est REFUSE (ambigu) : voir normalizeDeclaration.
 --- @return table|nil state, string|nil erreur
 function Intermission.declare(state, raw)
     if type(state) ~= "table" then
@@ -390,6 +652,7 @@ function Intermission.snapshot(state)
         macroNote = nil,
         caveat = D_CAVEAT,
         prompt = D_PROMPT,
+        ambiguity = D_AMBIGUITY,
     }
 
     local lines = snap.lines
@@ -398,13 +661,14 @@ function Intermission.snapshot(state)
         lines[#lines + 1] = "Timeline pre-calculee : " .. timeline.visibilitySeconds .. " s visibles puis salle obscurcie."
         lines[#lines + 1] = "Declenchement : debut de combat sur le boss, ou touche/bouton."
         lines[#lines + 1] = D_PROMPT
+        lines[#lines + 1] = D_AMBIGUITY
         return snap
     end
 
     if phase == PHASE_VISIBLE then
         local left = Intermission.remainingVisibility({ timeline = timeline, elapsed = elapsed })
         snap.countdownText = tostring(left)
-        snap.headline = "REGARDE AU-DESSUS DES TETES : " .. left .. " s"
+        snap.headline = "REGARDE LA COULEUR DES ORBES AU-DESSUS DES TETES : " .. left .. " s"
         if declaration == nil then
             lines[#lines + 1] = "Les indicateurs des autres joueurs sont encore visibles."
             lines[#lines + 1] = D_PROMPT
@@ -422,18 +686,23 @@ function Intermission.snapshot(state)
     local rec = declaration and CONVENTION[declaration] or nil
     if rec ~= nil then
         snap.instruction = copyRecord(rec)
-        lines[#lines + 1] = "TU ES " .. rec.n .. "  (" .. rec.orbs .. ")"
-        lines[#lines + 1] = "POSITION : " .. rec.positionLabel
-        lines[#lines + 1] = "PING : " .. rec.pingColor .. " (" .. rec.ping .. ")"
+        lines[#lines + 1] = "TU VOIS : " .. rec.display .. "  (" .. rec.key .. ")"
+        lines[#lines + 1] = "NUMERO AU-DESSUS DE TA TETE : "
+            .. rec.numberText
+            .. (rec.numberAmbiguous and "  -> il ne dit PAS la couleur" or "  -> non ambigu")
         lines[#lines + 1] = "FAIS : " .. rec.action
-        lines[#lines + 1] = "REJOINS : " .. rec.find
-        local macro = Intermission.buildMacro(rec.n, nil)
+        lines[#lines + 1] = "POSITION : " .. rec.positionLabel
+        lines[#lines + 1] = "ETAT A REJOINDRE : " .. rec.complement .. " - " .. rec.find
+        lines[#lines + 1] = "PING A ENVOYER : " .. rec.pingColor .. " (" .. rec.ping .. ")"
+        lines[#lines + 1] = "CONVENTION DE GUILDE : " .. rec.numberRule
+        local macro = Intermission.buildMacro(rec.key, nil)
         if macro ~= nil then
             snap.macroPrimary = macro.primary
             snap.macroFallback = macro.fallback
             snap.macroNote = macro.note
         end
     end
+    lines[#lines + 1] = D_AMBIGUITY
     lines[#lines + 1] = D_CAVEAT
     lines[#lines + 1] = D_CHANNEL
     return snap
@@ -452,9 +721,11 @@ end
            },
        }
 
-     `role` peut contenir la declaration preparee ("1" / "2" / "3") ou un role de
-     raid libre ("Tank", "Heal"). Rien n'est devine : si GIDEON ne l'ecrit pas,
-     l'addon ne l'affiche pas.
+     `role` peut contenir la COMPOSITION d'orbes preparee (« 3V1R », « 2V2R »,
+     « 1V3R », ou encore « 3 verts ») ou un role de raid libre (« Tank »,
+     « Heal »). Un numero seul « 1 » ou « 3 » est AMBIGU : il est signale comme
+     tel, jamais devine. Rien n'est invente : si GIDEON ne l'ecrit pas, l'addon
+     ne l'affiche pas.
 ]]
 
 --- Valide le bloc `plan` : entrees malformees ecartees et listees, jamais de crash.
@@ -578,7 +849,7 @@ function Intermission.buildPlan(assignment, playerName)
             lines[#lines + 1] = partner .. " : " .. partnerInfo
         end
         if out.me ~= nil and out.me.role ~= nil and plan.byName[partner] ~= nil then
-            local meeting = Intermission.checkMeeting(out.me.role, plan.byName[partner].role)
+            local meeting, meetingErr = Intermission.checkMeeting(out.me.role, plan.byName[partner].role)
             if meeting ~= nil then
                 out.meeting = meeting
                 if meeting.ok then
@@ -586,6 +857,9 @@ function Intermission.buildPlan(assignment, playerName)
                 else
                     lines[#lines + 1] = "|cffff5555Rencontre " .. meeting.label .. " : MORT (" .. meeting.reason .. ")|r"
                 end
+            else
+                -- Un role prepare « 1 » ou « 3 » seul est AMBIGU : on le dit, on ne devine pas.
+                lines[#lines + 1] = "|cffff8080Rencontre non verifiable : " .. tostring(meetingErr) .. "|r"
             end
         end
     end
