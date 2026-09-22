@@ -1,14 +1,17 @@
 name: Release
 
-# Le packager CRÉE la Release GitHub (et y attache le zip). Le jeton automatique
-# du workflow doit donc pouvoir ÉCRIRE dans le dépôt : sans ce bloc, le job échoue
-# avec "Resource not accessible by integration" (403) alors que tout le reste passe.
+# The packager CREATES the GitHub Release and attaches the addon zip to it.
+# The workflow token therefore needs write access: without this block the job
+# fails with "Resource not accessible by integration" (403) even when every
+# other step passes.
 permissions:
   contents: write
 
-# Le dépôt BathmanTv/Gideon contient l'addon À SA RACINE (contrainte du
-# BigWigs packager : il exige un .git dans le dossier passé, donc le dossier
-# passé DOIT être la racine du dépôt). On ne passe donc aucun -t.
+# This repository holds the addon at its ROOT. That is a hard requirement of the
+# BigWigs packager: it needs a .git directory inside the folder it is given, so
+# the folder it is given must be the repository root. That is why no -t flag is
+# used here, and why the bot / addon separation is enforced by using two separate
+# repositories rather than subfolders in one repository.
 on:
   push:
     tags:
@@ -16,14 +19,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Garde-fou : on ne publie JAMAIS si les tests échouent.
+  # Gate: never publish when the offline test suite fails.
   tests:
-    name: Tests avant release
-    runs-on: ubuntu-latest
+    name: Tests before release
+    # Pinned on purpose: the ubuntu-latest label migrates to Ubuntu 26.04 in
+    # November 2026 (actions/runner-images#14748). Bump it deliberately.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Installer Lua 5.1 + luacheck + busted + stylua
+      - name: Install Lua 5.1 + luacheck + busted + stylua
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.1 luarocks lua-check
@@ -32,28 +37,29 @@ jobs:
           unzip -o /tmp/stylua.zip -d /tmp/stylua
           sudo install -m 0755 /tmp/stylua/stylua /usr/local/bin/stylua
 
-      - name: Verifications hors jeu
+      - name: Offline checks
         run: make check
 
   release:
     needs: tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      # Packaging + publication. Le packager téléverse automatiquement vers
-      # chaque destination dont le token est présent :
-      #   GitHub Releases  : GITHUB_OAUTH (token fourni par Actions, rien à créer)
-      #                      -> c'est CETTE release qui permet a WowUp de suivre l'addon
-      #   CurseForge       : CF_API_TOKEN  (+ X-Curse-Project-ID dans le .toc)
-      #   Wago Addons      : WAGO_API_TOKEN (+ X-Wago-ID dans le .toc)
-      - name: Package et upload (BigWigs packager)
+      # Publishing policy (one publisher per destination, to avoid duplicate files):
+      #   GitHub Releases : always. GITHUB_OAUTH is provided by Actions, nothing to
+      #                     create. This is the release WowUp uses to install and
+      #                     auto-update the addon.
+      #   CurseForge      : handled by CurseForge itself ("Package tagged commits" in
+      #                     the project settings), so no CF_API_TOKEN is needed here.
+      #   Wago Addons     : enable later by adding the WAGO_API_TOKEN secret and a
+      #                     X-Wago-ID in the .toc.
+      - name: Package and publish (BigWigs packager)
         uses: BigWigsMods/packager@v2
         with:
           args: -g 12.1.0
         env:
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

@@ -10,12 +10,14 @@ on:
 
 jobs:
   check:
-    name: Lint + tests (hors jeu)
-    runs-on: ubuntu-latest
+    name: Lint and offline tests
+    # Pinned on purpose: the ubuntu-latest label migrates to Ubuntu 26.04 in
+    # November 2026 (actions/runner-images#14748). Bump it deliberately.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Installer Lua 5.1 + luacheck + busted + stylua
+      - name: Install Lua 5.1 + luacheck + busted + stylua
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.1 luarocks lua-check
