@@ -111,11 +111,15 @@ describe("Intermission : etats de couleur (modele corrige)", function()
         assert.matches("1V3R", I.getDeclaration("3V1R").positionLabel)
     end)
 
-    it("expose UNE SEULE ligne d'action, celle demandee par le raid lead", function()
+    it("expose UNE SEULE ligne d'action, avec le GESTE REEl de l'ancre", function()
         -- Politique par defaut (« anchors ») : seule l'ANCRE ping.
-        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "STAY WHERE YOU ARE"))
-        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "ping yourself (Warning)"))
-        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "jump on the spot"))
+        -- Retour en jeu : le ping part la ou est la SOURIS, donc l'ancre survole
+        -- son PROPRE cadre de personnage pour se pinger elle-meme.
+        local anchor = I.getDeclaration("1V3R").actionLine
+        assert.is_true(contains(anchor, "PING: YES"))
+        assert.is_true(contains(anchor, "hover YOUR OWN character frame"))
+        assert.is_true(contains(anchor, "press your ping key (Warning)"))
+        assert.is_true(contains(anchor, "jump on the spot"))
         assert.are.equal("DO NOT PING - go to the middle / under the boss", I.getDeclaration("2V2R").actionLine)
         assert.are.equal("DO NOT PING - run to a ping (a 1V3R)", I.getDeclaration("3V1R").actionLine)
         -- Role : une seule ligne courte, l'etat etant affiche en tres gros a part.
@@ -693,7 +697,7 @@ describe("Intermission : machine d'etat", function()
         assert.are.equal("PING: YES", snap.pingBanner)
         assert.are.equal("|cffff4040", snap.pingColorHex)
         assert.are.equal("PING: Warning - press Q", snap.pingHint.line)
-        assert.is_true(contains(snap.actionLine, "STAY WHERE YOU ARE"))
+        assert.is_true(contains(snap.actionLine, "hover YOUR OWN character frame"))
         assert.are.equal(3, #snap.lines)
     end)
 
@@ -1150,5 +1154,69 @@ describe("Config : bloc intermission", function()
         assert.are.equal("CENTER", c.position.point)
         -- L'ancien champ de macro a disparu : plus aucune trace dans les defaults.
         assert.is_nil(c.macroTargetToken)
+    end)
+end)
+
+describe("Config : panneau principal (position persistee + verrou)", function()
+    local ns = wowenv.loadCore()
+    local Config = ns.Config
+
+    it("cree une position par defaut FRAICHE (aucun alias entre comptes)", function()
+        local a = Config.defaultPanelPosition()
+        local b = Config.defaultPanelPosition()
+        assert.are_not.equal(a, b)
+        assert.are.same({ point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }, a)
+        a.x = 99
+        a.point = "TOPLEFT"
+        assert.are.equal(0, Config.defaultPanelPosition().x)
+        assert.are.equal("CENTER", Config.defaultPanelPosition().point)
+    end)
+
+    it("resout le verrou : seul un vrai booleen verrouille", function()
+        assert.is_false(Config.resolveLockPanel(nil))
+        assert.is_false(Config.resolveLockPanel(false))
+        assert.is_true(Config.resolveLockPanel(true))
+        for _, bad in ipairs({ "true", 1, 0, {}, "oui" }) do
+            assert.is_false(Config.resolveLockPanel(bad), tostring(bad))
+        end
+    end)
+
+    it("resout une position persistee : listes blanches, jamais d'erreur", function()
+        local plain = Config.resolvePosition(nil)
+        assert.are.same({ point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }, plain)
+        assert.are.equal(0, Config.resolvePosition({}).y)
+        local pos = Config.resolvePosition({ point = "topleft", relativePoint = "TOPLEFT", x = -120, y = -40 })
+        assert.are.equal("TOPLEFT", pos.point)
+        assert.are.equal("TOPLEFT", pos.relativePoint)
+        assert.are.equal(-120, pos.x)
+        assert.are.equal(-40, pos.y)
+        -- Un point INCONNU ne doit JAMAIS atteindre SetPoint (le client leverait).
+        local bad = Config.resolvePosition({ point = "BANANA", relativePoint = 42, x = "x", y = {} })
+        assert.are.equal("CENTER", bad.point)
+        assert.are.equal("CENTER", bad.relativePoint)
+        assert.are.equal(0, bad.x)
+        assert.are.equal(0, bad.y)
+        assert.are.equal("CENTER", Config.resolvePosition("pas une table").point)
+    end)
+
+    it("deverrouille par defaut et MIGRE une fois les SavedVariables existantes", function()
+        -- Fichier neuf : panneau deplacable, marqueur de schema pose.
+        local fresh = Config.ensureDB({})
+        assert.is_false(fresh.lockPanel, "le panneau doit etre deplacable par defaut")
+        assert.are.equal(Config.PANEL_SCHEMA, fresh.panelSchema)
+        assert.are.equal("CENTER", fresh.panelPosition.point)
+        assert.are.equal("CENTER", fresh.pingPanelPosition.point)
+        -- Ancien fichier : `lockPanel = true` etait l'ANCIEN defaut, qu'aucun
+        -- joueur ne pouvait changer -> deverrouille UNE fois.
+        local legacy = Config.ensureDB({ lockPanel = true })
+        assert.is_false(legacy.lockPanel)
+        assert.are.equal(Config.PANEL_SCHEMA, legacy.panelSchema)
+        -- Une fois le marqueur pose, le choix du joueur est RESPECTE.
+        local locked = Config.ensureDB({ lockPanel = true, panelSchema = Config.PANEL_SCHEMA })
+        assert.is_true(locked.lockPanel)
+        assert.is_true(Config.ensureDB({ lockPanel = false, panelSchema = Config.PANEL_SCHEMA }).lockPanel == false)
+        -- Valeur incoherente : jamais d'erreur, on retombe sur « deplacable ».
+        local odd = Config.ensureDB({ lockPanel = "oui", panelSchema = Config.PANEL_SCHEMA })
+        assert.is_false(odd.lockPanel)
     end)
 end)

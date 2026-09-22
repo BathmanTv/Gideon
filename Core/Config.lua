@@ -47,11 +47,33 @@ Config.DEFAULT_LEAD_SECONDS = 2
 --- SavedVariables must never produce an unbounded loop).
 Config.MAX_SCHEDULE_ENTRIES = 12
 
+--- Anchor points accepted when reading a PERSISTED panel position. A hand-edited
+--- SavedVariables holding an unknown point name would make the client raise on
+--- SetPoint: the resolver only ever returns a value from this list.
+Config.POSITION_POINTS = {
+    "CENTER",
+    "TOP",
+    "BOTTOM",
+    "LEFT",
+    "RIGHT",
+    "TOPLEFT",
+    "TOPRIGHT",
+    "BOTTOMLEFT",
+    "BOTTOMRIGHT",
+}
+
+--- SavedVariables schema of the PANEL preferences (position + lock). Bumped when
+--- a migration has to run once: see Config.ensureDB.
+Config.PANEL_SCHEMA = 1
+
 Config.DEFAULTS = {
     enabled = true,
     autoShow = true,
     scale = 1.0,
-    lockPanel = true,
+    -- The main panel is MOVABLE BY DEFAULT (in-game feedback: a panel the player
+    -- cannot move is unusable). /gr lock freezes it, /gr unlock frees it again.
+    -- Any other value than a boolean counts as "not locked".
+    lockPanel = false,
     -- Language preference of the player: "auto" (follow the client), "en", "fr".
     locale = Locale.AUTO,
     -- Block published by GIDEON out of game (see docs/TESTPLAN.md, step 4).
@@ -120,6 +142,58 @@ function Config.resolveSchedule(raw)
     return out
 end
 
+--- Fresh copy of the DEFAULT panel position (never a shared table: two characters
+--- must not alias the same position). Used by the main panel, the intermission
+--- panel and the ping-training frame.
+--- @return table { point, relativePoint, x, y }
+function Config.defaultPanelPosition()
+    return { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+end
+
+--- PURE resolution of the persisted LOCK preference (GideonRaidDB.lockPanel).
+--- true = the player froze the panels, false = they can be dragged. Anything else
+--- - absent, string, number, table, hand-edited SavedVariables - means NOT
+--- locked: the resolver is total, it never raises and never returns nil.
+--- @param raw boolean|any
+--- @return boolean
+function Config.resolveLockPanel(raw)
+    return raw == true
+end
+
+--- PURE normalization of a persisted panel position (point / relativePoint / x /
+--- y). Only a KNOWN anchor point is kept (an unknown name would make the client
+--- raise on SetPoint), the coordinates must be numbers: anything else falls back
+--- to the centered default. Total: never raises, never returns nil.
+--- @param raw table|nil raw position block
+--- @return table { point, relativePoint, x, y }
+function Config.resolvePosition(raw)
+    local out = Config.defaultPanelPosition()
+    if type(raw) ~= "table" then
+        return out
+    end
+    local wanted = type(raw.point) == "string" and raw.point:upper() or nil
+    for index = 1, #Config.POSITION_POINTS do
+        if wanted == Config.POSITION_POINTS[index] then
+            out.point = wanted
+            break
+        end
+    end
+    local relative = type(raw.relativePoint) == "string" and raw.relativePoint:upper() or nil
+    for index = 1, #Config.POSITION_POINTS do
+        if relative == Config.POSITION_POINTS[index] then
+            out.relativePoint = relative
+            break
+        end
+    end
+    if type(raw.x) == "number" then
+        out.x = raw.x
+    end
+    if type(raw.y) == "number" then
+        out.y = raw.y
+    end
+    return out
+end
+
 local function clampNumber(value, min, max)
     if value < min then
         return min
@@ -131,12 +205,31 @@ local function clampNumber(value, min, max)
 end
 
 --- Creates the SavedVariables table with the default values (non-destructive call).
+--- Also runs the ONE-TIME soft migration of the panel preferences:
+---   - a SavedVariables written by an older version carries `lockPanel = true`
+---     (the old hard-coded default, which no player could change: no command
+---     existed then), and no `panelSchema` marker. It is unlocked ONCE, then the
+---     player's own choice (/gr lock, /gr unlock, the panel button) is preserved;
+---   - a value that is not a boolean never raises: it counts as "not locked".
+--- The panel positions are created fresh (never aliased between characters).
 function Config.ensureDB(db)
     db = db or {}
     for k, v in pairs(Config.DEFAULTS) do
         if db[k] == nil then
             db[k] = v
         end
+    end
+    if db.panelSchema ~= Config.PANEL_SCHEMA then
+        db.lockPanel = false
+        db.panelSchema = Config.PANEL_SCHEMA
+    else
+        db.lockPanel = Config.resolveLockPanel(db.lockPanel)
+    end
+    if type(db.panelPosition) ~= "table" then
+        db.panelPosition = Config.defaultPanelPosition()
+    end
+    if type(db.pingPanelPosition) ~= "table" then
+        db.pingPanelPosition = Config.defaultPanelPosition()
     end
     if type(db.intermission) ~= "table" then
         db.intermission = Config.defaultIntermission()

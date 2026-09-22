@@ -77,13 +77,21 @@ local function ensurePanel()
     panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
+    panel:SetClampedToScreen(true)
+    -- DRAGGING. The panel is movable BY DEFAULT (GideonRaidDB.lockPanel = false):
+    -- in-game feedback showed that a panel the player cannot move is unusable.
+    -- /gr lock (or the LOCK PANEL button) freezes the position; /gr unlock frees
+    -- it again. The position is saved on every drag stop.
     panel:SetScript("OnDragStart", function(self)
-        if not _G.GideonRaidDB or not _G.GideonRaidDB.lockPanel then
-            self:StartMoving()
+        if UI.IsPanelLocked() then
+            UI.Print(Locale.t("panel.lockedHint"))
+            return
         end
+        self:StartMoving()
     end)
     panel:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        UI.SavePanelPosition()
     end)
     panel:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -100,7 +108,7 @@ local function ensurePanel()
 
     panel.body = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     panel.body:SetPoint("TOPLEFT", 16, -44)
-    panel.body:SetPoint("BOTTOMRIGHT", -16, 92)
+    panel.body:SetPoint("BOTTOMRIGHT", -16, 116)
     panel.body:SetJustifyH("LEFT")
     panel.body:SetJustifyV("TOP")
     panel.body:SetText("")
@@ -109,6 +117,16 @@ local function ensurePanel()
     -- tooltip and same behaviour everywhere (shared helper).
     panel.closeCross = UI.AttachCloseCross(panel, function()
         panel:Hide()
+    end)
+
+    -- LOCK / UNLOCK of the panels: the label always names the ACTION the click
+    -- performs (LOCK PANEL when the panel is movable, UNLOCK PANEL when it is
+    -- frozen). Same mechanism as /gr lock and /gr unlock.
+    panel.lock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    panel.lock:SetSize(180, 20)
+    panel.lock:SetPoint("BOTTOM", 0, 88)
+    panel.lock:SetScript("OnClick", function()
+        UI.SetPanelLocked(not UI.IsPanelLocked())
     end)
 
     -- Opens the PLACEMENT MODE of the intermission panel: the player drags it
@@ -149,11 +167,94 @@ function UI.Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99GideonRaid|r: " .. tostring(msg))
 end
 
+--- True when the player froze the panels (persisted `lockPanel`). The resolving
+--- is PURE (Core/Config.resolveLockPanel): an absent or mistyped value means NOT
+--- locked, so a hand-edited SavedVariables can never lock the player out.
+function UI.IsPanelLocked()
+    local db = _G.GideonRaidDB
+    return ns.Config.resolveLockPanel(type(db) == "table" and db.lockPanel or nil)
+end
+
+--- Reads the CURRENT anchor of a frame and returns a persistable position.
+--- Pure data copy (no computation): shared by the main panel, the intermission
+--- panel and the ping-training frame.
+--- @param frame Frame
+--- @return table { point, relativePoint, x, y }
+function UI.CapturePosition(frame)
+    local point, _, relativePoint, x, y = frame:GetPoint(1)
+    return {
+        point = point or "CENTER",
+        relativePoint = relativePoint or "CENTER",
+        x = x or 0,
+        y = y or 0,
+    }
+end
+
+--- Applies the PERSISTED position of the main panel (centered by default). The
+--- stored block goes through the PURE resolver, so an unknown anchor point can
+--- never reach SetPoint.
+function UI.ApplyPanelPosition()
+    local p = ensurePanel()
+    local db = _G.GideonRaidDB
+    local pos = ns.Config.resolvePosition(type(db) == "table" and db.panelPosition or nil)
+    p:ClearAllPoints()
+    p:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
+    return pos
+end
+
+--- Saves the current position of the main panel into the SavedVariables (called
+--- on every drag stop: the player never has to confirm anything).
+function UI.SavePanelPosition()
+    if type(_G.GideonRaidDB) ~= "table" then
+        return nil
+    end
+    _G.GideonRaidDB.panelPosition = UI.CapturePosition(ensurePanel())
+    return _G.GideonRaidDB.panelPosition
+end
+
+--- Locks / unlocks the panels (/gr lock, /gr unlock, the LOCK PANEL button).
+--- The choice is PERSISTED: it survives a /reload. The panel positions are kept.
+--- @param locked boolean
+--- @return boolean|nil effective value (nil when nothing could be written)
+function UI.SetPanelLocked(locked)
+    local db = _G.GideonRaidDB
+    if type(db) ~= "table" then
+        UI.Print(Locale.t("ui.noSavedVariables"))
+        return nil
+    end
+    local value = ns.Config.resolveLockPanel(locked and true or false)
+    db.lockPanel = value
+    UI.ApplyStaticText()
+    UI.Print(Locale.t(value and "cmd.panelLocked" or "cmd.panelUnlocked"))
+    return value
+end
+
+--- `/gr resetposition`: brings the main panel, the intermission panel and the
+--- ping-training frame back to the center of the screen, and persists it.
+function UI.ResetPositions()
+    local db = _G.GideonRaidDB
+    if type(db) ~= "table" then
+        UI.Print(Locale.t("ui.noSavedVariables"))
+        return nil
+    end
+    db.panelPosition = ns.Config.defaultPanelPosition()
+    db.pingPanelPosition = ns.Config.defaultPanelPosition()
+    if type(db.intermission) == "table" then
+        db.intermission.position = ns.Config.defaultPanelPosition()
+    end
+    UI.ApplyPanelPosition()
+    UI.IntermissionApplyConfig()
+    UI.PingPanelApplyPosition()
+    UI.Print(Locale.t("cmd.positionReset"))
+    return true
+end
+
 function UI.Toggle()
     local p = ensurePanel()
     if p:IsShown() then
         p:Hide()
     else
+        UI.ApplyPanelPosition()
         UI.Refresh()
         p:Show()
     end
@@ -219,6 +320,9 @@ function UI.ApplyStaticText()
     p.place:SetText(Locale.t("panel.placeButton"))
     p.simInter:SetText(Locale.t("panel.simInterButton"))
     p.simPing:SetText(Locale.t("panel.simPingButton"))
+    -- The lock button always names the ACTION: "LOCK PANEL" while the panel can
+    -- be dragged, "UNLOCK PANEL" once it is frozen.
+    p.lock:SetText(Locale.t(UI.IsPanelLocked() and "panel.unlockButton" or "panel.lockButton"))
     p.closeCross:SetText(Locale.t("ui.closeCross"))
     UI.Refresh()
 end
@@ -233,5 +337,9 @@ function UI.PrintStatus()
 end
 
 function UI.Initialize()
-    ensurePanel()
+    local p = ensurePanel()
+    -- The persisted position is applied as soon as the panel exists: the player
+    -- finds their panel where they left it, at the first /gr of the session.
+    UI.ApplyPanelPosition()
+    p.lock:SetText(Locale.t(UI.IsPanelLocked() and "panel.unlockButton" or "panel.lockButton"))
 end

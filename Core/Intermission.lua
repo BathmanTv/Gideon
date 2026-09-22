@@ -267,7 +267,9 @@ end
 
      DISPLAY: ONLY the essential is displayed (the panel is read in combat):
      state, role, PING: YES/NO and ONE action line. The long explanations live
-     in docs/INTERMISSION-COACH.md, never on screen.
+     in docs/INTERMISSION-COACH.md, never on screen. As soon as a composition is
+     clicked the three choices DISAPPEAR (snapshot.showButtons = false) and only
+     CORRECT stays (snapshot.showRedo = true), which brings them back.
 ]]
 --- The record fields that are DISPLAYED hold a LOCALE KEY, never a literal:
 --- copyRecord() resolves them through Locale.t, so /gr lang applies immediately,
@@ -934,7 +936,10 @@ function Intermission.snapshot(state, pingMode, bindingResolver)
         visible = phase ~= PHASE_IDLE,
         -- The wiring closes the panel by itself when the intermission is over.
         autoClose = phase == PHASE_DONE,
-        showButtons = phase == PHASE_PENDING or phase == PHASE_VISIBLE or phase == PHASE_DARK,
+        -- THE THREE CHOICES ARE HIDDEN AS SOON AS ONE IS CLICKED (in-game
+        -- feedback: "once you click, you must not see the others any more"):
+        -- only the result stays, with CORRECT.
+        showButtons = (phase == PHASE_PENDING or phase == PHASE_VISIBLE or phase == PHASE_DARK) and declaration == nil,
         showRedo = false,
         declaration = declaration,
         stateText = declaration or "",
@@ -987,7 +992,9 @@ function Intermission.snapshot(state, pingMode, bindingResolver)
         snap.pingBanner = Locale.format("ui.pingBanner", shown.pingDecision)
         snap.pingColorHex = shown.shouldPing and shown.pingColorHex or nil
         snap.actionLine = shown.actionLine
-        snap.showRedo = snap.showButtons
+        -- CORRECT is available as long as the intermission session is open: it
+        -- forgets the declaration and brings the three choices back.
+        snap.showRedo = phase == PHASE_PENDING or phase == PHASE_VISIBLE or phase == PHASE_DARK
         if shown.shouldPing then
             -- The key is read by the RENDERING layer (injected resolver) and
             -- formatted HERE: an unknown key simply yields the "set a keybind"

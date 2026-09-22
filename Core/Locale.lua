@@ -54,17 +54,35 @@ Locale.STRINGS = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sim inter|group|groupe (rehearsal, no boss) | /gr sim ping | /gr sim stop",
+            .. "  /gr sim inter|group|groupe [cycles=N] (rehearsal, no boss) | /gr sim ping | /gr sim stop\n"
+            .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sim inter|group|groupe (repetition, sans boss) | /gr sim ping | /gr sim stop",
+            .. "  /gr sim inter|group|groupe [cycles=N] (repetition, sans boss) | /gr sim ping | /gr sim stop\n"
+            .. "  /gr lock | /gr unlock | /gr resetposition",
     },
     ["cmd.sim.help"] = {
-        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = 3 accelerated "
-            .. "intermissions; /gr sim ping = the 3 native pings, guided; /gr sim stop = leave the simulation.",
-        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = 3 intermissions "
-            .. "accelerees ; /gr sim ping = les 3 pings natifs, guides ; /gr sim stop = quitter la simulation.",
+        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = 1 accelerated "
+            .. "intermission (add cycles=N, 1-9, for a longer test); /gr sim ping = ping training on YOUR OWN "
+            .. "character frame; /gr sim stop = leave the simulation.",
+        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = 1 intermission "
+            .. "acceleree (ajoute cycles=N, 1-9, pour un test plus long) ; /gr sim ping = entrainement au ping sur "
+            .. "TON propre cadre de personnage ; /gr sim stop = quitter la simulation.",
+    },
+    -- Panel lock: the main panel is MOVABLE by default (in-game feedback); these
+    -- three commands are the lock / unlock / reset entry points.
+    ["cmd.panelLocked"] = {
+        en = "Panel locked: it can no longer be dragged (/gr unlock to move it again).",
+        fr = "Panneau verrouille : il ne peut plus etre deplace (/gr unlock pour le deplacer a nouveau).",
+    },
+    ["cmd.panelUnlocked"] = {
+        en = "Panel unlocked: drag it where you want, the position is saved automatically.",
+        fr = "Panneau deverrouille : deplace-le ou tu veux, la position est enregistree automatiquement.",
+    },
+    ["cmd.positionReset"] = {
+        en = "Panel positions reset to the center of the screen (main panel, intermission panel, ping training).",
+        fr = "Positions des panneaux remises au centre de l'ecran (panneau principal, panneau intermission, " .. "entrainement au ping).",
     },
     ["cmd.sim.unknown"] = {
         en = "Unknown simulation '%s': accepted values are inter (group, groupe), ping, stop.",
@@ -89,19 +107,22 @@ Locale.STRINGS = {
         fr = "Aucune simulation en cours.",
     },
     ["cmd.sim.pingStart"] = {
-        en = "SIMULATION (no boss, no raid): native ping test, %d pings in a row (%s). Press your ping key "
-            .. "for real when the panel asks, then validate with the button.",
-        fr = "SIMULATION (sans boss, sans raid) : test des pings natifs, %d pings a la suite (%s). Appuie "
-            .. "pour de vrai sur ta touche de ping quand le panneau le demande, puis valide avec le bouton.",
+        en = "SIMULATION (no boss, no raid): ping training, %d native pings in a row (%s). Hover YOUR OWN "
+            .. "character frame and press your ping key for real: you ping yourself. Validate with the button "
+            .. "after each ping.",
+        fr = "SIMULATION (sans boss, sans raid) : entrainement au ping, %d pings natifs a la suite (%s). Survole "
+            .. "TON propre cadre de personnage et appuie pour de vrai sur ta touche de ping : tu te pinges "
+            .. "toi-meme. Valide avec le bouton apres chaque ping.",
     },
     ["cmd.sim.pingFinished"] = {
-        en = "Ping test over: %d ping(s) announced. The addon detected NOTHING (no API reports a ping): " .. "check your screen yourself.",
-        fr = "Test de ping termine : %d ping(s) annonce(s). L'addon n'a RIEN detecte (aucune API ne rapporte "
+        en = "Ping training over: %d ping(s) announced. The addon detected NOTHING (no API reports a ping): "
+            .. "check your screen yourself.",
+        fr = "Entrainement au ping termine : %d ping(s) annonce(s). L'addon n'a RIEN detecte (aucune API ne rapporte "
             .. "un ping) : verifie ton ecran toi-meme.",
     },
     ["cmd.sim.pingStopped"] = {
-        en = "Ping test left after %d/%d ping(s) announced.",
-        fr = "Test de ping quitte apres %d/%d ping(s) annonce(s).",
+        en = "Ping training left after %d/%d ping(s) announced.",
+        fr = "Entrainement au ping quitte apres %d/%d ping(s) annonce(s).",
     },
     ["cmd.lang.status"] = {
         en = "Language: client detected = %s, effective = %s, preference = %s (/gr lang auto|en|fr to change).",
@@ -169,8 +190,23 @@ Locale.STRINGS = {
         fr = "SIMULATION : GROUPE INTER (sans boss)",
     },
     ["panel.simPingButton"] = {
-        en = "SIMULATION: THE 3 NATIVE PINGS",
-        fr = "SIMULATION : LES 3 PINGS NATIFS",
+        en = "SIMULATION: PING TRAINING (PING YOURSELF)",
+        fr = "SIMULATION : ENTRAINEMENT AU PING (TE PINGER)",
+    },
+    -- Lock / unlock of the panels. The main panel is DRAGGABLE by default (the
+    -- player can move it); this button freezes the position, and the label always
+    -- names the ACTION the click performs.
+    ["panel.lockButton"] = {
+        en = "LOCK PANEL",
+        fr = "VERROUILLER",
+    },
+    ["panel.unlockButton"] = {
+        en = "UNLOCK PANEL",
+        fr = "DEVERROUILLER",
+    },
+    ["panel.lockedHint"] = {
+        en = "Panel locked: /gr unlock (or the UNLOCK PANEL button) to move it.",
+        fr = "Panneau verrouille : /gr unlock (ou le bouton DEVERROUILLER) pour le deplacer.",
     },
     ["status.noAssignment"] = {
         en = "no assignment (%s)",
@@ -396,8 +432,10 @@ Locale.STRINGS = {
     -- -------------------------------------------------------- ping role texts
     -- PING ROLES BY STATE (raid-lead decision). The number displayed above the
     -- head does NOT choose the role: the ORB COMPOSITION does.
-    --   1V3R = ANCHOR  : does not move, pings itself with the native keybind (or
-    --                    is pinged by another player);
+    --   1V3R = ANCHOR  : does not move, PINGS ITSELF with the native keybind by
+    --                    hovering ITS OWN character frame (measured in game: the
+    --                    ping lands under the mouse, so hovering your own frame
+    --                    pings yourself) - or is pinged by another player;
     --   2V2R = MIDDLE  : does not ping, goes to the middle and pairs with a 2V2R;
     --   3V1R = CHASER  : does not ping, runs to a ping (any 1V3R works).
     -- `state.actionPing.<state>` / `state.actionNoPing.<state>` are the two
@@ -415,9 +453,13 @@ Locale.STRINGS = {
         en = "CHASER",
         fr = "CHASSEUR",
     },
+    -- The ANCHOR action line states the REAL gesture, step by step (the ping
+    -- lands where the mouse is: hovering your own character frame pings YOU).
+    -- %s = the label of the ping to use (Warning / Avertissement).
     ["state.actionPing.1V3R"] = {
-        en = "STAY WHERE YOU ARE - ping yourself (%s) and jump on the spot",
-        fr = "RESTE SUR PLACE - ping-toi (%s) et saute sur place",
+        en = "PING: YES - hover YOUR OWN character frame then press your ping key (%s), stay put and jump on the spot",
+        fr = "PING : OUI - survole TON propre cadre de personnage puis appuie sur ta touche de ping (%s), reste sur "
+            .. "place et saute sur place",
     },
     ["state.actionNoPing.1V3R"] = {
         en = "STAY WHERE YOU ARE - jump on the spot (no ping in this policy)",
@@ -651,24 +693,32 @@ Locale.STRINGS = {
         en = "Encounter started: the simulation is stopped. No boss was simulated.",
         fr = "Combat commence : la simulation est arretee. Aucun boss n'a ete simule.",
     },
-    -- Ping test: the three native pings, one after the other. The panel says
-    -- which ping to trigger and which key to press (when the player bound one);
-    -- it can NOT check that the ping went out.
+    -- Ping training: the three native pings, one after the other, used to LEARN
+    -- the ANCHOR gesture (the ping lands under the MOUSE: hovering your own
+    -- character frame pings YOU). The frame says which key to press when the
+    -- player bound one; it can NOT check that the ping went out.
     ["sim.ping.title"] = {
-        en = "GideonRaid - Native ping test",
-        fr = "GideonRaid - Test des pings natifs",
+        en = "GideonRaid - Ping training (ping yourself)",
+        fr = "GideonRaid - Entrainement au ping (te pinger)",
     },
     ["sim.ping.stepLine"] = {
         en = "PING %d/%d",
         fr = "PING %d/%d",
     },
-    ["sim.ping.press"] = {
-        en = "PRESS: %s",
-        fr = "APPUIE : %s",
+    -- The BIG instruction, step by step. %s = the key the player really bound
+    -- (or sim.ping.yourKey when none is known) and the label of the ping.
+    ["sim.ping.selfSteps"] = {
+        en = "1. Hover YOUR OWN character frame (the one with your health bar).\n2. Press %s (%s) -> you ping yourself",
+        fr = "1. Survole TON propre cadre de personnage (celui avec ta barre de vie).\n2. Appuie sur %s (%s) -> tu te "
+            .. "pinges toi-meme",
     },
-    ["sim.ping.pressKey"] = {
-        en = "PRESS: %s (%s)",
-        fr = "APPUIE : %s (%s)",
+    ["sim.ping.yourKey"] = {
+        en = "your ping key",
+        fr = "ta touche de ping",
+    },
+    ["sim.ping.anchorNote"] = {
+        en = "This is exactly the ANCHOR (1V3R) gesture during the intermission: ping yourself where you stand.",
+        fr = "C'est exactement le geste de l'ANCRE (1V3R) pendant l'intermission : ping-toi la ou tu te tiens.",
     },
     ["sim.ping.ready"] = {
         en = "GET READY: %s",
@@ -707,12 +757,12 @@ Locale.STRINGS = {
         fr = "PING POSE",
     },
     ["sim.ping.quit"] = {
-        en = "QUIT TEST",
-        fr = "QUITTER LE TEST",
+        en = "QUIT TRAINING",
+        fr = "QUITTER L'ENTRAINEMENT",
     },
     ["sim.ping.finished"] = {
-        en = "PING TEST OVER",
-        fr = "TEST DE PING TERMINE",
+        en = "PING TRAINING OVER",
+        fr = "ENTRAINEMENT AU PING TERMINE",
     },
     ["sim.ping.finishedLine"] = {
         en = "%d/%d ping(s) announced by the addon - it detected none of them (impossible). Check your screen.",
@@ -737,8 +787,8 @@ Locale.STRINGS = {
         fr = "ping inconnu : %s (attendu Warning, OnMyWay ou Assist)",
     },
     ["err.nothingToConfirm"] = {
-        en = "nothing to confirm: the ping test is not waiting for a ping",
-        fr = "rien a valider : le test de ping n'attend aucun ping",
+        en = "nothing to confirm: the ping training is not waiting for a ping",
+        fr = "rien a valider : l'entrainement au ping n'attend aucun ping",
     },
     ["err.declarationInvalid"] = {
         en = "invalid declaration (expected a composition: 3V1R, 2V2R or 1V3R)",

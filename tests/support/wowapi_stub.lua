@@ -48,8 +48,11 @@ function stub.install()
         end
     end
     function Frame:SetSize() end
-    function Frame:SetPoint(point, a, b, c)
-        self.__point = { point, a, b, c }
+    --- Tous les arguments sont conserves (point, relativeTo, relativePoint, x, y) :
+    --- les positions PERSISTEES (panneau principal, panneau intermission, fenetre
+    --- de simulation) sont ainsi verifiables hors jeu.
+    function Frame:SetPoint(...)
+        self.__point = { ... }
     end
     function Frame:ClearAllPoints()
         self.__point = nil

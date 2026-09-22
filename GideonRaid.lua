@@ -180,6 +180,15 @@ local function slashHandler(cmd)
         printPingMode()
     elseif pingMode ~= nil then
         setPingMode(pingMode)
+    elseif cmd == "lock" then
+        -- The main panel is movable by default; these three commands are the
+        -- lock / unlock / reset-position entry points (same effect as the
+        -- LOCK PANEL / UNLOCK PANEL button of the main panel).
+        ns.UI.SetPanelLocked(true)
+    elseif cmd == "unlock" then
+        ns.UI.SetPanelLocked(false)
+    elseif cmd == "resetposition" or cmd == "resetpos" then
+        ns.UI.ResetPositions()
     elseif cmd == "inter" or cmd == "intermission" then
         ns.UI.IntermissionToggle()
     elseif cmd == "inter start" then

@@ -129,11 +129,15 @@ describe("Ping : politiques (logique pure)", function()
         assert.is_true(I.shouldPing("3V1R", "color"))
     end)
 
-    it("consigne operationnelle de l'ANCRE : sur place, ping, ne bouge pas", function()
+    it("consigne operationnelle de l'ANCRE : survoler SON cadre, ping, ne pas bouger", function()
         local anchor = I.getDeclaration("1V3R") -- anchors
         assert.are.equal("ROLE: ANCHOR", anchor.roleLine)
-        assert.is_true(contains(anchor.actionLine, "STAY WHERE YOU ARE"))
-        assert.is_true(contains(anchor.actionLine, "ping yourself (Warning)"))
+        -- Retour en jeu : le ping part la ou est la souris, donc l'ancre survole
+        -- son PROPRE cadre de personnage (le geste est ecrit, plus « place un
+        -- ping sur toi »).
+        assert.is_true(contains(anchor.actionLine, "PING: YES"))
+        assert.is_true(contains(anchor.actionLine, "hover YOUR OWN character frame"))
+        assert.is_true(contains(anchor.actionLine, "press your ping key (Warning)"))
         assert.is_true(contains(anchor.actionLine, "jump on the spot"))
         assert.is_true(anchor.shouldPing)
         local hint = assert(I.pingHint("1V3R", "anchors", "Q"))
@@ -144,6 +148,7 @@ describe("Ping : politiques (logique pure)", function()
         assert.is_true(contains(noPing.actionLine, "STAY WHERE YOU ARE"))
         assert.is_true(contains(noPing.actionLine, "jump on the spot"))
         assert.is_false(contains(noPing.actionLine, "ping yourself"))
+        assert.is_false(contains(noPing.actionLine, "hover YOUR OWN"))
         assert.are.equal("3V1R", anchor.complement)
     end)
 
@@ -179,10 +184,11 @@ describe("Ping : politiques (logique pure)", function()
         local anchor = fr.Intermission.getDeclaration("1V3R")
         assert.are.equal("ANCRE", anchor.roleName)
         assert.are.equal("ROLE : ANCRE", anchor.roleLine)
-        assert.is_true(contains(anchor.actionLine, "RESTE SUR PLACE"))
+        assert.is_true(contains(anchor.actionLine, "survole TON propre cadre de personnage"))
         -- Le libelle du ping suit la langue du client : « Avertissement » (mesure
         -- en jeu par le raid lead), pas le nom canonique anglais.
-        assert.is_true(contains(anchor.actionLine, "ping-toi (Avertissement)"))
+        assert.is_true(contains(anchor.actionLine, "ta touche de ping (Avertissement)"))
+        assert.is_true(contains(anchor.actionLine, "reste sur place"))
         assert.are.equal("Avertissement", fr.Intermission.pingLabel("Warning"))
         assert.are.equal("En route", fr.Intermission.pingLabel("OnMyWay"))
         assert.are.equal("Aide", fr.Intermission.pingLabel("Assist"))

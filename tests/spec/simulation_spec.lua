@@ -4,11 +4,15 @@
     Tests HORS JEU du MODE SIMULATION (Core/Simulation.lua, logique PURE) :
 
       1. "Groupe inter" : repetition complete d'intermissions en accelere
-         (ouverture apres 3 s, fermeture apres ~20 s, 3 cycles), sans boss, sans
-         raid, sans ENCOUNTER_START et sans jamais lire d'evenement de combat ;
-      2. "Test du ping en conditions reelles" : sequence GUIDEe des 3 pings
-         natifs (Warning -> OnMyWay -> Assist), avec la touche reellement bindee
-         INJECTEE (Core/ n'appelle aucune API) et un compte a rebours visible.
+         (ouverture apres 3 s, fermeture apres ~20 s, 1 cycle par defaut depuis
+         le retour en jeu du raid lead, jusqu'a 9 avec `cycles=N`), sans boss,
+         sans raid, sans ENCOUNTER_START et sans jamais lire d'evenement de
+         combat ;
+      2. "Entrainement au ping" : sequence GUIDEe des 3 pings natifs
+         (Warning -> OnMyWay -> Assist) qui enseigne le geste de l'ANCRE
+         (survoler SON PROPRE cadre de personnage = se pinger soi-meme), avec la
+         touche reellement bindee INJECTEE (Core/ n'appelle aucune API) et un
+         compte a rebours visible.
 
     Ce que ces tests verrouillent :
       - des ENTREES BORNEES : toute option numerique est bornee (jamais de
@@ -33,7 +37,9 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
     local S = ns.Simulation
 
     it("expose les bornes et les valeurs par defaut du raid lead", function()
-        assert.are.equal(3, S.DEFAULT_CYCLES)
+        -- Retour en jeu : UN seul cycle par defaut (« garde la simulation sur
+        -- 1 test intermission »). Les bornes 1..9 restent.
+        assert.are.equal(1, S.DEFAULT_CYCLES)
         assert.are.equal(1, S.MIN_CYCLES)
         assert.are.equal(9, S.MAX_CYCLES)
         assert.are.equal(3, S.DEFAULT_OPEN_DELAY_SECONDS)
@@ -42,7 +48,7 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
         assert.are.equal(20, S.DEFAULT_INTERMISSION_SECONDS)
         assert.are.equal(15, S.DEFAULT_PING_STEP_SECONDS)
         assert.are.equal(5, S.DEFAULT_PING_GAP_SECONDS)
-        assert.are.equal(1, S.SCHEMA_VERSION)
+        assert.are.equal(2, S.SCHEMA_VERSION)
     end)
 
     it("annonce les TROIS pings dans un ordre EXPLICITE et lisible", function()
@@ -81,6 +87,39 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
         assert.is_nil(S.resolveCommand(42))
         assert.is_nil(S.resolveCommand({}))
     end)
+
+    it("parse l'argument complet de /gr sim : mode + option bornee cycles=N", function()
+        local mode, options = S.parseCommand("inter")
+        assert.are.equal("inter", mode)
+        assert.are.same({}, options)
+        local alias, aliasOptions = S.parseCommand("  GROUPE  ")
+        assert.are.equal("inter", alias)
+        assert.are.same({}, aliasOptions)
+        -- Option explicite : un test LONG reste possible (bornes 1..9 cote newRun).
+        local long, longOptions = S.parseCommand("inter cycles=5")
+        assert.are.equal("inter", long)
+        assert.are.equal(5, longOptions.cycles)
+        local spaced, spacedOptions = S.parseCommand("inter cycles = 2")
+        assert.are.equal("inter", spaced)
+        assert.are.equal(2, spacedOptions.cycles)
+        -- Valeurs inconnues REFUSEES avec un message explicite, jamais devinees.
+        local bad, badOptions, badErr = S.parseCommand("inter cycles=abc")
+        assert.is_nil(bad)
+        assert.is_nil(badOptions)
+        assert.matches("cycles=abc", badErr)
+        assert.matches("invalid simulation option", badErr)
+        assert.is_nil(select(1, S.parseCommand("ping cycles=3")))
+        assert.matches("cycles=3", select(3, S.parseCommand("ping cycles=3")))
+        assert.is_nil(select(1, S.parseCommand("inter 3")))
+        -- Une sous-commande inconnue reste SANS erreur : l'appelant affiche l'aide.
+        local unknown, unknownOptions, unknownErr = S.parseCommand("bidon")
+        assert.is_nil(unknown)
+        assert.is_nil(unknownOptions)
+        assert.is_nil(unknownErr)
+        assert.is_nil(S.parseCommand(""))
+        assert.is_nil(S.parseCommand(nil))
+        assert.is_nil(S.parseCommand(42))
+    end)
 end)
 
 describe("Simulation : repetition d'intermission (logique pure)", function()
@@ -108,10 +147,12 @@ describe("Simulation : repetition d'intermission (logique pure)", function()
         return events
     end
 
-    it("cree une repetition aux valeurs par defaut (3 cycles, 3 s, 20 s)", function()
+    it("cree une repetition aux valeurs par defaut (1 cycle, 3 s, 20 s)", function()
         local run = S.newRun()
         assert.is_table(run)
-        assert.are.equal(3, run.cycles)
+        -- Retour en jeu : UN cycle par defaut, pas trois.
+        assert.are.equal(S.DEFAULT_CYCLES, run.cycles)
+        assert.are.equal(1, run.cycles)
         assert.are.equal(3, run.openDelay)
         assert.are.equal(20, run.duration)
         assert.are.equal(I.VISIBILITY_SECONDS, run.visibility)
@@ -123,6 +164,17 @@ describe("Simulation : repetition d'intermission (logique pure)", function()
         local refused, err = S.newRun("inter")
         assert.is_nil(refused)
         assert.are.equal(ns.Locale.t("err.invalidSimulation"), err)
+    end)
+
+    it("repetition par DEFAUT : un seul cycle, une ouverture, une fermeture", function()
+        local run = S.newRun()
+        local events = playAll(run, 0.25)
+        assert.are.same({ "open", "close" }, events)
+        assert.is_true(S.runFinished(run))
+        assert.are.equal(1, run.closed)
+        assert.are.equal("SIMULATED INTERMISSION 1/1", S.snapshot(run).cycleLine)
+        -- Termine : plus rien, meme avec un enorme dt.
+        assert.is_nil(select(2, S.advance(run, 1000)))
     end)
 
     it("BORNE les options numeriques et REFUSE les valeurs non numeriques", function()
@@ -378,21 +430,25 @@ describe("Simulation : test des pings natifs (logique pure)", function()
         assert.are.equal(2, run.index)
     end)
 
-    it("affiche PRESS: <ping> avec la touche bindee, et jamais une touche inventee", function()
+    it("affiche en gros le GESTE (survoler SON cadre + touche bindee), jamais une touche inventee", function()
         local run = S.newPingTest()
         -- Touche INJECTEE : c'est la couche de rendu qui lit GetBindingKey.
         local snap = S.pingTestSnapshot(run, keyResolver("Q"))
-        assert.are.equal("PRESS: Warning (Q)", snap.headline)
+        assert.is_true(contains(snap.headline, "1. Hover YOUR OWN character frame"))
+        assert.is_true(contains(snap.headline, "2. Press Q (Warning)"))
+        assert.is_true(contains(snap.headline, "you ping yourself"))
         assert.are.equal("Q", snap.key)
         assert.are.equal("1V3R", snap.stateKey)
         assert.are.equal("Warning", snap.label)
         assert.are.equal("PING 1/3", snap.stepLine)
         assert.is_true(contains(table.concat(snap.lines, "\n"), "Options > Keybindings"))
 
-        -- Sans touche connue : le nom du ping SEUL, plus une demande de raccourci.
+        -- Sans touche connue : la touche est DESIGNEE, jamais inventee.
         local sans = S.pingTestSnapshot(run, nil)
-        assert.are.equal("PRESS: Warning", sans.headline)
+        assert.is_true(contains(sans.headline, "1. Hover YOUR OWN character frame"))
+        assert.is_true(contains(sans.headline, "2. Press your ping key (Warning)"))
         assert.is_nil(sans.key)
+        assert.are.equal(ns.Locale.t("sim.ping.yourKey"), sans.yourKey)
         assert.is_true(contains(table.concat(sans.lines, "\n"), "no keybind found"))
 
         -- Un resolveur qui leve ou renvoie autre chose qu'une chaine : aucune touche.
@@ -403,6 +459,19 @@ describe("Simulation : test des pings natifs (logique pure)", function()
         assert.is_nil(S.pingTestSnapshot(run, keyResolver(42)).key)
         assert.is_nil(S.pingTestSnapshot(run, keyResolver("")).key)
         assert.is_nil(S.pingTestSnapshot(nil, keyResolver("Q")))
+    end)
+
+    it("enseigne le geste de l'ANCRE : se pinger soi-meme sur son propre cadre", function()
+        local run = S.newPingTest()
+        local snap = S.pingTestSnapshot(run, keyResolver("Q"))
+        local text = table.concat(snap.lines, "\n")
+        assert.are.equal(ns.Locale.t("sim.ping.anchorNote"), snap.anchorNote)
+        assert.is_true(contains(snap.anchorNote, "1V3R"))
+        assert.is_true(contains(snap.anchorNote, "ping yourself where you stand"))
+        assert.is_true(contains(text, snap.anchorNote))
+        -- La sequence des trois pings reste la verification des raccourcis.
+        assert.are.equal(3, snap.total)
+        assert.are.equal(1, snap.index)
     end)
 
     it("rappelle qu'il faut etre en groupe et que l'addon NE PEUT PAS detecter", function()
@@ -425,8 +494,11 @@ describe("Simulation : test des pings natifs (logique pure)", function()
         local run = S.newPingTest({ stepSeconds = 15, gapSeconds = 5 })
         ns.Locale.setActive("fr")
         local snap = S.pingTestSnapshot(run, keyResolver("A"))
-        assert.are.equal("APPUIE : Avertissement (A)", snap.headline)
+        assert.is_true(contains(snap.headline, "1. Survole TON propre cadre de personnage"))
+        assert.is_true(contains(snap.headline, "2. Appuie sur A (Avertissement)"))
+        assert.is_true(contains(snap.headline, "tu te pinges toi-meme"))
         assert.is_true(contains(table.concat(snap.lines, "\n"), "temps restant : 15 s"))
+        assert.is_true(contains(snap.anchorNote, "geste de l'ANCRE"))
         assert.is_true(contains(snap.groupReminder, "GROUPE ou en RAID"))
         assert.is_true(contains(snap.noDetection, "NE PEUT PAS detecter"))
         S.confirmPingTest(run)
@@ -446,7 +518,7 @@ describe("Simulation : test des pings natifs (logique pure)", function()
         local snap = S.pingTestSnapshot(run, nil)
         assert.is_true(snap.done)
         assert.are.equal(ns.Locale.t("sim.ping.finished"), snap.headline)
-        assert.matches("PING TEST OVER", snap.headline)
+        assert.matches("PING TRAINING OVER", snap.headline)
         assert.is_true(contains(table.concat(snap.lines, "\n"), "3/3"))
         assert.is_true(contains(table.concat(snap.lines, "\n"), "detected none"))
         assert.are.equal(ns.Locale.t("sim.ping.quit"), snap.quitLabel)
@@ -481,8 +553,9 @@ describe("Simulation : test des pings natifs (logique pure)", function()
             "sim.stoppedByEncounter",
             "sim.ping.title",
             "sim.ping.stepLine",
-            "sim.ping.press",
-            "sim.ping.pressKey",
+            "sim.ping.selfSteps",
+            "sim.ping.yourKey",
+            "sim.ping.anchorNote",
             "sim.ping.ready",
             "sim.ping.nextIn",
             "sim.ping.countdown",

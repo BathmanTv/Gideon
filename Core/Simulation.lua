@@ -13,12 +13,17 @@
       1. "INTERMISSION GROUP" (newRun / advance): the intermission panel opens by
          itself after a few seconds, the player clicks the composition they see,
          corrects it (REDO), the panel closes by itself and the cycle repeats
-         DEFAULT_CYCLES times (3). No boss, no ENCOUNTER_START, no combat event.
-      2. "NATIVE PING TEST" (newPingTest / advancePingTest / confirmPingTest):
+         DEFAULT_CYCLES times (1 by default; up to MAX_CYCLES with
+         `/gr sim inter cycles=N`). No boss, no ENCOUNTER_START, no combat event.
+      2. "PING TRAINING" (newPingTest / advancePingTest / confirmPingTest):
          the THREE native pings are announced one after the other
-         (Warning -> OnMyWay -> Assist, EXPLICIT order), with the key the player
-         really bound (INJECTED resolver: Core/ never calls GetBindingKey, see
-         docs/CONVENTIONS.md section 10.2bis) and a visible countdown.
+         (Warning -> OnMyWay -> Assist, EXPLICIT order). Measured in game by the
+         raid lead: the ping lands WHERE THE MOUSE IS, so hovering YOUR OWN
+         character frame pings YOURSELF - which is exactly the ANCHOR (1V3R)
+         gesture. The frame therefore states the gesture step by step, with the
+         key the player really bound (INJECTED resolver: Core/ never calls
+         GetBindingKey, see docs/CONVENTIONS.md section 10.2bis) and a visible
+         countdown.
 
     HONESTY RULES (docs/CONVENTIONS.md section 10):
       - the addon can NOT detect a ping: no API reports one. The ping test never
@@ -57,11 +62,15 @@ local Simulation = {}
 ns.Simulation = Simulation
 
 --- Simulation model version. 1 = two guided sequences (intermission rehearsal,
---- native ping test).
-Simulation.SCHEMA_VERSION = 1
+--- native ping test). 2 = the ping test trains the SELF-PING gesture (hover your
+--- own character frame) and the rehearsal defaults to ONE cycle.
+Simulation.SCHEMA_VERSION = 2
 
---- Default number of simulated intermissions ("the cycle repeats 3 times").
-Simulation.DEFAULT_CYCLES = 3
+--- Default number of simulated intermissions. In-game feedback from the raid
+--- lead: ONE cycle is enough to learn the gesture ("just keep it at 1 test
+--- intermission"). A longer rehearsal stays possible with `/gr sim inter
+--- cycles=N` (bounded to MIN_CYCLES..MAX_CYCLES).
+Simulation.DEFAULT_CYCLES = 1
 Simulation.MIN_CYCLES = 1
 Simulation.MAX_CYCLES = 9
 
@@ -163,6 +172,41 @@ function Simulation.resolveCommand(raw)
     return Simulation.COMMANDS[wanted]
 end
 
+--- Parses the WHOLE argument of /gr sim: "<mode>" or "inter cycles=N".
+--- Bounded and explicit, nothing is guessed:
+---   - an unknown sub-command returns nil with NO error (the caller shows the
+---     help, exactly like before);
+---   - a trailing token that is not "%d+" after "cycles=" - or that is glued to a
+---     sub-command that takes no option - is REFUSED with an explicit error;
+---   - the value itself is CLAMPED by newRun (MIN_CYCLES..MAX_CYCLES), so a
+---     hand-typed "cycles=999" can never build an endless rehearsal.
+--- @param raw string|nil
+--- @return string|nil mode, table|nil options, string|nil error
+function Simulation.parseCommand(raw)
+    if type(raw) ~= "string" then
+        return nil, nil, nil
+    end
+    local trimmed = raw:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if trimmed == "" then
+        return nil, nil, nil
+    end
+    local word, rest = trimmed:match("^(%S+)%s*(.*)$")
+    local mode = Simulation.resolveCommand(word)
+    if mode == nil then
+        return nil, nil, nil
+    end
+    local options = {}
+    if rest == nil or rest == "" then
+        return mode, options, nil
+    end
+    local cycles = mode == "inter" and rest:match("^cycles%s*=%s*(%d+)$") or nil
+    if cycles == nil then
+        return nil, nil, Locale.format("err.simulationOption", rest)
+    end
+    options.cycles = tonumber(cycles)
+    return mode, options, nil
+end
+
 --- The canonical state that carries a given ping ("Warning" -> "1V3R",
 --- "OnMyWay" -> "2V2R", "Assist" -> "3V1R"), or nil when the ping is unknown.
 --- The scan follows Intermission.STATES in its deterministic order (no pairs()).
@@ -200,7 +244,7 @@ end
 
 --- Creates a rehearsal run. OPTIONAL options (all bounded, unknown types
 --- refused):
----   cycles              number of simulated intermissions (1..9, default 3);
+---   cycles              number of simulated intermissions (1..9, default 1);
 ---   openDelaySeconds    delay before the panel opens (0..30, default 3);
 ---   visibilitySeconds   visibility window of a simulation (1..10);
 ---   durationSeconds     duration of a simulation (visibility+1..120, default 20).
@@ -522,10 +566,12 @@ function Simulation.cancelPingTest(run)
     return run
 end
 
---- Displayable state of the ping test, fully computed here.
+--- Displayable state of the ping training, fully computed here.
 --- The key to display is INJECTED (injected resolver, called under pcall by
---- Core/): when no key is known the panel shows the ping name ALONE, never an
---- invented shortcut.
+--- Core/): when no key is known the frame says "your ping key" and asks for a
+--- keybind, never an invented shortcut.
+--- The BIG instruction is the ANCHOR gesture, step by step: the ping lands where
+--- the MOUSE is, so hovering YOUR OWN character frame pings YOURSELF.
 --- @param run table|nil
 --- @param bindingResolver function|nil function(bindNames) -> key|nil
 --- @return table|nil snapshot, string|nil error
@@ -558,6 +604,8 @@ function Simulation.pingTestSnapshot(run, bindingResolver)
         nativeReminder = Locale.t("sim.ping.native"),
         groupReminder = Locale.t("sim.ping.group"),
         noDetection = Locale.t("sim.ping.noDetection"),
+        anchorNote = Locale.t("sim.ping.anchorNote"),
+        yourKey = Locale.t("sim.ping.yourKey"),
     }
     if snap.done then
         snap.headline = Locale.t("sim.ping.finished")
@@ -587,19 +635,17 @@ function Simulation.pingTestSnapshot(run, bindingResolver)
         snap.lines[#snap.lines + 1] = Locale.format("sim.ping.nextIn", snap.remaining)
     else
         snap.overdue = Simulation.pingTestOverdue(run)
-        if snap.key ~= nil then
-            snap.headline = Locale.format("sim.ping.pressKey", snap.label, snap.key)
-        else
-            snap.headline = Locale.format("sim.ping.press", snap.label)
-        end
+        -- The ONE big instruction: hover YOUR OWN frame, then press the key.
+        snap.headline = Locale.format("sim.ping.selfSteps", snap.key or snap.yourKey, snap.label)
         if snap.overdue then
             snap.lines[#snap.lines + 1] = Locale.t("sim.ping.overdue")
         else
             snap.lines[#snap.lines + 1] = Locale.format("sim.ping.countdown", snap.remaining)
         end
-    end
-    if snap.key == nil then
-        snap.lines[#snap.lines + 1] = Locale.t("sim.ping.noKey")
+        if snap.key == nil then
+            snap.lines[#snap.lines + 1] = Locale.t("sim.ping.noKey")
+        end
+        snap.lines[#snap.lines + 1] = snap.anchorNote
     end
     snap.lines[#snap.lines + 1] = snap.nativeReminder
     snap.lines[#snap.lines + 1] = snap.groupReminder

@@ -20,6 +20,9 @@
       - shows "set a keybind in Options > Keybindings" as long as no key is bound
         (the exact binding names are still TO BE CONFIRMED IN GAME: the candidate
         list comes from Core/Intermission.lua, PING_BINDINGS).
+    MEASURED IN GAME TOO: the ping lands WHERE THE MOUSE IS, so hovering YOUR OWN
+    character frame pings YOURSELF - the exact ANCHOR (1V3R) gesture. The ping
+    training teaches that gesture; nothing here detects a ping (no API does).
 
     FLOW OF A RAID EVENING (no argument of any combat event is ever read):
       a. before the pull, /gr -> "PLACE INTERMISSION PANEL": the frame is shown
@@ -229,6 +232,10 @@ local function ensurePanel()
     -- numero : 1 ou 3"): the UI layer computes nothing.
     -- The number is only a HINT: 1 and 3 are AMBIGUOUS about the color, only 2
     -- is unambiguous (2 verts + 2 rouges).
+    -- ONCE THE CHOICE IS CLICKED the three buttons DISAPPEAR (Core decides:
+    -- snapshot.showButtons): the panel then shows the result (state / role /
+    -- PING / action) and the CORRECT button alone, so a second click by accident
+    -- is impossible. CORRECT brings the three choices back.
     for index = 1, #ns.Intermission.STATES do
         local key = ns.Intermission.STATES[index]
         local rec = ns.Intermission.getDeclaration(key)
@@ -293,13 +300,31 @@ function UI.IntermissionSavePosition()
     if type(db) ~= "table" or type(db.intermission) ~= "table" then
         return
     end
-    local point, _, relativePoint, x, y = p:GetPoint(1)
-    db.intermission.position = {
-        point = point or "CENTER",
-        relativePoint = relativePoint or "CENTER",
-        x = x or 0,
-        y = y or 0,
-    }
+    db.intermission.position = UI.CapturePosition(p)
+end
+
+--- Applies the PERSISTED position of the ping-training frame (centered by
+--- default). Called before the frame is shown, so the player always finds it
+--- where they left it. Does nothing while the frame does not exist yet (it is
+--- built lazily, on the first simulation).
+function UI.PingPanelApplyPosition()
+    if pingPanel == nil then
+        return nil
+    end
+    local db = _G.GideonRaidDB
+    local pos = ns.Config.resolvePosition(type(db) == "table" and db.pingPanelPosition or nil)
+    pingPanel:ClearAllPoints()
+    pingPanel:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
+    return pos
+end
+
+--- Saves the position of the ping-training frame (drag stop).
+function UI.SavePingPanelPosition()
+    if pingPanel == nil or type(_G.GideonRaidDB) ~= "table" then
+        return nil
+    end
+    _G.GideonRaidDB.pingPanelPosition = UI.CapturePosition(pingPanel)
+    return _G.GideonRaidDB.pingPanelPosition
 end
 
 --- Parses a Core color code ("|cff40ff40") into RGB floats.
@@ -330,6 +355,9 @@ end
 --- Rebuilds the display from what Core/ computed. The panel NEVER shows more
 --- than the essential during a fight (state, role, PING: YES/NO, ONE action
 --- line): the long explanations live in docs/, not on screen.
+--- ONCE A COMPOSITION IS CLICKED Core hides the three choice buttons
+--- (snapshot.showButtons = false) and shows CORRECT: the panel then shows the
+--- result only, so the choice cannot be clicked twice by accident.
 function UI.IntermissionRefresh()
     local p = ensurePanel()
     local c = config()
@@ -361,6 +389,8 @@ function UI.IntermissionRefresh()
     p.state:SetText(snap.stateText)
     p.headline:SetText(snap.headline)
     p.body:SetText(table.concat(snap.lines, "\n"))
+    -- The three choices are hidden as soon as a composition is clicked
+    -- (snap.showButtons); CORRECT is then the only button (snap.showRedo).
     for _, button in ipairs(p.buttons) do
         button:SetShown(snap.showButtons)
     end
@@ -413,17 +443,22 @@ end
 --[[ SIMULATION MODE (rehearsal alone, with no boss and no raid) ----------------
 
      Two entries, reachable from the MAIN panel (two buttons) and from the chat
-     (/gr sim inter | group | groupe, /gr sim ping, /gr sim stop):
+     (/gr sim inter [cycles=N] | group | groupe, /gr sim ping, /gr sim stop):
 
        1. "INTERMISSION GROUP": the intermission panel opens by itself after 3 s,
           the player clicks their composition, corrects it (REDO), the panel
-          closes by itself after ~20 s and the cycle repeats 3 times. No boss, no
-          raid, no ENCOUNTER_START, no combat event ever read;
-       2. "NATIVE PING TEST": the three native pings are announced one after the
-          other (Avertissement -> En route -> Aide) with the key the player really
-          bound (read HERE, under pcall, and injected into Core) and a visible
-          countdown. The player presses the key for real and validates with a
-          button. The addon can NOT detect a ping and never says it did.
+          closes by itself after ~20 s. ONE cycle by default (in-game feedback:
+          one test intermission is enough); a longer rehearsal is available with
+          `/gr sim inter cycles=N` (1..9). No boss, no raid, no ENCOUNTER_START,
+          no combat event ever read;
+       2. "PING TRAINING": the ANCHOR gesture, taught step by step - hover YOUR
+          OWN character frame, then press the native ping key (the ping lands
+          under the mouse, so you ping yourself). The three native pings
+          (Warning -> En route -> Aide) are announced one after the other, with
+          the key the player really bound (read HERE, under pcall, and injected
+          into Core) and a visible countdown. The player presses the key for real
+          and validates with a button. The addon can NOT detect a ping and never
+          says it did.
 
      ISOLATION: the simulations own their own run (`simRun`) and state
      (`simState`), never touch `run` (the pre-computed ENCOUNTER_START timeline)
@@ -468,17 +503,31 @@ local function clearSimulation()
     end
 end
 
---- The frame of the guided NATIVE PING TEST. Deliberately separate from the
---- intermission panel: a ping test is not an intermission and the two must never
---- overlap on screen.
+--- The frame of the guided PING TRAINING. Deliberately separate from the
+--- intermission panel: a ping training is not an intermission and the two must
+--- never overlap on screen. Like the main panel it is DRAGGABLE and its position
+--- is persisted (GideonRaidDB.pingPanelPosition).
 local function ensurePingPanel()
     if pingPanel then
         return pingPanel
     end
     local p = CreateFrame("Frame", "GideonRaidPingTestPanel", UIParent, "BackdropTemplate")
-    p:SetSize(540, 320)
-    p:SetPoint("CENTER")
+    p:SetSize(540, 340)
+    p:SetMovable(true)
+    p:EnableMouse(true)
+    p:RegisterForDrag("LeftButton")
     p:SetClampedToScreen(true)
+    p:SetScript("OnDragStart", function(self)
+        if UI.IsPanelLocked() then
+            UI.Print(Locale.t("panel.lockedHint"))
+            return
+        end
+        self:StartMoving()
+    end)
+    p:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        UI.SavePingPanelPosition()
+    end)
     p:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -506,13 +555,17 @@ local function ensurePingPanel()
     p.step:SetPoint("TOP", 0, -58)
     p.step:SetText("")
 
-    -- "PRESS: <ping>" in very large type: the one thing to read.
-    p.press = p:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    p.press:SetPoint("TOP", 0, -84)
+    -- The BIG instruction, step by step: "1. Hover YOUR OWN character frame.
+    -- 2. Press <key> (<ping>) -> you ping yourself". Three lines at most (the
+    -- WAIT phase shows "GET READY: <ping>").
+    p.press = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    p.press:SetPoint("TOP", 0, -82)
+    p.press:SetWidth(512)
+    p.press:SetJustifyH("CENTER")
     p.press:SetText("")
 
     p.body = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.body:SetPoint("TOPLEFT", 24, -130)
+    p.body:SetPoint("TOPLEFT", 24, -158)
     p.body:SetWidth(492)
     p.body:SetJustifyH("LEFT")
     p.body:SetJustifyV("TOP")
@@ -604,24 +657,34 @@ local function simulationInterTick(dt)
 end
 
 --- `/gr sim` with no argument and the main-panel SIMULATION buttons land here.
---- An unknown sub-command is REFUSED (Core resolves it, nothing is guessed).
-function UI.SimulationCommand(mode)
-    local resolved = Simulation.resolveCommand(mode)
-    if resolved == "inter" then
-        UI.SimulationInterStart()
-    elseif resolved == "ping" then
-        UI.SimulationPingStart()
-    elseif resolved == "stop" then
-        UI.SimulationStop()
-    else
-        UI.Print(Locale.format("cmd.sim.unknown", tostring(mode)))
+--- The whole argument is parsed by Core (mode + optional `cycles=N`); an unknown
+--- sub-command or a malformed option is REFUSED with a message, nothing is
+--- guessed and nothing is launched.
+function UI.SimulationCommand(raw)
+    local mode, options, err = Simulation.parseCommand(raw)
+    if mode == nil then
+        if err ~= nil then
+            UI.Print(tostring(err))
+        end
+        UI.Print(Locale.format("cmd.sim.unknown", tostring(raw)))
         UI.Print(Locale.t("cmd.sim.help"))
+        return
+    end
+    if mode == "inter" then
+        UI.SimulationInterStart(options)
+    elseif mode == "ping" then
+        UI.SimulationPingStart()
+    else
+        UI.SimulationStop()
     end
 end
 
 --- Starts the "INTERMISSION GROUP" rehearsal (`/gr sim inter`, aliases group and
---- groupe, plus the main-panel button): 3 accelerated intermissions, no boss.
-function UI.SimulationInterStart()
+--- groupe, plus the main-panel button): ONE accelerated intermission by default
+--- (in-game feedback), no boss. A longer rehearsal is available through
+--- `/gr sim inter cycles=N` (bounded 1..9 by Core).
+--- @param options table|nil { cycles = number|nil }
+function UI.SimulationInterStart(options)
     local c = config()
     if not c.enabled then
         UI.Print(Locale.t("ui.disabled"))
@@ -635,12 +698,15 @@ function UI.SimulationInterStart()
         UI.Print(Locale.t("sim.refused.running"))
         return
     end
-    local newRun, err = Simulation.newRun({
-        cycles = Simulation.DEFAULT_CYCLES,
+    local opts = {
         openDelaySeconds = Simulation.DEFAULT_OPEN_DELAY_SECONDS,
         visibilitySeconds = c.visibilitySeconds,
         durationSeconds = c.durationSeconds,
-    })
+    }
+    if type(options) == "table" and options.cycles ~= nil then
+        opts.cycles = options.cycles
+    end
+    local newRun, err = Simulation.newRun(opts)
     if newRun == nil then
         UI.Print(Locale.format("ui.intermissionError", tostring(err)))
         return
@@ -652,8 +718,9 @@ function UI.SimulationInterStart()
     UI.Print(Locale.format("cmd.sim.inter", simRun.cycles, simRun.openDelay))
 end
 
---- Starts the guided NATIVE PING TEST (`/gr sim ping`, main-panel button): the
---- three pings in a row, with the key the player really bound when it is known.
+--- Starts the guided PING TRAINING (`/gr sim ping`, main-panel button): the
+--- ANCHOR gesture (hover your own character frame, press the key) rehearsed on
+--- the three native pings, with the key the player really bound when it is known.
 function UI.SimulationPingStart()
     local c = config()
     if not c.enabled then
@@ -676,6 +743,8 @@ function UI.SimulationPingStart()
     clearSimulation()
     pingRun = newTest
     local p = ensurePingPanel()
+    -- The frame reopens where the player left it (persisted position).
+    UI.PingPanelApplyPosition()
     p:Show()
     pingPanelRefresh()
     ensureTicker()

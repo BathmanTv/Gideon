@@ -90,13 +90,13 @@ possible:
 
 | Screen | Content | Data source |
 |---|---|---|
-| Main panel (`/gr`) | partner, role, position, pairs, and the **PLACE INTERMISSION PANEL** button | `assignment` block prepared out of game by GIDEON |
+| Main panel (`/gr`) | partner, role, position, pairs, and the **PLACE INTERMISSION PANEL** button — the panel is **draggable** (LOCK/UNLOCK PANEL button) and reopens where you left it | `assignment` block prepared out of game by GIDEON |
 | Placement mode (before the pull) | the panel is dragged where you want it, **OK** validates and closes | the player's drag (persisted) |
 | Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
-| After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button | convention frozen in `Core/Intermission.lua` |
+| After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button; **the three composition buttons disappear** (REDO brings them back, empty state) | convention frozen in `Core/Intermission.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
 | Close cross (`X`, top right) | closes the panel — on **both** the main panel and the intermission panel | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
-| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens by itself after 3 s, you click your composition, correct it with REDO, it closes after ~20 s, **3 cycles**; **Native ping test** (`/gr sim ping`): the 3 native pings announced one by one (`PRESS: Warning (Q)`) with a countdown, a `PING PLACED` button and an explicit reminder that **the addon cannot detect a ping** and that pings only show **while grouped** | pure sequences in `Core/Simulation.lua` (+ the close cross and the main-panel buttons) |
+| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens by itself after 3 s, you click your composition, correct it with REDO, it closes after ~20 s, **ONE cycle by default** (`cycles=N` for a long run); **Ping training** (`/gr sim ping`): the **ANCHOR gesture** taught step by step (`1. Hover YOUR OWN character frame`, `2. Press <key> (<Warning>) -> you ping yourself`) on the 3 native pings, with a countdown, a `PING PLACED` button and an explicit reminder that **the addon cannot detect a ping** and that pings only show **while grouped** | pure sequences in `Core/Simulation.lua` (+ the close cross and the main-panel buttons) |
 
 The panel shows the essential only (state, role, `PING: OUI/NON`, one action
 line); the explanations and the way each decision is justified live in
@@ -108,9 +108,16 @@ A state carries a **role**, and the role decides what the player does:
 
 | State | Role | Does it ping? (default policy) | The ONE action line |
 |---|---|---|---|
-| `1V3R` | **ANCHOR** | **YES** — pings itself with the native ping keybind, or is pinged by another player | "STAY WHERE YOU ARE - ping yourself (Warning) and jump on the spot" |
+| `1V3R` | **ANCHOR** | **YES** — pings itself with the native ping keybind, or is pinged by another player | "PING: YES - hover YOUR OWN character frame then press your ping key (Warning), stay put and jump on the spot" |
 | `2V2R` | **MIDDLE** | no | "DO NOT PING - go to the middle / under the boss" |
 | `3V1R` | **CHASER** | no | "DO NOT PING - run to a ping (a 1V3R)" |
+
+**Why the ANCHOR line names the mouse gesture:** measured in game by the raid lead,
+**the ping goes where the mouse is** — hovering your **own character frame** (the
+unit frame with your health bar) **pings yourself**. The action line therefore says
+exactly what to do instead of a vague "ping yourself". What is still **to be
+confirmed in a real raid**: whether that self-ping shows **above the character for
+the other players** (see `docs/TESTPLAN.md`, row 14b).
 
 **Why:** every state pinging used to flood the channel with ~20 pings; with one
 ping per anchor (4 per side) the raid sends **at most ~8 pings**, which stays
@@ -149,10 +156,26 @@ player is the one who places it.
    (46.3 s, then 148.9 / 251.5 / 353.2 s) — its arguments are never read;
 3. **1–2 s before each intermission the panel opens by itself** with the three
    choices;
-4. click your composition: state, role, `PING: OUI/NON` and one action line —
-   **REDO** brings the three choices back, as many times as needed;
+4. click your composition: state, role, `PING: OUI/NON` and one action line — the
+   **three buttons disappear** (so no accidental second click) and **REDO** brings
+   them back as many times as needed;
 5. at the end of the intermission the panel **closes by itself**; the next one
    reopens it automatically.
+
+**The panels are movable** (third in-game test): the main panel used to be frozen
+(`lockPanel` was hard-coded to `true`). It is now **draggable by default**, and so
+is the ping training frame; each one **keeps its position** (saved in
+`GideonRaidDB`, restored on `/reload`). Three new commands:
+
+```bash
+/gr lock           # freeze the panels where they are (persisted)
+/gr unlock         # let them be dragged again (also the UNLOCK PANEL button)
+/gr resetposition  # bring the main panel, the intermission panel and the ping training back to the center
+```
+
+An existing `SavedVariables` file (all of them carried the old `lockPanel = true`)
+is **unlocked once** on the first load after the update, then your own choice is
+respected.
 
 **Close cross (`X`, top right)** — on the main panel and on the intermission
 panel: it closes the panel (during the placement it **cancels**, exactly like the
@@ -164,17 +187,17 @@ and opens again at the next intermission.
 (`SIMULATION` buttons) or from the chat:
 
 ```bash
-/gr sim inter    # "Intermission group": 3 accelerated intermissions, click, REDO, auto close
-/gr sim ping     # test the 3 NATIVE pings for real (Warning, On My Way, Assist), one by one
-/gr sim stop     # leave any simulation at once
+/gr sim inter [cycles=N]  # "Intermission group": 1 accelerated intermission by default, click, REDO, auto close
+/gr sim ping              # PING TRAINING: hover your own character frame, press your native ping key -> you ping yourself
+/gr sim stop              # leave any simulation at once
 ```
 
 The simulation is **isolated from the real flow**: it never arms/disarms the
 `ENCOUNTER_START` timeline, publishes no decision, is refused while a real
 intermission runs and is stopped the moment a real encounter starts. It displays a
 `SIMULATION - NO BOSS, NO RAID` banner so it can never be mistaken for a fight. The
-ping test states as is that **the addon cannot detect a ping** (no API reports one)
-and that **pings only show while in a group or a raid**.
+ping training states as is that **the addon cannot detect a ping** (no API reports
+one) and that **pings only show while in a group or a raid**.
 
 ```bash
 make inter    # convention + action lines, out of game
@@ -273,12 +296,12 @@ Total: 0 warnings / 0 errors in 20 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
 OK GideonRaid.toc                              # check_toc (8 files listed)
 busted
-196 successes / 0 failures / 0 errors / 0 pending : 0.770765 seconds
+212 successes / 0 failures / 0 errors / 0 pending : 0.871998 seconds
 ```
 
-The 196 tests are spread over `intermission_spec.lua` (80),
-`load_spec.lua` (34 — real loading, `.toc` order, evening flow, close cross,
-simulations), `simulation_spec.lua` (23 — pure simulation sequences),
+The 212 tests are spread over `intermission_spec.lua` (84),
+`load_spec.lua` (43 — real loading, `.toc` order, evening flow, movable panels,
+close cross, simulations), `simulation_spec.lua` (26 — pure simulation sequences),
 `locale_spec.lua` (21), `pingpolicy_spec.lua` (20 — ping roles and policies),
 `pairing_spec.lua` (11) and `guard_spec.lua` (7 — anti-forbidden-API guard +
 simulation isolation).

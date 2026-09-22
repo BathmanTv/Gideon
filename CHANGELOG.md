@@ -4,6 +4,81 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+Four corrections requested by the raid lead after the **third** in-game test: the
+main panel could not be moved, the rehearsal ran three cycles instead of one, the
+composition buttons stayed on screen after the click, and the ping test had to
+teach the **real ANCHOR gesture** (pinging yourself).
+
+### Added
+- **`/gr lock` / `/gr unlock` / `/gr resetposition`** (and the **LOCK PANEL /
+  UNLOCK PANEL** button on the main panel): freeze the panels where they are, let
+  them be dragged again (persisted in `GideonRaidDB.lockPanel`), or bring the main
+  panel, the intermission panel and the ping training frame back to the center.
+  Dragging a locked panel prints a hint instead of doing nothing silently.
+- **Persisted panel positions**: `GideonRaidDB.panelPosition` (main panel) and
+  `GideonRaidDB.pingPanelPosition` (ping training frame), saved on every drag stop
+  and restored at `ADDON_LOADED` / at the next opening, alongside the intermission
+  panel position that already existed (`intermission.position`). Each block is a
+  `{ point, relativePoint, x, y }` read back through a **pure, total** resolver.
+- `tests/spec/load_spec.lua`: the drag is really allowed, the position is
+  persisted, restored, locked, unlocked and reset; the three composition buttons
+  disappear after a click (in a real intermission **and** in a rehearsal); the ping
+  training shows the self-ping gesture with the bound key. `intermission_spec.lua`
+  covers the new panel preferences (`Config.PANEL_SCHEMA`, the one-time migration,
+  the total lock/position resolvers, no alias between accounts).
+- Locale keys `panel.lockButton` / `panel.unlockButton` / `panel.lockedHint`,
+  `cmd.panelLocked` / `cmd.panelUnlocked` / `cmd.positionReset`,
+  `ui.noSavedVariables` and the ping-training step lines, in **English and
+  French**.
+
+### Changed
+- **The main panel is draggable by default** (third in-game feedback: it could not
+  be moved at all). `Core/Config.lua` set `lockPanel = true` as the default and
+  `UI/Panel.lua` refused the drag accordingly; the default is now `false`, and the
+  earlier behaviour is still one command away (`/gr lock`). A SavedVariables file
+  written by an older version (no `panelSchema`, hence a `lockPanel = true` no
+  player could ever change) is **softly migrated ONCE** in `Config.ensureDB`:
+  `lockPanel` is forced to `false` and the schema stamped, so the player's own
+  later choice is respected. A non-boolean `lockPanel` counts as "not locked": the
+  resolver is total and never locks the player out.
+- **A composition click now hides the three choice buttons**: `Core/Intermission.lua`
+  serves `showButtons = false` once the state is declared, while `showRedo` stays
+  true for the whole session — only the result (state, role, `PING: YES/NO`, the
+  action line) and **CORRECT** remain, and CORRECT brings the three choices back
+  with an empty state. A second accidental click is impossible.
+- **The rehearsal runs ONE cycle by default** (`Simulation.DEFAULT_CYCLES` 3 → 1;
+  in-game feedback: "just keep it on 1 test intermission"). The bounds are
+  untouched (1–9) and a long rehearsal stays available with
+  `/gr sim inter cycles=N`; the chat, the panel counter and the closing summary
+  follow.
+- **The ping test became a PING TRAINING for the ANCHOR gesture.** Measured in
+  game: the ping lands **where the mouse is**, so hovering **your own character
+  frame** pings **you**. The frame now shows the gesture step by step in large type
+  — `1. Hover YOUR OWN character frame (the one with your health bar).` then
+  `2. Press <key> (<Warning>) -> you ping yourself` — with the **really bound key**
+  when the injected resolver knows it and **`your ping key`** otherwise (never an
+  invented shortcut), plus the reminder that a ping only shows **while grouped**
+  and that **the addon cannot detect a ping**. `Simulation.SCHEMA_VERSION` 1 → 2
+  (the semantics of the sequence changed).
+- **The ANCHOR action line states the real gesture** (`Core/Intermission.lua`, EN
+  and FR): "PING: YES - hover YOUR OWN character frame then press your ping key
+  (Warning), stay put and jump on the spot" instead of the vague "STAY WHERE YOU
+  ARE - ping yourself (Warning)". The MIDDLE and CHASER lines are unchanged, the
+  `none` policy still says "STAY WHERE YOU ARE".
+- `/gr sim` parses its **whole argument** (mode + optional `cycles=N`) through a
+  pure resolver; a sub-command or an option that is not understood is **refused
+  with a message**, never guessed.
+- **The ping sequence is named "training" everywhere it is displayed**:
+  `sim.ping.title`, `sim.ping.quit` (`QUIT TRAINING`), `sim.ping.finished`
+  (`PING TRAINING OVER`) and the chat reports (`Ping training over: …`,
+  `Ping training left after …`, `err.nothingToConfirm`), EN and FR.
+- `README.md`, `docs/INTERMISSION-COACH.md` and `docs/TESTPLAN.md` document the
+  movable panels, the single default cycle, the hidden buttons and the self-ping
+  gesture (including the in-game rows to replay them, and the open question: does
+  the ping placed on oneself show **above the character for the other players**).
+
 ## [0.6.0] - 2026-09-22
 
 Two requests from the raid lead after the first real in-game test: a **close
