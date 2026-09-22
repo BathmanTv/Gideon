@@ -4,7 +4,7 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
-## [Unreleased]
+## [0.6.0] - 2026-09-22
 
 Two requests from the raid lead after the first real in-game test: a **close
 cross** on both panels, and a **SIMULATION MODE** to rehearse alone — no boss, no
@@ -250,6 +250,7 @@ was too verbose, and a wrong click could not be corrected.
   (`Core/Pairing.lua`) shared with the GIDEON Discord bot.
 - CI and release workflows (BigWigs packager), offline test suite with busted.
 
+[0.6.0]: https://github.com/BathmanTv/Gideon/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/BathmanTv/Gideon/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/BathmanTv/Gideon/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/BathmanTv/Gideon/compare/v0.2.2...v0.3.0
