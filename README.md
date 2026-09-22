@@ -95,6 +95,8 @@ possible:
 | Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
 | After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button | convention frozen in `Core/Intermission.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
+| Close cross (`X`, top right) | closes the panel — on **both** the main panel and the intermission panel | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
+| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens by itself after 3 s, you click your composition, correct it with REDO, it closes after ~20 s, **3 cycles**; **Native ping test** (`/gr sim ping`): the 3 native pings announced one by one (`PRESS: Warning (Q)`) with a countdown, a `PING PLACED` button and an explicit reminder that **the addon cannot detect a ping** and that pings only show **while grouped** | pure sequences in `Core/Simulation.lua` (+ the close cross and the main-panel buttons) |
 
 The panel shows the essential only (state, role, `PING: OUI/NON`, one action
 line); the explanations and the way each decision is justified live in
@@ -151,6 +153,28 @@ player is the one who places it.
    **REDO** brings the three choices back, as many times as needed;
 5. at the end of the intermission the panel **closes by itself**; the next one
    reopens it automatically.
+
+**Close cross (`X`, top right)** — on the main panel and on the intermission
+panel: it closes the panel (during the placement it **cancels**, exactly like the
+Close button, and during a simulation it **leaves the rehearsal**). Hiding the
+intermission panel never touches the clock: it still closes by itself at the end
+and opens again at the next intermission.
+
+**Rehearse alone — SIMULATION mode** (no boss, no raid), from the main panel
+(`SIMULATION` buttons) or from the chat:
+
+```bash
+/gr sim inter    # "Intermission group": 3 accelerated intermissions, click, REDO, auto close
+/gr sim ping     # test the 3 NATIVE pings for real (Warning, On My Way, Assist), one by one
+/gr sim stop     # leave any simulation at once
+```
+
+The simulation is **isolated from the real flow**: it never arms/disarms the
+`ENCOUNTER_START` timeline, publishes no decision, is refused while a real
+intermission runs and is stopped the moment a real encounter starts. It displays a
+`SIMULATION - NO BOSS, NO RAID` banner so it can never be mistaken for a fight. The
+ping test states as is that **the addon cannot detect a ping** (no API reports one)
+and that **pings only show while in a group or a raid**.
 
 ```bash
 make inter    # convention + action lines, out of game
@@ -210,10 +234,11 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │   ├── Locale.lua     <- in-game strings (en/fr) + language resolution
 │   ├── Config.lua
 │   ├── Pairing.lua
-│   └── Intermission.lua
+│   ├── Intermission.lua
+│   └── Simulation.lua <- SIMULATION mode: rehearse the intermissions, test the pings
 ├── UI/                <- RENDERING (zero computation)
-│   ├── Panel.lua
-│   └── Intermission.lua
+│   ├── Panel.lua      <- main panel (+ the close cross shared by both panels)
+│   └── Intermission.lua <- intermission panel + simulation frames (close cross, banner)
 ├── libs/              <- embedded libraries (externals)
 ├── tests/             <- busted + fixtures (excluded from the zip)
 ├── tools/             <- CLI + .toc validator (excluded from the zip)
@@ -236,24 +261,27 @@ make plan     # pre-pull view from the assignment fixture
 make fmt      # automatic reformatting
 ```
 
-Reference result (after the Intermission Coach redesign: no ping macro, minimal
-panel, REDO, full evening flow with the pre-computed schedule):
+Reference result (after the Intermission Coach redesign and the close cross +
+SIMULATION mode: no ping macro, minimal panel, REDO, full evening flow with the
+pre-computed schedule, rehearsal alone):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 18 files        # luacheck
+Total: 0 warnings / 0 errors in 20 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (7 files listed)
+OK GideonRaid.toc                              # check_toc (8 files listed)
 busted
-162 successes / 0 failures / 0 errors / 0 pending : 0.462049 seconds
+196 successes / 0 failures / 0 errors / 0 pending : 0.770765 seconds
 ```
 
-The 162 tests are spread over `intermission_spec.lua` (80),
-`load_spec.lua` (24 — real loading, `.toc` order, evening flow), `locale_spec.lua`
-(21), `pingpolicy_spec.lua` (20 — ping roles and policies), `pairing_spec.lua`
-(11) and `guard_spec.lua` (6 — anti-forbidden-API guard).
+The 196 tests are spread over `intermission_spec.lua` (80),
+`load_spec.lua` (34 — real loading, `.toc` order, evening flow, close cross,
+simulations), `simulation_spec.lua` (23 — pure simulation sequences),
+`locale_spec.lua` (21), `pingpolicy_spec.lua` (20 — ping roles and policies),
+`pairing_spec.lua` (11) and `guard_spec.lua` (7 — anti-forbidden-API guard +
+simulation isolation).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 

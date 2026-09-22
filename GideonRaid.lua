@@ -157,6 +157,10 @@ local function slashHandler(cmd)
     -- /gr ping <mode> : same mechanics (the pattern accepts anything and
     -- setPingMode() judges it: an unknown value is refused).
     local pingMode = cmd:match("^ping%s+(.+)$")
+    -- /gr sim <mode> : SIMULATION MODE (rehearsal alone, no boss, no raid).
+    -- The pattern accepts anything and Core/Simulation.resolveCommand() judges it:
+    -- an unknown value is REFUSED (nothing is guessed, nothing is launched).
+    local simMode = cmd:match("^sim%s+(.+)$")
     if cmd == "" or cmd == "show" then
         ns.UI.Toggle()
     elseif cmd == "reset" then
@@ -194,6 +198,10 @@ local function slashHandler(cmd)
         ns.UI.IntermissionSetEnabled(true)
     elseif cmd == "inter off" then
         ns.UI.IntermissionSetEnabled(false)
+    elseif cmd == "sim" then
+        ns.UI.Print(ns.Locale.t("cmd.sim.help"))
+    elseif simMode ~= nil then
+        ns.UI.SimulationCommand(simMode)
     elseif declaration ~= nil then
         ns.UI.IntermissionDeclare(declaration)
     else

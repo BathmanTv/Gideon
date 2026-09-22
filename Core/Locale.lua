@@ -53,10 +53,55 @@ Locale.STRINGS = {
     ["cmd.help"] = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]",
+            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr sim inter|group|groupe (rehearsal, no boss) | /gr sim ping | /gr sim stop",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]",
+            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr sim inter|group|groupe (repetition, sans boss) | /gr sim ping | /gr sim stop",
+    },
+    ["cmd.sim.help"] = {
+        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = 3 accelerated "
+            .. "intermissions; /gr sim ping = the 3 native pings, guided; /gr sim stop = leave the simulation.",
+        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = 3 intermissions "
+            .. "accelerees ; /gr sim ping = les 3 pings natifs, guides ; /gr sim stop = quitter la simulation.",
+    },
+    ["cmd.sim.unknown"] = {
+        en = "Unknown simulation '%s': accepted values are inter (group, groupe), ping, stop.",
+        fr = "Simulation inconnue '%s' : valeurs acceptees inter (group, groupe), ping, stop.",
+    },
+    ["cmd.sim.inter"] = {
+        en = "SIMULATION (no boss, no raid): %d intermission(s), the panel opens by itself in %d s. "
+            .. "The ENCOUNTER_START timeline is NOT armed. /gr sim stop to leave.",
+        fr = "SIMULATION (sans boss, sans raid) : %d intermission(s), le panneau s'ouvre tout seul dans %d s. "
+            .. "Le planning ENCOUNTER_START n'est PAS arme. /gr sim stop pour quitter.",
+    },
+    ["cmd.sim.finished"] = {
+        en = "Simulation over: %d intermission(s) replayed, no boss, no raid.",
+        fr = "Simulation terminee : %d intermission(s) rejouee(s), sans boss, sans raid.",
+    },
+    ["cmd.sim.stopped"] = {
+        en = "Simulation stopped after %d simulated intermission(s).",
+        fr = "Simulation arretee apres %d intermission(s) simulee(s).",
+    },
+    ["cmd.sim.none"] = {
+        en = "No simulation running.",
+        fr = "Aucune simulation en cours.",
+    },
+    ["cmd.sim.pingStart"] = {
+        en = "SIMULATION (no boss, no raid): native ping test, %d pings in a row (%s). Press your ping key "
+            .. "for real when the panel asks, then validate with the button.",
+        fr = "SIMULATION (sans boss, sans raid) : test des pings natifs, %d pings a la suite (%s). Appuie "
+            .. "pour de vrai sur ta touche de ping quand le panneau le demande, puis valide avec le bouton.",
+    },
+    ["cmd.sim.pingFinished"] = {
+        en = "Ping test over: %d ping(s) announced. The addon detected NOTHING (no API reports a ping): " .. "check your screen yourself.",
+        fr = "Test de ping termine : %d ping(s) annonce(s). L'addon n'a RIEN detecte (aucune API ne rapporte "
+            .. "un ping) : verifie ton ecran toi-meme.",
+    },
+    ["cmd.sim.pingStopped"] = {
+        en = "Ping test left after %d/%d ping(s) announced.",
+        fr = "Test de ping quitte apres %d/%d ping(s) annonce(s).",
     },
     ["cmd.lang.status"] = {
         en = "Language: client detected = %s, effective = %s, preference = %s (/gr lang auto|en|fr to change).",
@@ -117,6 +162,16 @@ Locale.STRINGS = {
         en = "PLACE INTERMISSION PANEL",
         fr = "PLACER LE PANNEAU INTERMISSION",
     },
+    -- Two SIMULATION entries, also reachable by command (/gr sim inter, /gr sim
+    -- ping): a rehearsal alone, with no boss and no raid.
+    ["panel.simInterButton"] = {
+        en = "SIMULATION: INTERMISSION GROUP (no boss)",
+        fr = "SIMULATION : GROUPE INTER (sans boss)",
+    },
+    ["panel.simPingButton"] = {
+        en = "SIMULATION: THE 3 NATIVE PINGS",
+        fr = "SIMULATION : LES 3 PINGS NATIFS",
+    },
     ["status.noAssignment"] = {
         en = "no assignment (%s)",
         fr = "pas d'assignation (%s)",
@@ -132,6 +187,17 @@ Locale.STRINGS = {
         fr = "GideonRaid - Intermission Coach",
     },
     ["ui.close"] = {
+        en = "Close",
+        fr = "Fermer",
+    },
+    -- Close CROSS ("X", top right) of the main panel and of the intermission
+    -- panel, plus its short tooltip. The label is translated here, never written
+    -- as a literal in the rendering layer.
+    ["ui.closeCross"] = {
+        en = "X",
+        fr = "X",
+    },
+    ["ui.closeTooltip"] = {
         en = "Close",
         fr = "Fermer",
     },
@@ -542,7 +608,138 @@ Locale.STRINGS = {
         fr = "Plan prepare hors jeu : aucune aura lue, aucun journal de combat.",
     },
 
+    -- ------------------------------------------------------------- simulation
+    -- SIMULATION MODE (rehearsal alone, no boss, no raid). The banner is
+    -- displayed on every simulation surface so a rehearsal is never mistaken for
+    -- a real fight. Honest wording: the addon NEVER claims to have detected a
+    -- ping (no API reports one) and never claims an automatic action.
+    ["sim.banner"] = {
+        en = "SIMULATION - NO BOSS, NO RAID",
+        fr = "SIMULATION - SANS BOSS, SANS RAID",
+    },
+    ["sim.cycleLine"] = {
+        en = "SIMULATED INTERMISSION %d/%d",
+        fr = "INTERMISSION SIMULEE %d/%d",
+    },
+    ["sim.running"] = {
+        en = "simulated intermission running: %d s left in this cycle",
+        fr = "intermission simulee en cours : %d s restantes dans ce cycle",
+    },
+    ["sim.opens"] = {
+        en = "the simulated intermission opens in %d s",
+        fr = "l'intermission simulee s'ouvre dans %d s",
+    },
+    ["sim.finished"] = {
+        en = "SIMULATION OVER",
+        fr = "SIMULATION TERMINEE",
+    },
+    ["sim.notOpen"] = {
+        en = "the simulated intermission is not open yet: it opens by itself a few seconds after the start",
+        fr = "l'intermission simulee n'est pas encore ouverte : elle s'ouvre toute seule quelques secondes apres le debut",
+    },
+    ["sim.refused.live"] = {
+        en = "Simulation refused: the real flow is running (intermission in progress or ENCOUNTER_START "
+            .. "timeline armed). Finish it first (/gr inter stop).",
+        fr = "Simulation refusee : le flux reel tourne (intermission en cours ou planning ENCOUNTER_START "
+            .. "arme). Termine-le d'abord (/gr inter stop).",
+    },
+    ["sim.refused.running"] = {
+        en = "Refused: a simulation is already running (/gr sim stop).",
+        fr = "Refuse : une simulation tourne deja (/gr sim stop).",
+    },
+    ["sim.stoppedByEncounter"] = {
+        en = "Encounter started: the simulation is stopped. No boss was simulated.",
+        fr = "Combat commence : la simulation est arretee. Aucun boss n'a ete simule.",
+    },
+    -- Ping test: the three native pings, one after the other. The panel says
+    -- which ping to trigger and which key to press (when the player bound one);
+    -- it can NOT check that the ping went out.
+    ["sim.ping.title"] = {
+        en = "GideonRaid - Native ping test",
+        fr = "GideonRaid - Test des pings natifs",
+    },
+    ["sim.ping.stepLine"] = {
+        en = "PING %d/%d",
+        fr = "PING %d/%d",
+    },
+    ["sim.ping.press"] = {
+        en = "PRESS: %s",
+        fr = "APPUIE : %s",
+    },
+    ["sim.ping.pressKey"] = {
+        en = "PRESS: %s (%s)",
+        fr = "APPUIE : %s (%s)",
+    },
+    ["sim.ping.ready"] = {
+        en = "GET READY: %s",
+        fr = "TIENS-TOI PRET : %s",
+    },
+    ["sim.ping.nextIn"] = {
+        en = "next ping in %d s (the client accepts 3 pings in a row, then ~5 s of wait)",
+        fr = "prochain ping dans %d s (le client accepte 3 pings d'affilee, puis ~5 s d'attente)",
+    },
+    ["sim.ping.countdown"] = {
+        en = "time left: %d s - press your key, then validate with the button",
+        fr = "temps restant : %d s - appuie sur ta touche, puis valide avec le bouton",
+    },
+    ["sim.ping.overdue"] = {
+        en = "countdown over - validate once your ping is placed (the addon cannot check it)",
+        fr = "compte a rebours termine - valide une fois ton ping pose (l'addon ne peut pas le verifier)",
+    },
+    ["sim.ping.noKey"] = {
+        en = "no keybind found for this ping: bind one in Options > Keybindings > ping system",
+        fr = "aucun raccourci trouve pour ce ping : bind-en un dans Options > Raccourcis > systeme de ping",
+    },
+    ["sim.ping.native"] = {
+        en = "Press the NATIVE ping keybind of your client (Options > Keybindings > ping system).",
+        fr = "Appuie sur le raccourci de ping NATIF du client (Options > Raccourcis > systeme de ping).",
+    },
+    ["sim.ping.group"] = {
+        en = "REMINDER: pings only show on screen while you are in a GROUP or a RAID. Alone, nothing appears.",
+        fr = "RAPPEL : les pings ne s'affichent a l'ecran que si tu es en GROUPE ou en RAID. Seul, rien n'apparait.",
+    },
+    ["sim.ping.noDetection"] = {
+        en = "The addon CANNOT detect a ping: no game API reports one. Only you can check your screen.",
+        fr = "L'addon NE PEUT PAS detecter un ping : aucune API du jeu ne le rapporte. Toi seul peux verifier ton ecran.",
+    },
+    ["sim.ping.ok"] = {
+        en = "PING PLACED",
+        fr = "PING POSE",
+    },
+    ["sim.ping.quit"] = {
+        en = "QUIT TEST",
+        fr = "QUITTER LE TEST",
+    },
+    ["sim.ping.finished"] = {
+        en = "PING TEST OVER",
+        fr = "TEST DE PING TERMINE",
+    },
+    ["sim.ping.finishedLine"] = {
+        en = "%d/%d ping(s) announced by the addon - it detected none of them (impossible). Check your screen.",
+        fr = "%d/%d ping(s) annonces par l'addon - il n'en a detecte aucun (impossible). Verifie ton ecran.",
+    },
+
     -- --------------------------------------------------------------- errors
+    ["err.invalidSimulation"] = {
+        en = "invalid simulation (table expected)",
+        fr = "simulation invalide (table attendue)",
+    },
+    ["err.simulationOption"] = {
+        en = "invalid simulation option '%s' (a number is expected)",
+        fr = "option de simulation invalide '%s' (un nombre est attendu)",
+    },
+    ["err.pingSequenceEmpty"] = {
+        en = "empty ping sequence (at least one ping is expected)",
+        fr = "sequence de ping vide (au moins un ping est attendu)",
+    },
+    ["err.unknownPing"] = {
+        en = "unknown ping: %s (expected Warning, OnMyWay or Assist)",
+        fr = "ping inconnu : %s (attendu Warning, OnMyWay ou Assist)",
+    },
+    ["err.nothingToConfirm"] = {
+        en = "nothing to confirm: the ping test is not waiting for a ping",
+        fr = "rien a valider : le test de ping n'attend aucun ping",
+    },
     ["err.declarationInvalid"] = {
         en = "invalid declaration (expected a composition: 3V1R, 2V2R or 1V3R)",
         fr = "declaration invalide (attendu une composition : 3V1R, 2V2R ou 1V3R)",

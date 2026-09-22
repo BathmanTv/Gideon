@@ -14,6 +14,8 @@
 # Files loaded in the order of the list. Separator = backslash, never a slash.
 # Core/Locale.lua is listed FIRST among the Core/ modules: the language layer is
 # a dependency of Config, Intermission, Panel and UI.
+# Core/Simulation.lua comes AFTER Core/Intermission.lua (it reuses the canonical
+# states, the ping labels and the binding candidates) and BEFORE the UI/ files.
 # Bindings.xml is NOT listed here: the client loads it automatically
 # (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
@@ -21,5 +23,6 @@ Core\Locale.lua
 Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua
+Core\Simulation.lua
 UI\Panel.lua
 UI\Intermission.lua

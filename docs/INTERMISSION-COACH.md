@@ -150,6 +150,61 @@ bounded, 12 entries max) and can be replaced out of game. The state machine is
 pure and time is **injected**: `Intermission.tick(state, dt)` and
 `Intermission.advanceRun(run, dt)` never read the client clock.
 
+### 2.4 SIMULATION mode (rehearse ALONE: no boss, no raid)
+
+The raid lead must be able to rehearse the intermission **without a boss and
+without a raid** (to learn the flow, to check the panel, to test the ping keys).
+Two guided sequences, both reachable **from the main panel (two buttons) and from
+the chat**, driven by the pure module `Core/Simulation.lua`:
+
+| Entry | Command (aliases) | What happens |
+|---|---|---|
+| **Intermission group** | `/gr sim inter` (`sim group`, `sim groupe`) | the intermission panel **opens by itself after 3 s**, the player clicks their composition, sees the state / role / `PING: YES/NO` / the action line, corrects it with **REDO**, the panel **closes by itself after ~20 s** and the **cycle repeats 3 times**, then the chat announces the end |
+| **Native ping test** | `/gr sim ping` | a dedicated frame announces the three native pings **one after the other** — `PRESS: Warning (Q)`, then `PRESS: On My Way`, then `PRESS: Assist` — with a **visible countdown**, a `PING PLACED` button to move on, a `QUIT TEST` button and the close cross |
+| Leave | `/gr sim stop` (or `QUIT TEST`, or the cross) | stops whatever simulation is running and gives an honest report |
+
+**What the banners say.** Every simulation surface displays
+`SIMULATION - NO BOSS, NO RAID` (plus the cycle counter on the intermission
+panel): a rehearsal can never be mistaken for a real fight.
+
+**What the ping test does NOT claim.** The addon **cannot detect a ping** — no
+game API reports one (see §4). The frame therefore says, in both languages:
+
+- `REMINDER: pings only show on screen while you are in a GROUP or a RAID.
+  Alone, nothing appears.`
+- `The addon CANNOT detect a ping: no game API reports one. Only you can check
+  your screen.`
+
+The player presses their key for real and validates the step themselves: the
+addon only counts how many pings it **announced**. It never writes that a ping
+went out. The default wait between two pings is **5 s** — the client accepts 3
+pings in a row, then ~5 s of wait (§2.1), so the rehearsal stays inside the
+budget.
+
+**Isolation (enforced by `tests/spec/guard_spec.lua`).** A simulation owns its own
+run and state and:
+
+- never arms, disarms or advances the pre-computed `ENCOUNTER_START` timeline
+  (`Core/Simulation.lua` must not reference `ENCOUNTER_START`,
+  `Intermission.newRun`, `advanceRun`, `resetRun` or `RegisterEvent`);
+- never publishes a decision in the SavedVariables — the diagnostic kit must never
+  read a rehearsal as a real choice;
+- is **refused while the real flow is running** (intermission in progress or
+  timeline armed), and **stopped the moment a real encounter starts**;
+- only works with **bounded** inputs (cycles 1–9, opening delay 0–30 s, cycle
+  duration = visibility+1–120 s, ping step 1–120 s, gap 0–30 s), and **refuses**
+  unknown values: a non-numeric option, an unknown ping, an empty ping sequence or
+  an unknown sub-command (`/gr sim bidon`) are rejected with a message, never
+  guessed.
+
+**The close cross ("X").** Both panels (main and intermission) have a close cross
+in the top right corner (label and tooltip from `Core/Locale.lua`:
+`ui.closeCross` = `X`, `ui.closeTooltip` = `Close` / `Fermer`). On the intermission
+panel it **cancels the placement** during placement mode (same effect as the Close
+button), **leaves the rehearsal** during a simulation, and otherwise **only hides
+the panel**: the intermission clock keeps running, the panel still closes by itself
+at the end of the intermission and **opens again at the next one**.
+
 ## 3. What the addon does / can NOT do (to be told to the players as is)
 
 **It can:**
@@ -326,13 +381,14 @@ preference**:
 ## 7. Commands and keybinding
 
 ```
-/gr                       main panel (plan + PLACE INTERMISSION PANEL button)
+/gr                       main panel (plan + PLACE INTERMISSION PANEL button
+                          + the two SIMULATION buttons)
 /gr plan                  detailed plan in the chat
 /gr lang                  detected language, effective language, how to change
 /gr lang auto|en|fr       rules on the language and persists it in the SavedVariables
 /gr ping                  current ping policy and what it means for the roles
 /gr ping anchors|color|none   rules on the PING POLICY and persists it (default anchors)
-/gr inter                 shows/hides the intermission panel
+/gr inter                 shows/hides the intermission panel (close cross too)
 /gr inter start|stop      starts/stops ONE intermission manually
 /gr inter place           placement mode: drag the panel, prepare the ping, press OK
 /gr inter ping            which ping to use, which key, and the binding names tried
@@ -340,6 +396,10 @@ preference**:
 /gr inter 2               only "2" is accepted as a number (unambiguous)
 /gr inter on | off        enables/disables the module
 /gr inter status          module state + timeline + schedule
+/gr sim                   simulation help (what it does, how to leave)
+/gr sim inter             SIMULATION: 3 accelerated intermissions, no boss (aliases: group, groupe)
+/gr sim ping              SIMULATION: guided test of the 3 NATIVE pings, no detection
+/gr sim stop              leaves any simulation at once
 ```
 
 `/gr inter 1` or `/gr inter 3` are **refused** with a message asking for the
@@ -354,7 +414,10 @@ the panel; the ping keybinds are the client's own (ping system).
 ## 8. Out-of-game tests
 
 ```bash
-busted                                    # 160 tests, 78 for this module + 20 for the ping policy
+busted                                    # 196 tests: 80 for this module, 34 for the real loading
+                                          # (panels, close cross, simulations), 23 for the simulation
+                                          # sequences (pure), 21 for the language, 20 for the ping
+                                          # policy, 11 for the pairing, 7 for the anti-API guard
 lua5.1 tools/intermission_cli.lua all     # the 3 states + action lines
 lua5.1 tools/intermission_cli.lua roles   # the 3 states under the 3 ping policies
 lua5.1 tools/intermission_cli.lua 3V1R    # one state
@@ -369,7 +432,7 @@ lua5.1 tools/intermission_cli.lua plan Velna [fixture] [anchors|color|none]
 translated. The key it prints is SIMULATED — the real key is read in game with
 `GetBindingKey`.)
 
-Covered by `tests/spec/intermission_spec.lua` (78 tests):
+Covered by `tests/spec/intermission_spec.lua` (80 tests):
 
 - the three color states (label, green/red counts, possible numbers, ping,
   complement, role, button label, the **ONE action line**) and their
@@ -415,7 +478,8 @@ resolved to `anchors`, the refusal to name a ping for a role that must not ping,
 the persistence of `/gr ping`, the refusal of an unknown value, and the fact
 that **the policy is no longer displayed permanently** on the panel.
 
-Covered by `tests/spec/load_spec.lua` (24 tests, real loading, `.toc` order):
+Covered by `tests/spec/load_spec.lua` (34 tests, real loading, `.toc` order)
+— plus the close cross and the two simulations, detailed after the guard below:
 `ADDON_LOADED` creates the SavedVariables (schedule and lead included),
 `PLAYER_LOGIN` renders the plan, the main panel shows the discreet
 "no out-of-game plan" line and **never** a non-existent command, the **placement
@@ -427,14 +491,36 @@ when `GetBindingKey` raises), the panel **closes by itself** at the end,
 **reopens** at the next intermission, `ENCOUNTER_END` disarms everything,
 disabling is honoured and the panel never displays a dynamic value.
 
-Covered by `tests/spec/guard_spec.lua` (6 tests, anti-forbidden-API guard): no
+Covered by `tests/spec/simulation_spec.lua` (23 tests, **pure logic**, no client):
+`Core/Simulation.lua` must not reference `ENCOUNTER_START`, `Intermission.newRun`,
+`advanceRun`, `resetRun` or `RegisterEvent`; the **rehearsal** sequence opens after
+its delay, closes at the end of the cycle and chains the cycles (1 to 9, default 3),
+one transition per call even with a huge `dt`, refuses a non-numeric option, a
+non-integer `cycles` or an unknown composition, and never writes anything to the
+SavedVariables; the **ping test** announces `Warning → OnMyWay → Assist` in that
+explicit order, carries the bound key when the injected resolver knows it and the
+ping name alone otherwise, counts the announced pings (never a "detected" one),
+leaves cleanly on demand, and refuses an unknown ping, a non-numeric step or an
+empty sequence; all the simulation locale keys are present in **both** languages.
+
+Covered by `tests/spec/guard_spec.lua` (7 tests, anti-forbidden-API guard): no
 file listed in the `.toc` contains `COMBAT_LOG_EVENT`, `UnitAura`, `UnitBuff`,
 `UnitDebuff`, `UnitGUID`, `SendChatMessage`, `GetRaidRosterInfo`, `C_VoiceChat`
 outside a comment; **no ping API at all** (`C_Ping`, `SendMacroPing`,
 `PingSubjectType`) even inside a string; `buildMacro` is gone; `Core/` stays free
 of `GetTime`, `math.random`, `CreateFrame`, `UnitName`, `GideonRaidDB` **and of
-the binding lookup**; and the binding lookup, when present, is **only in `UI/`
-and only under `pcall`**.
+the binding lookup**; a simulation stays free of the real timeline; and the binding
+lookup, when present, is **only in `UI/` and only under `pcall`**.
+
+Covered by `tests/spec/load_spec.lua` (34 tests): the real loading in `.toc` order
+(8 files), the evening flow (arming, automatic opening, closing, reopening,
+`ENCOUNTER_END`, placement mode and its saved position), the **close cross on both
+panels** (label, short tooltip, translated tooltip, closing the main panel, hiding
+the intermission panel without touching the clock, cancelling the placement) and
+the **two simulations end to end, tick by tick** (opening after 3 s, click, REDO,
+automatic closing, 3 cycles, the `SIMULATION` banner, the guided ping sequence with
+the bound key, the refusals, the honest "no detection" wording and the
+`ENCOUNTER_START` isolation).
 
 Covered by `tests/spec/locale_spec.lua` (21 tests): default English, every key
 served in **both** languages, `GetLocale()` returning `"frFR"` → French,
@@ -482,3 +568,21 @@ exception.
 9. Link between the **displayed number** and the **mark** (Mark of Acid / Mark of
    Blood): measured in game by the `GideonDiagAddon` diagnostic kit
    (`/gdiagmark`), which records **number + composition** per intermission.
+10. **Close cross ("X") in the client** — the button is built and tested out of
+    game (label, short tooltip, click handlers), but its **hover** and its
+    position in the top right corner are only verifiable in the client: check the
+    tooltip reads `Close` in English / `Fermer` in French, and that the cross on
+    the intermission panel **cancels** the placement mode and **does not** stop
+    the automatic reopening at the next intermission.
+11. **SIMULATION mode in the client** (`/gr sim inter`, `/gr sim ping`): the
+    out-of-game tests drive both sequences tick by tick with a stubbed API, so
+    what remains to be seen in game is only the *real* timer cadence. Check that
+    the panel opens ~3 s after the command, closes ~20 s later, chains **3**
+    cycles, that the `SIMULATION - NO BOSS, NO RAID` banner is impossible to
+    confuse with a real fight, and that a boss pull during a rehearsal **stops**
+    it (the encounter then arms the normal schedule exactly once).
+12. **The `PRESS: Warning (Q)` line during the ping test** depends on the same
+    binding names as item 1: as long as the real command names are unknown, the
+    test correctly falls back to the ping name alone. Verify the ping itself
+    really shows on screen **while grouped** (alone, nothing appears — that is
+    expected and stated by the addon).

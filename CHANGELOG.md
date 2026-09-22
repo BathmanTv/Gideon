@@ -4,6 +4,73 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+Two requests from the raid lead after the first real in-game test: a **close
+cross** on both panels, and a **SIMULATION MODE** to rehearse alone — no boss, no
+raid.
+
+### Added
+- **Close cross ("X", top right) on the main panel AND on the intermission
+  panel.** The label (`ui.closeCross` = "X") and the short tooltip
+  (`ui.closeTooltip` = "Close" / "Fermer") live in `Core/Locale.lua`; a single
+  shared rendering helper (`UI.AttachCloseCross`, in `UI/Panel.lua`, which loads
+  first) builds the button for both frames, and the tooltip is skipped safely
+  when `GameTooltip` does not exist. On the intermission panel the cross
+  **cancels the placement** while in placement mode (same effect as the existing
+  Close button), **leaves the rehearsal** during a simulation, and otherwise
+  **only hides the panel**: the intermission clock keeps running, the panel still
+  closes by itself at the end of the intermission and opens again at the next one
+  — nothing is armed or disarmed and the validated in-game behaviour is
+  untouched.
+- **SIMULATION MODE, two entries reachable from the main panel (two buttons) and
+  from the chat** (`/gr sim inter` | `sim group` | `sim groupe`, `/gr sim ping`,
+  `/gr sim stop`), driven by the new **pure** module `Core/Simulation.lua`:
+  - **"Intermission group"** (`/gr sim inter`): the intermission panel opens by
+    itself **3 s** after the command (and after each closing), the player clicks
+    their composition, sees the state / role / `PING: YES/NO` / the action line,
+    corrects it with **REDO**, the panel closes by itself after **~20 s**, and the
+    cycle repeats **3 times**. No boss, no raid, no `ENCOUNTER_START`, no combat
+    event ever read.
+  - **"Native ping test"** (`/gr sim ping`): the three native pings are announced
+    one after the other in an **explicit order (Warning → OnMyWay → Assist)** on a
+    dedicated frame — "PRESS: Warning (Q)" when the key is really bound (read by
+    the rendering layer and injected into `Core/`), "PRESS: Warning" alone
+    otherwise — with a **visible countdown**, a `PING PLACED` button to move to
+    the next ping, a `QUIT TEST` button and the close cross to leave at any time.
+    The frame states as is that **the addon cannot detect a ping** (no API reports
+    one, so it never claims it did) and that **pings only show on screen while in
+    a group or a raid**.
+  - **A "SIMULATION - NO BOSS, NO RAID" banner** is displayed on every simulation
+    surface (intermission panel and ping-test frame), with the cycle counter — a
+    rehearsal can never be mistaken for a real fight.
+  - `Core/Simulation.lua` is **isolated by construction**: bounded numeric options
+    (cycles 1–9, opening delay 0–30 s, cycle duration = visibility+1–120 s, step
+    1–120 s, gap 0–30 s), **unknown values REFUSED** (non-numeric option, unknown
+    ping, empty sequence, unknown sub-command), **at most one transition per call**
+    (a huge `dt` never skips a cycle nor a ping), and **no reference at all to the
+    pre-computed `ENCOUNTER_START` timeline** (`tests/spec/guard_spec.lua` fails if
+    `Core/Simulation.lua` ever mentions `ENCOUNTER_START`, `Intermission.newRun`,
+    `advanceRun`, `resetRun` or `RegisterEvent`). A simulation publishes **no
+    decision** in the SavedVariables (the diagnostic kit must never read a
+    rehearsal as a real choice), is **refused while the real flow is running**
+    (live intermission or armed timeline) and is **stopped the moment a real
+    encounter starts**.
+- `tests/spec/simulation_spec.lua`: 23 out-of-game tests of the two sequences
+  (bounds, refusals, explicit order, one-transition-per-call, countdowns, honest
+  ping wording, all the new locale keys present in EN and FR); `load_spec.lua`
+  covers the two crosses and the two simulations end to end (real loading, tick
+  by tick), and `guard_spec.lua` gained the simulation-isolation guard.
+
+### Changed
+- `GideonRaid.toc` lists `Core\Simulation.lua` **after** `Core\Intermission.lua`
+  (it reuses the canonical states, the ping labels and the binding candidates) and
+  before the `UI\` files: `check_toc` now reports **8 files**.
+- `cmd.help` (EN and FR) announces the simulation commands, and `tests/support/`
+  (API stub + core loader) follows the new `.toc` order.
+- The intermission panel layout was shifted down a few pixels so the simulation
+  banner can sit under the title (the content and the wording are unchanged).
+
 ## [0.5.0] - 2026-09-22
 
 Redesign of the Intermission Coach after the **first real in-game test** (raid

@@ -11,7 +11,8 @@ so that 90 % of the risk is eliminated before opening the client.
 | 1 | Pairing logic (pure) | busted + lua5.1 | on every commit | CI + local |
 | 1b | Intermission Coach: orb convention + state machine (pure) | busted + lua5.1 | on every commit | CI + local |
 | 1c | Language layer: strings, resolution, `/gr lang` | busted + lua5.1 | on every commit | CI + local |
-| 2 | Addon loading (wiring, .toc, events) | busted + API stub | on every commit | CI + local |
+| 1d | Simulation mode: rehearsal + guided ping test (pure) | busted + lua5.1 | on every commit | CI + local |
+| 2 | Addon loading (wiring, .toc, events, close cross, simulations) | busted + API stub | on every commit | CI + local |
 | 3 | Rendering and ergonomics in game | test client | before every patch | WoW client |
 | 4 | End-to-end GIDEON integration | Lua CLI + Discord | before every raid | VPS + Discord |
 
@@ -26,8 +27,9 @@ API. It is therefore runnable by `lua5.1` and by `busted`, installed on the VPS
 and on the GitHub runner.
 
 **File**: `tests/spec/pairing_spec.lua` (11 tests; the repository total is
-**162 tests**, spread over `intermission_spec.lua` (80), `load_spec.lua` (24),
-`locale_spec.lua` (21), `pingpolicy_spec.lua` (20) and `guard_spec.lua` (6)).
+**196 tests**, spread over `intermission_spec.lua` (80), `load_spec.lua` (34),
+`simulation_spec.lua` (23), `locale_spec.lua` (21), `pingpolicy_spec.lua` (20),
+`pairing_spec.lua` (11) and `guard_spec.lua` (7)).
 
 **How to run**:
 
@@ -94,7 +96,7 @@ intermission state machine, pre-pull view, configuration bounds) is tested
 **outside the client**, because in game there is nothing to observe: the addon
 reads no combat API.
 
-**File**: `tests/spec/intermission_spec.lua` (78 tests) +
+**File**: `tests/spec/intermission_spec.lua` (80 tests) +
 `tests/spec/pingpolicy_spec.lua` (20 tests, ping roles and policies).
 
 **What is verified:**
@@ -158,6 +160,50 @@ string can ever raise.
 
 **Pass criterion**: `locale_spec.lua` green + `intermission_spec.lua` green in the
 default (English) language.
+
+---
+
+## Step 1d — Out-of-game tests of the SIMULATION mode (pure logic)
+
+**Goal**: prove that the two simulation entries (rehearsal of the intermissions and
+guided test of the native pings, requested by the raid lead) are **pure logic**,
+**bounded**, and **isolated from the real flow**: a rehearsal must never arm,
+disarm or advance the `ENCOUNTER_START` timeline, and must never publish a decision
+the diagnostic kit could read as a real one.
+
+**File**: `tests/spec/simulation_spec.lua` (23 tests) + the isolation guard in
+`tests/spec/guard_spec.lua`.
+
+**What is proven out of game:**
+
+- `Core/Simulation.lua` contains **none** of `ENCOUNTER_START`,
+  `Intermission.newRun`, `advanceRun`, `resetRun`, `RegisterEvent` (guard test), nor
+  `GetTime` / `math.random` / any WoW API (the `Core/` purity guard covers it);
+- the **rehearsal** sequence: default 3 cycles, 3 s before the panel opens, ~20 s
+  per cycle; opens after the delay, **closes by itself** at the end of the cycle,
+  chains the cycles and stops after the last one; every option is **bounded**
+  (cycles 1–9, delay 0–30 s, duration = visibility+1–120 s) and an out-of-range,
+  non-numeric or non-integer value is **REFUSED** (clamped only for the values the
+  raid lead may edit later, never for an unknown composition);
+- **one transition per call**: a `dt` of 100 s never skips a cycle, and a zero or
+  negative `dt` never moves anything;
+- the **ping test**: `Warning → OnMyWay → Assist` in that explicit order (the
+  constant is asserted), one ping announced at a time, the bound key carried by the
+  injected resolver (`PRESS: Warning (Q)`) and the ping name alone when the resolver
+  is absent, raises or returns nothing; the countdown between two steps; the
+  "announced" counter (never a "detected" one — no API can report a ping); leaving
+  at any time; refusal of an unknown ping, a non-numeric step or an empty sequence;
+- every simulation string exists in **both** languages (`locale.t` pairs), and both
+  surfaces carry the `SIMULATION - NO BOSS, NO RAID` banner.
+
+**How to run**:
+
+```bash
+busted tests/spec/simulation_spec.lua
+busted tests/spec/guard_spec.lua
+```
+
+**Pass criterion**: both green, `make check` green (196 tests).
 
 ---
 
@@ -343,6 +389,31 @@ Aide » (+ « Activer le ciblage de ping ») — measured in game by the raid le
 | 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — **the only part still to be confirmed in game** |
 | 15 | Count the pings in the raid with the `anchors` policy (expected ~8) versus `color` (expected ~20) | the `anchors` policy keeps the channel readable: at most one ping per anchor, 4 per side, **one ping per player per intermission** — far from the 3-per-5-s client limit |
 
+### 3.5b In-game protocol — close cross and SIMULATION mode (5 min, ALONE)
+
+**Goal**: validate the two additions requested by the raid lead (close cross on both
+panels, simulation mode) **without a boss, without a raid and without pulling
+anything**. Everything else about the simulation is already proven out of game
+(Step 1d): what is verified here is the **rendering** and the **real timer cadence**.
+Keep `/console scriptErrors 1` on: no Lua error is allowed here either.
+
+| # | Action | Expected |
+|---|---|---|
+| 1 | `/gr`, then hover the **X** in the top right corner | a short tooltip reads `Close` (English) / `Fermer` (French on a frFR client); the X itself is the label from `Core/Locale.lua` |
+| 2 | Click that **X** | the main panel closes; `/gr` brings it back (the plan and the buttons are unchanged) |
+| 3 | `/gr inter place`, then click the **X** of the intermission panel | the placement is **cancelled** exactly like the Close button: the panel closes and **no** position is saved; `/gr inter place` works again |
+| 4 | `/gr inter start` (or wait for a real intermission), then click the **X** | the panel hides; the intermission clock keeps running, the panel **closes by itself** at the end and **opens again at the next intermission** (nothing was disarmed) |
+| 5 | `/gr sim inter` (same as the **SIMULATION** button of the main panel) | the chat states `SIMULATION (no boss, no raid): 3 intermission(s), the panel opens by itself in 3 s. The ENCOUNTER_START timeline is NOT armed.`; the panel opens **by itself after ~3 s** with the banner `SIMULATION - NO BOSS, NO RAID` and `SIMULATED INTERMISSION 1/3` |
+| 6 | Click a composition | state in very large type, `ROLE`, `PING: YES/NO` and ONE action line, exactly like a real intermission; **REDO** brings the three buttons back |
+| 7 | Let the cycle run | the panel **closes by itself after ~20 s** (no click), then **cycle 2/3** opens on its own, then 3/3, then the chat announces `Simulation over: 3 intermission(s) replayed, no boss, no raid.` |
+| 8 | After the rehearsal, `/gr inter status` | the **real** module is untouched: phase `IDLE`, schedule **not armed**, no decision published (the diagnostic kit must see nothing) |
+| 9 | `/gr sim ping` | a frame announces `PRESS: Warning (Q)` (or `PRESS: Warning` alone if the binding name is still unknown — TBD item 1 of `docs/INTERMISSION-COACH.md` §9), with `PING 1/3`, the group reminder and the explicit **"the addon CANNOT detect a ping"** line |
+| 10 | Press the real ping key while **grouped**, then click `PING PLACED` | the ping really appears on screen; after a ~5 s countdown the frame announces `PRESS: On My Way`, then `PRESS: Assist`, then `PING TEST OVER` — the addon only counts the pings it **announced** |
+| 11 | Redo step 10 **alone** (not grouped, no raid) | **nothing** appears on screen and the addon does not claim otherwise: this is expected and stated on the frame |
+| 12 | Restart `/gr sim inter`, then `/gr sim stop` (or the **X** of the ping frame) mid-sequence | the simulation stops immediately with an honest report (`Simulation stopped after N simulated intermission(s)`); `/gr sim stop` again answers `No simulation running.` |
+| 13 | Start a simulation, then **pull a boss** (or `/gr inter start`) | the simulation is **stopped at once** by `ENCOUNTER_START` and the normal schedule is armed **exactly once** (no double state, no panel left open) |
+| 14 | `/gr sim` then `/gr sim bidon` | the simulation help lists the three commands; an unknown sub-command is **refused** with a message (never guessed) |
+
 ### 3.6 Recommended test environment
 
 A single "guinea pig" player is enough: the essential part (reading
@@ -448,6 +519,10 @@ covered in steps 1 and 2.
 | File forgotten in the `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
 | Lua 5.1 syntax error | 2 | `make syntax` |
 | Crash at login / wrong event | 2 | `load_spec.lua` |
+| **A rehearsal corrupts a real fight** (timeline armed/disarmed, decision published, double state) | 1d + 2 + 3 | guard: `Core/Simulation.lua` must not reference `ENCOUNTER_START` / `Intermission.newRun` / `advanceRun` / `resetRun` / `RegisterEvent`; the two crosses, the two simulations and the refusals are driven tick by tick in `load_spec.lua`; no decision ever published; protocol §3.5b points 8/13 |
+| **Simulation mistaken for a real intermission** | 1d + 2 + 3 | `SIMULATION - NO BOSS, NO RAID` banner on both surfaces (asserted in the tests) + protocol §3.5b point 5 |
+| **Addon pretending to detect a ping** (no API can) | 1d + 2 | the "announced" counter only, the explicit `CANNOT detect a ping` line and the group reminder, asserted in both languages; protocol §3.5b points 10/11 |
+| **Panels impossible to close** | 2 + 3 | close cross on both panels: label + short tooltip from `Core/Locale.lua`, click handlers covered in `load_spec.lua`, tooltip without `GameTooltip` does not raise; protocol §3.5b points 1–4 |
 | Unreadable panel in a raid | 3 | manual protocol §3.2 and §3.5 |
 | Secret value error in combat | 3 | §3.0 + code review (conventions §1 and §10) |
 | GIDEON format drift (pairs **and** `plan`) | 4 | contract test + round-trip |

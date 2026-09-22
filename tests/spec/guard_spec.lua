@@ -69,7 +69,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(7, #files)
+        assert.are.equal(8, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -100,7 +100,14 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         -- Config.lua est l'ACCESSOR des SavedVariables (son job) : les controles
         -- ci-dessous portent sur l'horloge, le hasard et l'API WoW, pas sur la
         -- lecture de GideonRaidDB, verifiee separement pour les modules de CALCUL.
-        for _, file in ipairs({ "Core/Locale.lua", "Core/Config.lua", "Core/Pairing.lua", "Core/Intermission.lua" }) do
+        local pureFiles = {
+            "Core/Locale.lua",
+            "Core/Config.lua",
+            "Core/Pairing.lua",
+            "Core/Intermission.lua",
+            "Core/Simulation.lua",
+        }
+        for _, file in ipairs(pureFiles) do
             local code = stripComments(readFile(file))
             assert.is_nil(code:find("GetTime", 1, true), file .. " lit l'heure du client (interdit dans Core/)")
             assert.is_nil(code:find("math.random", 1, true), file .. " utilise math.random (non deterministe)")
@@ -108,9 +115,19 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             assert.is_nil(code:find("UnitName", 1, true), file .. " lit une unite (interdit dans Core/)")
             assert.is_nil(code:find(BINDING_LOOKUP, 1, true), file .. " lit un raccourci (reserve a la couche de rendu)")
         end
-        for _, file in ipairs({ "Core/Pairing.lua", "Core/Intermission.lua" }) do
+        for _, file in ipairs({ "Core/Pairing.lua", "Core/Intermission.lua", "Core/Simulation.lua" }) do
             local code = stripComments(readFile(file))
             assert.is_nil(code:find("GideonRaidDB", 1, true), file .. " lit les SavedVariables (interdit dans Core/)")
+        end
+    end)
+
+    it("garde la SIMULATION isolee de la timeline ENCOUNTER_START", function()
+        -- La simulation est une repetition : elle ne doit ni armer, ni desarmer,
+        -- ni avancer la timeline pre-calculee (Core/Intermission.newRun /
+        -- advanceRun / resetRun) et ne doit toucher aucun evenement de combat.
+        local code = stripComments(readFile("Core/Simulation.lua"))
+        for _, token in ipairs({ "ENCOUNTER_START", "Intermission.newRun", "advanceRun", "resetRun", "RegisterEvent" }) do
+            assert.is_nil(code:find(token, 1, true), "Core/Simulation.lua reference " .. token .. " (la simulation doit etre isolee)")
         end
     end)
 

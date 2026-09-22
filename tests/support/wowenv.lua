@@ -33,6 +33,9 @@ function wowenv.loadCore()
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
     wowenv.load("Core/Intermission.lua", ns)
+    -- Core/Simulation.lua vient APRES Intermission.lua (il reutilise ses etats,
+    -- ses libelles de ping et ses candidats de raccourci) et AVANT les UI/.
+    wowenv.load("Core/Simulation.lua", ns)
     return ns
 end
 

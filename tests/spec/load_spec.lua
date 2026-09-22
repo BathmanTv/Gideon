@@ -31,6 +31,8 @@ describe("chargement de l'addon", function()
         _G.GideonRaidCharDB = nil
         _G.GideonRaidPanel = nil
         _G.GideonRaidIntermissionPanel = nil
+        _G.GideonRaidPingTestPanel = nil
+        _G.GameTooltip = nil
         _G.SlashCmdList = nil
         _G.GetBindingKey = nil
         stub.install()
@@ -45,12 +47,16 @@ describe("chargement de l'addon", function()
 
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(7, #files)
+        assert.are.equal(8, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
         assert.are.equal("Core/Config.lua", files[3])
-        assert.are.equal("UI/Intermission.lua", files[7])
+        -- Core/Simulation.lua APRES Intermission.lua (il reutilise ses etats et
+        -- ses libelles) et AVANT la couche de rendu (UI/).
+        assert.are.equal("Core/Simulation.lua", files[6])
+        assert.are.equal("UI/Panel.lua", files[7])
+        assert.are.equal("UI/Intermission.lua", files[8])
     end)
 
     it("expose toutes les couches attendues", function()
@@ -58,6 +64,7 @@ describe("chargement de l'addon", function()
         assert.is_table(ns.Pairing)
         assert.is_table(ns.Config)
         assert.is_table(ns.Intermission)
+        assert.is_table(ns.Simulation)
         assert.is_table(ns.UI)
         assert.is_table(ns.GR)
     end)
@@ -182,7 +189,7 @@ describe("chargement de l'addon", function()
         stub.fireTickers(400)
         assert.is_false(panel:IsShown())
         -- 45 s : ouvert, en attente du debut de l'intermission.
-        stub.fireTickers(50)
+        stub.fireTickers(51)
         assert.is_true(panel:IsShown())
         assert.matches("GET READY", panel.headline:GetText())
         assert.are.equal("", panel.state:GetText())
@@ -348,5 +355,265 @@ describe("chargement de l'addon", function()
         local text = _G.GideonRaidIntermissionPanel.body:GetText()
         assert.is_nil(string.find(text, "UnitHealth", 1, true))
         assert.is_nil(string.find(text, "UnitAura", 1, true))
+    end)
+
+    -- ------------------------------------------------------------------------
+    -- CROIX DE FERMETURE ("X") : panneau principal ET panneau d'intermission
+    -- ------------------------------------------------------------------------
+    it("les deux panneaux portent une croix X avec un tooltip court et traduit", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        local main = _G.GideonRaidPanel
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_table(main.closeCross)
+        assert.is_table(panel.closeCross)
+        assert.are.equal("X", main.closeCross:GetText())
+        assert.are.equal("X", panel.closeCross:GetText())
+
+        -- Survol LISIBLE : court, et dans la langue servie (Core/Locale.lua).
+        _G.GameTooltip = {
+            SetOwner = function() end,
+            SetText = function(self, text)
+                self.text = text
+            end,
+            Show = function() end,
+            Hide = function() end,
+        }
+        main.closeCross:GetScript("OnEnter")(main.closeCross)
+        assert.are.equal("Close", _G.GameTooltip.text)
+        _G.SlashCmdList["GIDEONRAID"]("lang fr")
+        main.closeCross:GetScript("OnEnter")(main.closeCross)
+        assert.are.equal("Fermer", _G.GameTooltip.text)
+        main.closeCross:GetScript("OnLeave")(main.closeCross)
+        -- Hors client (aucun GameTooltip) : le survol ne leve jamais.
+        _G.GameTooltip = nil
+        main.closeCross:GetScript("OnEnter")(main.closeCross)
+
+        -- La croix ferme le panneau principal.
+        _G.SlashCmdList["GIDEONRAID"]("show")
+        assert.is_true(main:IsShown())
+        main.closeCross:Click()
+        assert.is_false(main:IsShown())
+    end)
+
+    it("la croix de l'intermission ferme, et le tour reste intact (fermeture + reouverture auto)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        stub.fireTickers(450)
+        assert.is_true(panel:IsShown())
+        panel.closeCross:Click()
+        assert.is_false(panel:IsShown(), "une fermeture a la main doit etre possible")
+        -- L'horloge n'est PAS desarmee : le panneau se ferme tout seul a la fin
+        -- et se ROUVRE a l'intermission suivante.
+        stub.fireTickers(260)
+        assert.is_false(panel:IsShown())
+        stub.fireTickers(760)
+        assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
+        assert.matches("GET READY", panel.headline:GetText())
+    end)
+
+    it("en placement, la croix ANNULE (meme effet que le bouton Close existant)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.matches("BEFORE THE PULL", panel.headline:GetText())
+        panel.closeCross:Click()
+        assert.is_false(panel:IsShown())
+        -- Annulation : le placement n'est PAS valide.
+        assert.is_false(contains(messages(), "Placement saved"))
+    end)
+
+    -- ------------------------------------------------------------------------
+    -- SIMULATION : entrees, refus et isolation du flux reel
+    -- ------------------------------------------------------------------------
+    it("/gr sim affiche l'aide et REFUSE une sous-commande inconnue", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim")
+        assert.matches("/gr sim", messages())
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        _G.SlashCmdList["GIDEONRAID"]("sim bidon")
+        assert.matches("Unknown simulation", messages())
+        -- L'aide generale annonce la simulation, et rien n'a ete lance.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        _G.SlashCmdList["GIDEONRAID"]("inconnu")
+        assert.matches("/gr sim", messages())
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
+        -- La fenetre du test de ping n'est meme pas construite : rien n'a ete lance.
+        assert.is_nil(_G.GideonRaidPingTestPanel)
+    end)
+
+    it("les deux entrees SIMULATION sont sur le panneau principal", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        local main = _G.GideonRaidPanel
+        assert.matches("SIMULATION", main.simInter:GetText())
+        assert.matches("SIMULATION", main.simPing:GetText())
+        main:Show()
+        main.simInter:Click()
+        assert.matches("SIMULATION %(no boss, no raid%): 3 intermission", messages())
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+        main.simPing:Click()
+        assert.is_true(_G.GideonRaidPingTestPanel:IsShown())
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+        assert.is_false(_G.GideonRaidPingTestPanel:IsShown())
+    end)
+
+    it("refuse de melanger une simulation et le flux reel, et n'arme jamais la timeline", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        -- Flux reel en cours (intermission lancee a la main) : simulation refusee.
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        _G.SlashCmdList["GIDEONRAID"]("sim inter")
+        assert.matches("Simulation refused", messages())
+        assert.is_false(_G.GideonRaidIntermissionPanel.simBanner:IsShown())
+        _G.SlashCmdList["GIDEONRAID"]("inter stop")
+        -- Simulation en cours : le placement et l'intermission manuelle sont refuses.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        _G.SlashCmdList["GIDEONRAID"]("sim ping")
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        assert.matches("Refused: a simulation is already running", messages())
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        assert.matches("Refused: a simulation is already running", messages())
+        -- ENCOUNTER_START coupe la simulation et arme le planning normalement.
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        assert.matches("Encounter started", messages())
+        assert.matches("armed: 4 intermission", messages())
+        assert.is_false(_G.GideonRaidPingTestPanel:IsShown())
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+        assert.matches("No simulation running", messages())
+    end)
+
+    -- ------------------------------------------------------------------------
+    -- SIMULATION : "Groupe inter" (repetition complete, 3 cycles, sans boss)
+    -- ------------------------------------------------------------------------
+    it("SIMULATION groupe inter : 3 cycles accelerees, sans boss ni timeline", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim inter")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.matches("SIMULATION %(no boss, no raid%): 3 intermission", messages())
+        assert.is_false(panel:IsShown(), "le panneau s'ouvre apres le delai, pas tout de suite")
+        -- 2,9 s : toujours ferme ; 3,1 s : le panneau s'ouvre TOUT SEUL.
+        stub.fireTickers(29)
+        assert.is_false(panel:IsShown())
+        stub.fireTickers(2)
+        assert.is_true(panel:IsShown())
+        assert.is_true(panel.simBanner:IsShown())
+        assert.matches("SIMULATION", panel.simBanner:GetText())
+        assert.matches("SIMULATED INTERMISSION 1/3", panel.simBanner:GetText())
+        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
+        assert.is_true(panel.buttons[1]:IsShown())
+
+        -- Le geste complet du joueur : composition, CORRIGER, composition.
+        panel.buttons[1]:Click()
+        assert.are.equal("1V3R", panel.state:GetText())
+        assert.are.equal("PING: YES", panel.pingBanner:GetText())
+        assert.is_true(contains(panel.body:GetText(), "ROLE: ANCHOR"))
+        assert.is_true(contains(panel.body:GetText(), "STAY WHERE YOU ARE"))
+        assert.is_true(panel.redo:IsShown())
+        panel.redo:Click()
+        assert.are.equal("", panel.state:GetText())
+        panel.buttons[3]:Click()
+        assert.are.equal("3V1R", panel.state:GetText())
+        -- Une repetition ne publie AUCUNE decision : le kit de diagnostic ne doit
+        -- jamais lire une repetition comme un vrai choix.
+        assert.is_nil(_G.GideonRaidDB.intermission.lastDecision)
+
+        -- Fin du cycle : fermeture automatique, puis cycle 2 tout seul.
+        stub.fireTickers(200)
+        assert.is_false(panel:IsShown())
+        stub.fireTickers(31)
+        assert.is_true(panel:IsShown())
+        assert.matches("SIMULATED INTERMISSION 2/3", panel.simBanner:GetText())
+        -- Les 3 cycles, puis la fin annoncee dans le chat.
+        stub.fireTickers(700)
+        assert.is_false(panel:IsShown())
+        assert.matches("Simulation over: 3 intermission", messages())
+        assert.matches("no boss, no raid", messages())
+        -- ISOLATION : la timeline ENCOUNTER_START n'a jamais ete armee ("coach
+        -- armed" absent) et l'etat REEL de l'intermission est reste IDLE.
+        assert.is_false(contains(messages(), "coach armed"))
+        assert.is_true(contains(messages(), "NOT armed"))
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        _G.SlashCmdList["GIDEONRAID"]("inter status")
+        assert.matches("phase IDLE", messages())
+        -- ... et le flux reel fonctionne encore normalement apres la repetition.
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        assert.matches("armed: 4 intermission", messages())
+        stub.fireTickers(450)
+        assert.is_true(panel:IsShown())
+        assert.is_false(panel.simBanner:IsShown(), "plus de bandeau SIMULATION hors repetition")
+    end)
+
+    it("accepte les alias /gr sim group et /gr sim groupe", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim groupe")
+        assert.matches("SIMULATION %(no boss, no raid%): 3 intermission", messages())
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+        assert.matches("Simulation stopped after 0 simulated intermission", messages())
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        _G.SlashCmdList["GIDEONRAID"]("sim group")
+        assert.matches("SIMULATION %(no boss, no raid%): 3 intermission", messages())
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+        assert.matches("Simulation stopped after 0 simulated intermission", messages())
+    end)
+
+    -- ------------------------------------------------------------------------
+    -- SIMULATION : test des pings natifs (3 pings guides, sans detection)
+    -- ------------------------------------------------------------------------
+    it("SIMULATION ping : sequence guidee des 3 pings, sans aucune detection", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GetBindingKey = function(name)
+            if name == "PING_WARNING" then
+                return "Q"
+            end
+            return nil
+        end
+        _G.SlashCmdList["GIDEONRAID"]("sim ping")
+        local test = _G.GideonRaidPingTestPanel
+        assert.is_true(test:IsShown())
+        assert.matches("SIMULATION", messages())
+        assert.matches("SIMULATION", test.simBanner:GetText())
+        assert.matches("PING 1/3", test.step:GetText())
+        -- Touche REELLE bindee sur le 1er ping, lue par la couche de rendu.
+        assert.are.equal("PRESS: Warning (Q)", test.press:GetText())
+        local text = test.body:GetText()
+        assert.is_true(contains(text, "GROUP or a RAID"))
+        assert.is_true(contains(text, "CANNOT detect a ping"))
+        assert.is_true(contains(text, "NATIVE ping keybind"))
+        assert.is_true(test.ok:IsShown())
+        assert.matches("PING PLACED", test.ok:GetText())
+
+        -- Le joueur presse SA touche puis valide : l'addon ne detecte rien.
+        test.ok:Click()
+        assert.matches("GET READY: On My Way", test.press:GetText())
+        stub.fireTickers(51)
+        assert.are.equal("PRESS: On My Way", test.press:GetText())
+        test.ok:Click()
+        stub.fireTickers(51)
+        test.ok:Click()
+        assert.matches("PING TEST OVER", test.press:GetText())
+        assert.is_false(test.ok:IsShown())
+        assert.matches("Ping test over: 3 ping", messages())
+        assert.matches("detected NOTHING", messages())
+        -- Aucune decision publiee, et on peut quitter a tout moment.
+        assert.is_nil(_G.GideonRaidDB.intermission.lastDecision)
+        test.quit:Click()
+        assert.is_false(test:IsShown())
+        assert.matches("Ping test left after 3/3 ping", messages())
+
+        -- Le meme test se quitte par la croix.
+        _G.SlashCmdList["GIDEONRAID"]("sim ping")
+        assert.is_true(test:IsShown())
+        test.closeCross:Click()
+        assert.is_false(test:IsShown())
+    end)
+
+    it("le test de ping se quitte avant la fin (compte rendu honnete)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim ping")
+        local test = _G.GideonRaidPingTestPanel
+        test.ok:Click()
+        test.quit:Click()
+        assert.is_false(test:IsShown())
+        assert.matches("Ping test left after 1/3 ping", messages())
     end)
 end)

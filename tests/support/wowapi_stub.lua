@@ -32,6 +32,15 @@ function stub.install()
         self.__scripts = self.__scripts or {}
         self.__scripts[name] = fn
     end
+    --- Retourne le script (OnClick, OnEnter, OnLeave, OnEvent...) pour pouvoir le
+    --- declencher depuis un test, par exemple pour verifier le tooltip de la croix
+    --- de fermeture (survol lisible).
+    function Frame:GetScript(name)
+        if not self.__scripts then
+            return nil
+        end
+        return self.__scripts[name]
+    end
     function Frame:Fire(event, ...)
         local fn = self.__scripts and self.__scripts.OnEvent
         if fn then
