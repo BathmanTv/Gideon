@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Lint + tests (hors jeu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer Lua 5.1 + luacheck + busted + stylua
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 luarocks lua-check
+          sudo luarocks install busted
+          curl -sL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o /tmp/stylua.zip
+          unzip -o /tmp/stylua.zip -d /tmp/stylua
+          sudo install -m 0755 /tmp/stylua/stylua /usr/local/bin/stylua
+
+      - name: make check (stylua + luacheck + .toc + busted)
+        run: make check

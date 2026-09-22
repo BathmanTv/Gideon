@@ -1,0 +1,53 @@
+name: Release
+
+# Le dépôt BathmanTv/Gideon contient l'addon À SA RACINE (contrainte du
+# BigWigs packager : il exige un .git dans le dossier passé, donc le dossier
+# passé DOIT être la racine du dépôt). On ne passe donc aucun -t.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  # Garde-fou : on ne publie JAMAIS si les tests échouent.
+  tests:
+    name: Tests avant release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer Lua 5.1 + luacheck + busted + stylua
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 luarocks lua-check
+          sudo luarocks install busted
+          curl -sL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o /tmp/stylua.zip
+          unzip -o /tmp/stylua.zip -d /tmp/stylua
+          sudo install -m 0755 /tmp/stylua/stylua /usr/local/bin/stylua
+
+      - name: Verifications hors jeu
+        run: make check
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Packaging + publication. Le packager téléverse automatiquement vers
+      # chaque destination dont le token est présent :
+      #   GitHub Releases  : GITHUB_OAUTH (token fourni par Actions, rien à créer)
+      #                      -> c'est CETTE release qui permet a WowUp de suivre l'addon
+      #   CurseForge       : CF_API_TOKEN  (+ X-Curse-Project-ID dans le .toc)
+      #   Wago Addons      : WAGO_API_TOKEN (+ X-Wago-ID dans le .toc)
+      - name: Package et upload (BigWigs packager)
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -g 12.1.0
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}

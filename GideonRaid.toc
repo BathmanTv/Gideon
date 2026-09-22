@@ -8,7 +8,7 @@
 ## SavedVariablesPerCharacter: GideonRaidCharDB
 ## Category: Combat
 ## IconTexture: Interface\ICONS\Spell_Shadow_ShadowWordPain
-## X-Curse-Project-ID: 0
+## X-Curse-Project-ID: 1707362
 ## X-Wago-ID: 0
 
 # Fichiers charges dans l'ordre. Separateur = backslash, jamais de slash.
