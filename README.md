@@ -88,9 +88,40 @@ macros only). The module therefore does what is still possible:
 
 | Screen | Content | Data source |
 |---|---|---|
-| Main panel (`/gr`) | partner, role, position, pairs | `assignment` block prepared out of game by GIDEON |
-| Intermission panel (`/gr inter` or the keybinding) | very large reminder, 3 s countdown, **three buttons named after the visible composition** (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
-| After the click | instruction (what you have, what you must do, state to join, ping color/token) + **ping macro ready to copy** | convention frozen in `Core/Intermission.lua` |
+| Main panel (`/gr`) | ping policy, partner, role, position, pairs | `assignment` block prepared out of game by GIDEON + `pingMode` |
+| Intermission panel (`/gr inter` or the keybinding) | very large reminder, 3 s countdown, a **"PING: YES/NO" banner**, **three buttons named after the visible composition** (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
+| After the click | role + **role order** (what you must do), state to join, ping decision/color, **ping macro — only if your role has to ping** | convention frozen in `Core/Intermission.lua` |
+
+### 3.1 Ping roles by STATE (instead of one duty per number)
+
+A state carries a **role**, and the role decides what the player does:
+
+| State | Role | Does it ping? (default policy) | Order |
+|---|---|---|---|
+| `1V3R` | **ANCHOR** | **YES** — pings itself with the macro, or is pinged by another player | stay where you are, **do not move** |
+| `2V2R` | **MIDDLE** | no | go to the middle / under the boss, pair up with another 2V2R |
+| `3V1R` | **CHASER** | no | spot a ping and run to it (any 1V3R anchor works) |
+
+**Why:** every state pinging used to flood the channel with ~20 pings; with one
+ping per anchor (4 per side) the raid sends **at most ~8 pings**, which stays
+readable — the client also rate-limits pings per player (`C_Ping.SendMacroPing`
+has its own limit, see `docs/TESTPLAN.md`). An ANCHOR may also simply **be pinged
+by another player** of the raid: only one signal per anchor is needed, and since
+patch **12.1 pings are visible on the raid frames**, so a chaser finds the anchor
+without any addon-to-addon communication.
+
+The policy is **configurable** (`/gr ping`, persisted in
+`GideonRaidDB.intermission.pingMode`):
+
+| Policy | Who pings |
+|---|---|
+| `anchors` (**default**, raid-lead decision) | only the `1V3R` ANCHORS |
+| `color` (raidstrats variant) | every state, with its own color: `1V3R` red/Warning, `2V2R` blue/OnMyWay, `3V1R` green/Assist |
+| `none` | nobody: the raid plays on positions only |
+
+The addon **never sends a ping itself** (`C_Ping.SendMacroPing` is `#protected`):
+it generates the macro text **only for a role that has to ping** under the
+current policy, and displays the reason for the other roles.
 
 **Nothing is automatic.** The interface states it explicitly: *who declared what
 is UNKNOWN* (no addon→addon channel in an instance, the UI is local to the
@@ -185,14 +216,14 @@ Reference result (after the color-model fix and the bilingual language layer):
 
 ```
 $ make check
-Total: 0 warnings / 0 errors in 17 files        # luacheck
+Total: 0 warnings / 0 errors in 18 files        # luacheck
 OK GideonRaid.toc                              # check_toc (7 files listed)
-111 successes / 0 failures / 0 errors           # busted
+138 successes / 0 failures / 0 errors           # busted
 ```
 
-The 111 tests are spread over `pairing_spec.lua` (11),
-`intermission_spec.lua` (60), `load_spec.lua` (16), `guard_spec.lua` (4) and
-`locale_spec.lua` (20).
+The 138 tests are spread over `pairing_spec.lua` (11),
+`intermission_spec.lua` (65), `load_spec.lua` (19), `guard_spec.lua` (4),
+`locale_spec.lua` (20) and `pingpolicy_spec.lua` (19 — ping roles and policies).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 

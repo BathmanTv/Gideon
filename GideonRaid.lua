@@ -44,6 +44,14 @@ local function applyLanguage()
     return GR.locale
 end
 
+--- Label of the keybinding shown in Options > Keybindings ("Panneau
+--- Intermission" in French, English by default). The client reads these globals
+--- when it builds the keybinding list, so they are refreshed with /gr lang.
+local function applyBindingLabel()
+    _G.BINDING_HEADER_GIDEONRAID = GR.DISPLAY
+    _G["BINDING_NAME_GIDEONRAID_INTERMISSION"] = ns.Locale.t("ui.bindingLabel")
+end
+
 local frame = CreateFrame("Frame")
 
 local function onAddonLoaded(loadedName)
@@ -56,6 +64,7 @@ local function onAddonLoaded(loadedName)
     -- Language BEFORE the UI is built: the static labels are created from the
     -- effective language.
     applyLanguage()
+    applyBindingLabel()
     ns.UI.Initialize()
     ns.UI.IntermissionInitialize()
 end
@@ -98,8 +107,39 @@ local function setLanguage(mode)
         db.locale = accepted
     end
     applyLanguage()
+    applyBindingLabel()
     ns.UI.IntermissionApplyStaticText()
     ns.UI.Print(ns.Locale.format("cmd.lang.updated", accepted, GR.locale))
+    return accepted
+end
+
+--- /gr ping (no argument): current ping policy and what it means for the roles.
+local function printPingMode()
+    local db = _G.GideonRaidDB
+    local resolved = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil).pingMode
+    ns.UI.Print(ns.Locale.format("cmd.ping.status", resolved, ns.Intermission.pingPolicyLine(resolved)))
+end
+
+--- /gr ping <anchors|color|none>: rules on the PING POLICY of the intermission
+--- module, persists it in the SavedVariables and re-applies the panel labels.
+--- An unknown value is REFUSED (nothing is persisted, nothing is guessed):
+--- same mechanics as /gr lang.
+local function setPingMode(mode)
+    local wanted = type(mode) == "string" and mode:lower() or ""
+    local accepted = ns.Config.resolvePingMode(wanted)
+    if accepted ~= wanted then
+        ns.UI.Print(ns.Locale.format("cmd.ping.unknown", tostring(mode)))
+        return nil
+    end
+    local db = _G.GideonRaidDB
+    if type(db) == "table" then
+        if type(db.intermission) ~= "table" then
+            db.intermission = ns.Config.defaultIntermission()
+        end
+        db.intermission.pingMode = accepted
+    end
+    ns.UI.IntermissionApplyStaticText()
+    ns.UI.Print(ns.Locale.format("cmd.ping.updated", accepted, ns.Intermission.pingPolicyLine(accepted)))
     return accepted
 end
 
@@ -113,6 +153,9 @@ local function slashHandler(cmd)
     -- /gr lang <mode> : le mode est normalise en minuscules par l'appelant, donc
     -- le motif accepte n'importe quelle valeur et setLanguage() la juge.
     local langMode = cmd:match("^lang%s+(.+)$")
+    -- /gr ping <mode> : same mechanics (the pattern accepts anything and
+    -- setPingMode() judges it: an unknown value is refused).
+    local pingMode = cmd:match("^ping%s+(.+)$")
     if cmd == "" or cmd == "show" then
         ns.UI.Toggle()
     elseif cmd == "reset" then
@@ -128,6 +171,10 @@ local function slashHandler(cmd)
         printLanguage()
     elseif langMode ~= nil then
         setLanguage(langMode)
+    elseif cmd == "ping" then
+        printPingMode()
+    elseif pingMode ~= nil then
+        setPingMode(pingMode)
     elseif cmd == "inter" or cmd == "intermission" then
         ns.UI.IntermissionToggle()
     elseif cmd == "inter start" then
@@ -176,6 +223,9 @@ _G.SlashCmdList["GIDEONRAID"] = slashHandler
 -- Bindings.xml is loaded AUTOMATICALLY by the client and must NOT be listed in
 -- the .toc. The body of a binding is Lua executed insecurely: it only opens the
 -- panel (the addon can NOT send a ping, see C_Ping.SendMacroPing #protected).
--- The two globals below provide the labels shown in Options > Keybindings.
-_G.BINDING_HEADER_GIDEONRAID = "GideonRaid"
-_G["BINDING_NAME_GIDEONRAID_INTERMISSION"] = "Panneau Intermission (Entombed Sentinels)"
+-- The two globals below provide the labels shown in Options > Keybindings. They
+-- are set in ENGLISH here (GideonRaid.lua is the FIRST file of the .toc, before
+-- Core/Locale.lua) and refreshed in the effective language after ADDON_LOADED
+-- and on every /gr lang through applyBindingLabel().
+_G.BINDING_HEADER_GIDEONRAID = GR.DISPLAY
+_G["BINDING_NAME_GIDEONRAID_INTERMISSION"] = "Intermission panel (Entombed Sentinels)"

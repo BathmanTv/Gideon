@@ -63,7 +63,7 @@ local function ensurePanel()
     end
 
     local p = CreateFrame("Frame", "GideonRaidIntermissionPanel", UIParent, "BackdropTemplate")
-    p:SetSize(560, 400)
+    p:SetSize(560, 520)
     p:SetMovable(true)
     p:EnableMouse(true)
     p:RegisterForDrag("LeftButton")
@@ -93,8 +93,15 @@ local function ensurePanel()
     p.headline:SetPoint("TOP", 0, -40)
     p.headline:SetText("")
 
+    -- The ping banner: the FIRST thing the player must read ("PING: YES/NO").
+    -- Its text and its color come from Core (role + configured policy).
+    p.pingBanner = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    p.pingBanner:SetPoint("TOPLEFT", 24, -78)
+    p.pingBanner:SetText("")
+    p.pingBanner:Hide()
+
     p.body = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.body:SetPoint("TOPLEFT", 24, -96)
+    p.body:SetPoint("TOPLEFT", 24, -104)
     p.body:SetWidth(492)
     p.body:SetJustifyH("LEFT")
     p.body:SetJustifyV("TOP")
@@ -111,7 +118,7 @@ local function ensurePanel()
         local rec = ns.Intermission.getDeclaration(key)
         local button = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
         button:SetSize(168, 64)
-        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -208)
+        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -300)
         button:SetText(rec ~= nil and rec.buttonLabel or key)
         button:SetScript("OnClick", function()
             UI.IntermissionDeclare(key)
@@ -120,12 +127,12 @@ local function ensurePanel()
     end
 
     p.macroLabel = p:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    p.macroLabel:SetPoint("TOPLEFT", 24, -284)
+    p.macroLabel:SetPoint("TOPLEFT", 24, -372)
     p.macroLabel:SetText(Locale.t("ui.macroLabel"))
 
     p.macroBox = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
     p.macroBox:SetSize(492, 24)
-    p.macroBox:SetPoint("TOPLEFT", 24, -302)
+    p.macroBox:SetPoint("TOPLEFT", 24, -390)
     p.macroBox:SetAutoFocus(false)
     p.macroBox:SetText("")
     p.macroBox:SetTextInsets(6, 6, 0, 0)
@@ -137,7 +144,7 @@ local function ensurePanel()
     end)
 
     p.note = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    p.note:SetPoint("TOPLEFT", 24, -334)
+    p.note:SetPoint("TOPLEFT", 24, -420)
     p.note:SetWidth(492)
     p.note:SetJustifyH("LEFT")
     p.note:SetText("")
@@ -181,10 +188,51 @@ function UI.IntermissionSavePosition()
     }
 end
 
+--- Parses a Core color code ("|cff40ff40") into RGB floats.
+--- Rendering helper only: the color itself comes from Core (ping by dominant
+--- color); a missing/invalid code falls back to the "no ping" red.
+local function parseColor(hex)
+    if type(hex) == "string" and #hex >= 10 and hex:sub(1, 2) == "|c" then
+        local r = tonumber(hex:sub(5, 6), 16)
+        local g = tonumber(hex:sub(7, 8), 16)
+        local b = tonumber(hex:sub(9, 10), 16)
+        if r and g and b then
+            return r / 255, g / 255, b / 255
+        end
+    end
+    return 1.0, 0.33, 0.33
+end
+
+--- Shows/hides the ping macro zone: the macro is DISPLAYED ONLY when the role
+--- must ping under the configured policy. A CHASER or a MIDDLE under "anchors"
+--- sees the reason instead of a macro it must not use.
+local function applyMacroArea(p, snap)
+    if snap.macroPrimary then
+        p.macroLabel:Show()
+        p.macroBox:Show()
+        p.macroBox:SetText(snap.macroPrimary)
+        p.note:SetText(Locale.format("ui.macroFallback", tostring(snap.macroFallback), tostring(snap.macroNote)))
+        return
+    end
+    p.macroBox:SetText("")
+    if snap.declaration ~= nil and not snap.macroAllowed then
+        p.macroLabel:Hide()
+        p.macroBox:Hide()
+        p.note:SetText(Locale.t("ui.macroForbidden"))
+        return
+    end
+    p.macroLabel:Show()
+    p.macroBox:Show()
+    p.note:SetText(Locale.t("ui.macroPrompt"))
+end
+
 --- Rebuilds the display from the state computed by Core/.
 function UI.IntermissionRefresh()
     local p = ensurePanel()
-    local snap = ns.Intermission.snapshot(state)
+    local c = config()
+    -- The ping policy is INJECTED into Core (Core never reads the SavedVariables)
+    -- and decides the role order, the "PING: YES/NO" banner and the macro.
+    local snap = ns.Intermission.snapshot(state, c.pingMode)
     p.headline:SetText(snap.headline)
     p.body:SetText(table.concat(snap.lines, "\n"))
     for _, button in ipairs(p.buttons) do
@@ -192,12 +240,14 @@ function UI.IntermissionRefresh()
         -- here we only show/hide.
         button:SetShown(snap.showButtons)
     end
-    p.macroBox:SetText(snap.macroPrimary or "")
-    if snap.macroPrimary then
-        p.note:SetText(Locale.format("ui.macroFallback", tostring(snap.macroFallback), tostring(snap.macroNote)))
+    if snap.pingText then
+        p.pingBanner:SetText(snap.pingText)
+        p.pingBanner:SetTextColor(parseColor(snap.pingColorHex))
+        p.pingBanner:Show()
     else
-        p.note:SetText(Locale.t("ui.macroPrompt"))
+        p.pingBanner:Hide()
     end
+    applyMacroArea(p, snap)
     return snap
 end
 
@@ -349,7 +399,7 @@ end
 
 function UI.IntermissionStatus()
     local c = config()
-    local snap = ns.Intermission.snapshot(state)
+    local snap = ns.Intermission.snapshot(state, c.pingMode)
     UI.Print(
         Locale.format(
             "ui.statusLine",
@@ -359,27 +409,36 @@ function UI.IntermissionStatus()
         )
     )
     UI.Print(Locale.format("ui.timelineLine", c.visibilitySeconds, c.durationSeconds, c.scale))
+    UI.Print(Locale.format("ui.pingPolicyLine", c.pingMode, snap.policyLine))
 end
 
 function UI.IntermissionPrintMacro()
-    local snap = ns.Intermission.snapshot(state)
-    if not snap.macroPrimary then
-        UI.Print(Locale.t("ui.noMacro"))
+    local c = config()
+    local snap = ns.Intermission.snapshot(state, c.pingMode)
+    if snap.macroPrimary then
+        UI.Print(Locale.format("ui.macroToPaste", snap.macroPrimary))
+        UI.Print(Locale.format("ui.macroFallbackLine", tostring(snap.macroFallback), tostring(snap.macroNote)))
         return
     end
-    UI.Print(Locale.format("ui.macroToPaste", snap.macroPrimary))
-    UI.Print(Locale.format("ui.macroFallbackLine", tostring(snap.macroFallback), tostring(snap.macroNote)))
+    -- No macro to print: either nothing is declared yet, or the role must not
+    -- ping under the current policy (the reason is always stated, never silent).
+    if snap.declaration ~= nil and not snap.macroAllowed then
+        UI.Print(Locale.format("ui.noMacroForbidden", tostring(snap.roleName), tostring(snap.pingPolicy)))
+        return
+    end
+    UI.Print(Locale.t("ui.noMacro"))
 end
 
 --- Prints the plan prepared out of game into the chat (same source as the panel).
 function UI.PrintPlan()
     local me = UnitName("player")
+    local c = config()
     local assignment, err = ns.Config.getAssignment()
     if not assignment then
         UI.Print(Locale.format("status.noAssignment", tostring(err)))
         return
     end
-    local plan, planErr = ns.Intermission.buildPlan(assignment, me)
+    local plan, planErr = ns.Intermission.buildPlan(assignment, me, c.pingMode)
     if not plan then
         UI.Print(Locale.format("ui.unreadablePlan", tostring(planErr)))
         return

@@ -4,6 +4,53 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+### Added
+- **Ping roles by STATE** in the Intermission Coach (raid-lead decision): the
+  state no longer gives a duty per number but a ROLE — `1V3R` = **ANCHOR**
+  (stands still, pings itself with the macro or is pinged by another player,
+  does not move), `2V2R` = **MIDDLE** (does not ping, goes to the middle and
+  pairs up with another 2V2R), `3V1R` = **CHASER** (does not ping, runs to a
+  ping, any 1V3R anchor works).
+- **Configurable ping policy**, persisted in `GideonRaidDB.intermission.pingMode`
+  and changeable in game with the new `/gr ping anchors|color|none`:
+  - `anchors` (default): only the ANCHOR states ping, one ping per anchor —
+    about **8 pings per raid instead of ~20**, which keeps the ping channel
+    readable (the client also rate-limits pings per player);
+  - `color`: raidstrats variant, every state pings with its own color
+    (1V3R red/Warning, 2V2R blue/OnMyWay, 3V1R green/Assist);
+  - `none`: nobody pings, the raid plays on positions only.
+  An unknown value is refused (nothing is persisted, nothing is guessed).
+- The intermission panel now shows a **"PING: YES/NO" banner** (colored with the
+  role's ping color), the **role order** ("ROLE ORDER: …"), the current ping
+  policy, and the **ping macro ONLY for a role that must ping** — a
+  CHASER/MIDDLE under `anchors` sees why no macro is proposed instead.
+- The pre-pull plan (`/gr plan`, main panel) now deduces the **ping role, the
+  role order and, when relevant, the ping macro** from the composition prepared
+  by GIDEON, under the configured policy.
+- `/gr ping` (no argument) prints the current policy and what it means.
+
+### Changed
+- `Intermission.getDeclaration`, `Intermission.snapshot` and
+  `Intermission.buildPlan` accept the ping policy as an explicit, injected
+  argument: `Core/` stays pure (no SavedVariables read, no API, no clock) and an
+  unknown policy always resolves to `anchors`.
+- `Intermission.buildMacro` now REFUSES to build a ping macro for a state that
+  must not ping under the given policy.
+- The state action texts no longer prescribe a ping unconditionally (the ping
+  decision comes from the role + the policy), and the "state to join" line is
+  adapted for the ANCHOR ("STATE THAT JOINS YOU: …").
+- The keybinding label follows the effective language (`/gr lang`) instead of
+  being a hard-coded French literal.
+
+### Notes
+- Offline test suite: **138 tests**, zero luacheck warnings (19 new tests in
+  `tests/spec/pingpolicy_spec.lua`).
+- Still 12.x compliant: no combat API, no aura read, no combat log, no
+  addon-to-addon messaging, and the addon still only GENERATES the ping macro
+  text (the player triggers it: `C_Ping.SendMacroPing` is `#protected`).
+
 ## [0.3.0] - 2026-09-22
 
 ### Added

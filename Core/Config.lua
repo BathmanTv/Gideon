@@ -20,6 +20,19 @@ ns.Config = Config
 Config.MIN_SCALE = 0.5
 Config.MAX_SCALE = 3.0
 
+--- PING POLICIES accepted by the module (persisted preference `pingMode`).
+--- SORTED list, no pairs() anywhere (determinism):
+---   "anchors" (DEFAULT, raid-lead decision): only the 1V3R ANCHORS ping, one
+---      ping per anchor -> about 8 pings per raid instead of ~20. 3V1R CHASERS
+---      and 2V2R MIDDLE players never ping;
+---   "color": raidstrats guide variant, every state pings with its own color
+---      (1V3R = red/Warning, 2V2R = blue/OnMyWay, 3V1R = green/Assist);
+---   "none": nobody pings at all, the raid plays on positions only.
+Config.PING_MODES = { "anchors", "color", "none" }
+
+--- Default ping policy: the raid lead's decision ("anchors").
+Config.DEFAULT_PING_MODE = "anchors"
+
 Config.DEFAULTS = {
     enabled = true,
     autoShow = true,
@@ -46,6 +59,9 @@ function Config.defaultIntermission()
         visibilitySeconds = 3,
         durationSeconds = 20,
         macroTargetToken = "player",
+        -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
+        -- and changeable in game with /gr ping anchors|color|none.
+        pingMode = Config.DEFAULT_PING_MODE,
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 },
     }
 end
@@ -89,6 +105,24 @@ function Config.resolveLocale(raw)
         end
     end
     return Locale.AUTO
+end
+
+--- Resolves the PERSISTED PING POLICY (GideonRaidDB.intermission.pingMode).
+--- Accepted values: "anchors" (default), "color", "none". Anything else -
+--- absent, mistyped, hand-edited SavedVariables, a number, a table - falls back
+--- to "anchors": the resolver is PURE and TOTAL, it never raises and never
+--- returns nil. The comparison is case-insensitive.
+--- @param raw string|nil raw GideonRaidDB.intermission.pingMode value
+--- @return string "anchors", "color" or "none"
+function Config.resolvePingMode(raw)
+    local wanted = (type(raw) == "string") and raw:lower() or ""
+    for index = 1, #Config.PING_MODES do
+        local candidate = Config.PING_MODES[index]
+        if wanted == candidate then
+            return candidate
+        end
+    end
+    return Config.DEFAULT_PING_MODE
 end
 
 --- Returns (assignment, err). Validates the block before use.
@@ -164,6 +198,9 @@ function Config.resolveIntermission(raw)
     if type(raw.macroTargetToken) == "string" and raw.macroTargetToken ~= "" then
         out.macroTargetToken = raw.macroTargetToken
     end
+    -- Ping policy: pure and bounded resolution, an unknown value falls back to
+    -- "anchors" (never an error, never nil).
+    out.pingMode = Config.resolvePingMode(raw.pingMode)
 
     local pos = raw.position
     if type(pos) == "table" then

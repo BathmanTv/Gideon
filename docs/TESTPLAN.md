@@ -94,29 +94,35 @@ intermission state machine, pre-pull view, configuration bounds) is tested
 **outside the client**, because in game there is nothing to observe: the addon
 reads no combat API.
 
-**File**: `tests/spec/intermission_spec.lua` (60 tests).
+**File**: `tests/spec/intermission_spec.lua` (65 tests) +
+`tests/spec/pingpolicy_spec.lua` (19 tests, ping roles and policies).
 
 **What is verified:**
 
 | Family | Cases |
 |---|---|
-| Color states | the three states `1V3R` / `2V2R` / `3V1R` (label, green AND red counts, possible numbers, ping, complement, instruction), "2" alone unambiguous, "1"/"3" ambiguous, deterministic order, non-mutable copy, **the French variant served explicitly when the active language is `fr`** |
+| Color states | the three states `1V3R` / `2V2R` / `3V1R` (label, green AND red counts, possible numbers, role, ping, complement, instruction), "2" alone unambiguous, "1"/"3" ambiguous, deterministic order, non-mutable copy, **the French variant served explicitly when the active language is `fr`** |
 | Normalization | `3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`, `vvrr`, `3 verts`, `1 vert 3 rouges`, dominant color alone ("vert", "majorité verte"), "2" accepted, **"1"/"3" alone refused with an "ambiguous" message**, empty/unknown/unusable input refused |
 | Collisions | `3V1R+1V3R` OK both ways, `2V2R+2V2R` OK, `3V1R+2V2R` = 5 green = dead, `1V3R+1V3R` and `3V1R+3V1R` refused, comparison on an ambiguous number refused |
-| Macro | `C_Ping.SendMacroPing` call per state (dominant color), target token, `/ping` variant, "to be confirmed" note, **absence of forbidden event text**, no macro on an ambiguous number |
+| Ping roles | `1V3R` = ANCHOR (pings, "STAY WHERE YOU ARE… DO NOT MOVE", can be pinged by another player), `2V2R` = MID (`MIDDLE`, "another 2V2R"), `3V1R` = CHASER ("run to it, any 1V3R works"), role independent of the number and of the policy |
+| Ping policies | `anchors` (default): **only `1V3R` pings**; `color`: the three states ping with their own color (red/Warning, blue/OnMyWay, green/Assist); `none`: nobody pings; unknown value → `anchors`; the "PING: YES/NO" line, the policy line and the role order follow the policy in EN and FR |
+| Macro | `C_Ping.SendMacroPing` call per state (dominant color), target token, `/ping` variant, "to be confirmed" note, **absence of forbidden event text**, no macro on an ambiguous number, **macro generated ONLY for a state allowed to ping** |
 | Timeline | default values (3 s), prepared values, bounds (1–10 s, 3–120 s), `duration > visibility` |
 | State machine | `IDLE → VISIBLE (3 s) → DARK → DONE`, countdown 3/2/1/0, declaration during VISIBLE and DARK, refusal before start, on an ambiguous number and after the end, `reset`, negative/non-numeric `dt` ignored, determinism (same inputs ⇒ same report) |
-| Pre-pull view | partner, role (composition), position, meeting `2V2R+2V2R` OK / `3V1R+2V2R` DEAD / `1V3R+3V1R` OK / **unverifiable when the role stays ambiguous**, pairs sorted by name and insensitive to input order, plan absent, malformed plan, player absent, invalid assignment |
-| Configuration | fresh defaults (no alias between accounts), scale and duration bounds, inconsistent types ignored |
+| Pre-pull view | partner, role (composition), position, **ping role / role order / macro deduced from the prepared composition and the policy**, meeting `2V2R+2V2R` OK / `3V1R+2V2R` DEAD / `1V3R+3V1R` OK / **unverifiable when the role stays ambiguous**, pairs sorted by name and insensitive to input order, plan absent, malformed plan, player absent, invalid assignment |
+| Configuration | fresh defaults (no alias between accounts), scale and duration bounds, inconsistent types ignored, `pingMode` default `anchors` and any unknown value falling back to `anchors` |
+| Command `/gr ping` | `ping` prints the policy and its meaning, `ping color|none` persists it and changes the panel (macro shown/hidden), unknown value refused **without writing anything**, value reloaded after a `/reload` simulation |
 
 **Out-of-game preview** (verifiable by hand, without a client — the developer CLI
 keeps printing French):
 
 ```
 $ lua5.1 tools/intermission_cli.lua all            # les 3 états + macros
+$ lua5.1 tools/intermission_cli.lua roles          # les 3 états × les 3 politiques
 $ lua5.1 tools/intermission_cli.lua 1              # -> REFUS : numéro ambigu
+$ lua5.1 tools/intermission_cli.lua 3V1R color     # un état sous une politique explicite
 $ lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R # -> 3V1R+2V2R : MORT (5 verts = 5g)
-$ lua5.1 tools/intermission_cli.lua plan Velna
+$ lua5.1 tools/intermission_cli.lua plan Velna none
 ```
 
 ---
@@ -296,12 +302,16 @@ middle of the 12.x transition.
 | 3 | `bindings`: Options > Keybindings > GideonRaid, assign a key | the binding shows up; the key opens/closes the panel |
 | 4 | Enter *Entombed Sentinels*, pull the boss | the panel opens on its own on `ENCOUNTER_START` (points 1 and 2: **to be confirmed**) |
 | 5 | During the 3 s of visibility | the reminder displays "LOOK AT THE ORB COLOR ABOVE THE HEADS: 3" then 2, 1 (French on a frFR client) |
-| 6 | Count your orbs, click `1` / `2` / `3` composition button | the instruction (position + ping color) and the macro appear |
+| 6 | Count your orbs, click `1` / `2` / `3` composition button | the instruction appears: **ROLE** (ANCHOR / MIDDLE / CHASER), role order, state to join, **"PING: YES/NO"** and — only if the role must ping — the ping macro |
 | 7 | Paste the macro into a game macro (60 s before the pull) | the ping goes out with the right color — **syntax to be confirmed, this is item 1 of the list in `docs/INTERMISSION-COACH.md` §9** |
 | 8 | Check after 3 s | "ROOM DARKENED": the panel stays readable, no dynamic text |
 | 9 | End of combat | `ENCOUNTER_END` closes the panel |
 | 10 | `/console scriptErrors 1` over 10 min of raid | **no** Lua error (typically `attempt to compare a secret value` = blocking regression) |
 | 11 | `/gr lang` on a frFR client and on an enUS client | detected language correct, text in the right language; TBD item 3 of `docs/INTERMISSION-COACH.md` §9 |
+| 12 | `/gr ping` then `/gr ping anchors|color|none`, then re-open the intermission panel | the header banner switches between **PING: YES** and **PING: NO**, the role order follows the policy, and the macro area disappears for a role that must not ping — **to be confirmed in game** |
+| 13 | Ping yourself repeatedly with the macro (default guild macro, then a spam of 4–5 pings in a row) | **exact limit of pings per player**, what the client does beyond it (silent refusal, error, no effect) — **to be confirmed in game**, the assumption is a burst of about 3 pings |
+| 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — **to be confirmed in game** |
+| 15 | Count the pings in the raid with the `anchors` policy (expected ~8) versus `color` (expected ~20) | the `anchors` policy is readable in practice: at most one ping per anchor, 4 per side — **to be confirmed in game** |
 
 ### 3.6 Recommended test environment
 
@@ -392,11 +402,14 @@ covered in steps 1 and 2.
 |---|---|---|
 | Wrong pairing | 1 | 11 tests, 20-player data set |
 | Non-deterministic result | 1 | "insensitive to input order" test |
-| Orb convention / wrong collisions | 1b | 60 tests (states 3V1R/2V2R/1V3R, `3V1R+1V3R` and `2V2R+2V2R` safe, `3V1R+2V2R` = 5 green, ambiguous number refused) |
+| Orb convention / wrong collisions | 1b | 65 tests (states 3V1R/2V2R/1V3R, `3V1R+1V3R` and `2V2R+2V2R` safe, `3V1R+2V2R` = 5 green, ambiguous number refused) |
 | Wrong language served (English/French) | 1c | 20 tests (`resolve`, `t`/`format` fallbacks, `GetLocale` stubbed `frFR`/`enUS`/`deDE`, `/gr lang`, missing key) |
 | Hard-coded in-game string | 1c + 2 | all displayed text comes from `Core/Locale.lua`; the guard scans the loaded files |
 | Countdown / switch to the darkened room wrong | 1b + 2 | deterministic state machine + tested ticker |
 | Ping macro unusable or badly targeted | 1b + 3 | generated text + protocol §3.5 point 7 ("to be confirmed in game") |
+| Wrong ping role (a duty deduced from the ambiguous number) | 1b | 19 tests (`pingpolicy_spec.lua`): role carried by the state, never by the number |
+| **Ping flood** (~20 pings, unreadable channel, client ping limit) | 1b + 3 | `anchors` policy: only the anchors ping, macro generated only for them; protocol §3.5 points 13 and 15 ("to be confirmed in game": exact limit, burst, raid frame display) |
+| Unknown ping policy silently accepted | 1b + 2 | pure resolver (unknown → `anchors`), `/gr ping` refuses an unknown value and writes nothing |
 | Declaring one thing and displaying another | 1b + 2 | instruction coming from the same table as the macro |
 | File forgotten in the `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
 | Lua 5.1 syntax error | 2 | `make syntax` |

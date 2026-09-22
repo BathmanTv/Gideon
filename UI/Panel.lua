@@ -92,10 +92,17 @@ function UI.Refresh()
     local me = UnitName("player")
     local lines = {}
     local assignment, err = ns.Config.getAssignment()
+    -- Ping policy of the "Intermission Coach" (persisted preference): displayed
+    -- BEFORE the plan, because it decides which role pings and therefore whether
+    -- a ping macro is needed at all.
+    local intermission = ns.Config.resolveIntermission(_G.GideonRaidDB and _G.GideonRaidDB.intermission)
 
     if _G.GideonRaidDB and type(_G.GideonRaidDB.scale) == "number" then
         p:SetScale(_G.GideonRaidDB.scale)
     end
+
+    lines[#lines + 1] = Locale.format("panel.pingPolicy", Locale.t("pingMode." .. intermission.pingMode))
+    lines[#lines + 1] = ""
 
     if not assignment then
         lines[#lines + 1] = Locale.t("panel.noAssignment")
@@ -104,7 +111,7 @@ function UI.Refresh()
         lines[#lines + 1] = Locale.t("panel.askGideon")
         lines[#lines + 1] = "!g roster assign"
     else
-        local plan, planErr = ns.Intermission.buildPlan(assignment, me)
+        local plan, planErr = ns.Intermission.buildPlan(assignment, me, intermission.pingMode)
         if not plan then
             lines[#lines + 1] = Locale.t("panel.unreadablePlan") .. " (" .. tostring(planErr) .. ")"
         else

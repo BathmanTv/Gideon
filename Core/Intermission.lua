@@ -42,12 +42,36 @@
 
     NO GetTime, NO math.random, NO non-deterministic order: time is injected
     into tick(state, dt) by the wiring layer.
+
+    ROLES AND PING POLICY (raid-lead decision, replace "one role per number"):
+    a state does not carry a NUMBER-based duty but a ROLE:
+      1V3R = ANCHOR : does not move, places a ping on itself (macro) or is
+                      pinged by another player, and DOES NOT MOVE;
+      3V1R = CHASER : does NOT ping, spots a ping and runs to it (any 1V3R
+                      anchor works);
+      2V2R = MIDDLE : does NOT ping, goes to the middle / under the boss and
+                      pairs up with another 2V2R.
+    With the "anchors" policy the raid goes from ~20 pings to at most ~8 (one
+    ping per anchor, 4 per side), which keeps the ping channel readable (the
+    client also rate-limits pings per player).
+    The policy is CONFIGURABLE (Core/Config.lua -> pingMode, /gr ping):
+      "anchors" (default) : only the ANCHOR states ping (the macro is generated
+                            for them only);
+      "color"             : raidstrats variant - every state pings with its own
+                            color (1V3R red/Warning, 2V2R blue/OnMyWay,
+                            3V1R green/Assist);
+      "none"              : nobody pings, the raid plays on positions only.
+    Everything below is PURE: no API, injected mode, no clock.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
 
 --- Core/Locale.lua is loaded BEFORE this file by the .toc: the language layer is
 --- a hard dependency (every string displayed in game goes through it).
 local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Intermission.lua")
+
+--- Core/Config.lua is loaded BEFORE this file by the .toc: it owns the canonical
+--- list of ping policies and their pure resolver (unknown value -> "anchors").
+local Config = assert(ns.Config, "Core/Config.lua must be loaded before Core/Intermission.lua")
 
 ---@class Intermission
 local Intermission = {}
@@ -73,6 +97,25 @@ Intermission.STATES = { "1V3R", "2V2R", "3V1R" }
 --- Historical alias: the module used to talk about "declarations 1/2/3". These
 --- are now ORB COMPOSITIONS; the alias avoids breaking the callers.
 Intermission.DECLARATIONS = Intermission.STATES
+
+--- The THREE ping policies. The canonical list lives in Core/Config.lua (the
+--- persistence layer): this is the same table, so it cannot drift.
+Intermission.PING_MODES = Config.PING_MODES
+
+--- Default ping policy: the raid lead's decision ("anchors").
+Intermission.DEFAULT_PING_MODE = Config.DEFAULT_PING_MODE
+
+--- Pure, total resolution of a ping policy: accepts "anchors" / "color" / "none"
+--- (case-insensitive) and returns "anchors" for anything else, never an error.
+Intermission.resolvePingMode = Config.resolvePingMode
+
+--- The THREE roles. A role is carried by the ORB COMPOSITION, never by the
+--- number displayed above the head (the number 1 or 3 is ambiguous).
+Intermission.ROLES = { ANCHOR = "ANCHOR", CHASER = "CHASER", MID = "MID" }
+
+--- State -> role, DETERMINISTIC table (no pairs()): 1V3R / 2V2R / 3V1R.
+local ROLE_BY_STATE = { ["1V3R"] = "ANCHOR", ["2V2R"] = "MID", ["3V1R"] = "CHASER" }
+Intermission.ROLE_BY_STATE = ROLE_BY_STATE
 
 --- Intermission phases.
 Intermission.PHASE = {
@@ -106,6 +149,14 @@ local PHASE_DONE = Intermission.PHASE.DONE
                       raidstrats guide convention, BY DOMINANT COLOR:
                       3 green -> Assist (green), 2-2 -> OnMyWay (blue),
                       3 red -> Warning (red).
+     role           : PING ROLE carried by the state (ANCHOR / MID / CHASER).
+                      It comes from the ORB COMPOSITION, never from the number.
+     roleName       : locale key of the displayed role label ("ANCHOR", "ANCRE")
+     orderPing      : locale key of the operational order when the role PINGS
+     orderNoPing    : locale key of the operational order when it does NOT ping
+                      (roleOrder = the variant selected by the ping policy: the
+                      same role never receives a contradictory order)
+     pingYes/pingNo : locale key of the "PING: YES/NO" detail line
      action         : operational instruction (what the player DOES)
      find           : which state can join it + the sum computation
      complement     : the state that MUST join it (4 green + 4 red)
@@ -119,6 +170,13 @@ local PHASE_DONE = Intermission.PHASE.DONE
      FIXED point is the RED-majority state (1V3R, RED ping) and the RUNNER is
      the GREEN-majority state (3V1R, GREEN ping), the 2V2R going to the middle.
      It is the only convention consistent with "the color decides".
+
+     ROLES (raid-lead decision, replaces "one duty per number"): the ANCHOR is
+     the 1V3R state (holds its position, pings itself or is pinged by somebody
+     else), the CHASER is the 3V1R state (runs to a ping, any anchor works) and
+     the MIDDLE is the 2V2R state (goes to the middle and pairs with a 2V2R).
+     Which of them actually PINGS depends on the ping policy (see below), never
+     on the number displayed above the head.
 ]]
 --- The record fields that are DISPLAYED hold a LOCALE KEY, never a literal:
 --- copyRecord() resolves them through Locale.t, so /gr lang applies immediately,
@@ -141,6 +199,12 @@ local CONVENTION = {
         pingToken = "Warning",
         pingColor = "state.pingColor.1V3R",
         pingColorHex = "|cffff4040",
+        role = "ANCHOR",
+        roleName = "state.roleName.1V3R",
+        orderPing = "state.order.ping.1V3R",
+        orderNoPing = "state.order.noPing.1V3R",
+        pingYes = "state.ping.yes.1V3R",
+        pingNo = "state.ping.no.1V3R",
         action = "state.action.1V3R",
         find = "state.find.1V3R",
         complement = "3V1R",
@@ -163,6 +227,12 @@ local CONVENTION = {
         pingToken = "OnMyWay",
         pingColor = "state.pingColor.2V2R",
         pingColorHex = "|cff40a0ff",
+        role = "MID",
+        roleName = "state.roleName.2V2R",
+        orderPing = "state.order.ping.2V2R",
+        orderNoPing = "state.order.noPing.2V2R",
+        pingYes = "state.ping.yes.2V2R",
+        pingNo = "state.ping.no.2V2R",
         action = "state.action.2V2R",
         find = "state.find.2V2R",
         complement = "2V2R",
@@ -185,6 +255,12 @@ local CONVENTION = {
         pingToken = "Assist",
         pingColor = "state.pingColor.3V1R",
         pingColorHex = "|cff40ff40",
+        role = "CHASER",
+        roleName = "state.roleName.3V1R",
+        orderPing = "state.order.ping.3V1R",
+        orderNoPing = "state.order.noPing.3V1R",
+        pingYes = "state.ping.yes.3V1R",
+        pingNo = "state.ping.no.3V1R",
         action = "state.action.3V1R",
         find = "state.find.3V1R",
         complement = "1V3R",
@@ -199,6 +275,23 @@ Intermission.CONVENTION = CONVENTION
 
 --- Green-count -> canonical state mapping (no state with 0 or 4 green).
 local GREENS_TO_STATE = { [1] = "1V3R", [2] = "2V2R", [3] = "3V1R" }
+
+--- Does the ROLE of `rec` have to ping under `mode`?
+--- PURE and DETERMINISTIC (no clock, no API, no random):
+---   "none"    -> never (nobody pings, positions only);
+---   "color"   -> always (raidstrats variant: every state pings its own color);
+---   "anchors" -> only the ANCHOR (1V3R): one ping per anchor, ~8 per raid.
+--- The mode is normalized first, so an unknown mode behaves like "anchors".
+local function pingsInMode(rec, mode)
+    local resolved = Config.resolvePingMode(mode)
+    if resolved == "none" then
+        return false
+    end
+    if resolved == "color" then
+        return true
+    end
+    return rec.role == Intermission.ROLES.ANCHOR
+end
 
 --- Glued symbolic forms: "3v1r", "3 v 1 r" (once the spaces are removed).
 local STATE_BY_SYMBOLS = { ["3v1r"] = "3V1R", ["2v2r"] = "2V2R", ["1v3r"] = "1V3R" }
@@ -278,10 +371,23 @@ local function clampInt(value, min, max)
     return round(clampNumber(tonumber(value) or min, min, max))
 end
 
-local function copyRecord(rec)
+local function copyRecord(rec, mode)
+    local resolvedMode = Config.resolvePingMode(mode)
     local numbers = {}
     for index = 1, #rec.numbers do
         numbers[#numbers + 1] = rec.numbers[index]
+    end
+    -- The ping decision depends ONLY on the role and the configured policy; the
+    -- operational order and the "PING: YES/NO" line follow it, so a role never
+    -- receives a contradictory order.
+    local shouldPing = pingsInMode(rec, resolvedMode)
+    local roleName = Locale.t(rec.roleName)
+    local pingColor = Locale.t(rec.pingColor)
+    local pingLine
+    if shouldPing then
+        pingLine = Locale.format(rec.pingYes, pingColor, rec.ping)
+    else
+        pingLine = Locale.format(rec.pingNo, roleName)
     end
     return {
         key = rec.key,
@@ -297,8 +403,18 @@ local function copyRecord(rec)
         positionLabel = Locale.t(rec.positionLabel),
         ping = rec.ping,
         pingToken = rec.pingToken,
-        pingColor = Locale.t(rec.pingColor),
+        pingColor = pingColor,
         pingColorHex = rec.pingColorHex,
+        -- PING ROLE (never deduced from the number) + its operational order.
+        role = rec.role,
+        roleName = roleName,
+        roleOrder = Locale.t(shouldPing and rec.orderPing or rec.orderNoPing),
+        -- Ping policy applied to this state.
+        shouldPing = shouldPing,
+        pingDecision = Locale.t(shouldPing and "state.ping.yes" or "state.ping.no"),
+        pingLine = pingLine,
+        pingPolicy = resolvedMode,
+        policyLine = Locale.t("pingMode." .. resolvedMode),
         action = Locale.t(rec.action),
         find = Locale.t(rec.find),
         complement = rec.complement,
@@ -425,12 +541,34 @@ end
 --- Returns (copy of the canonical state, nil) or (nil, error, info).
 --- The info carries { ambiguous = true } when the input did NOT reveal the
 --- color: the caller must then ASK for the dominant color.
-function Intermission.getDeclaration(raw)
+--- `pingMode` is the configured ping policy ("anchors" by default): it decides
+--- `shouldPing`, `roleOrder` and the ping lines. An unknown value falls back to
+--- "anchors" (never an error).
+function Intermission.getDeclaration(raw, pingMode)
     local key, err, info = Intermission.normalizeDeclaration(raw)
     if key == nil then
         return nil, err, info
     end
-    return copyRecord(CONVENTION[key])
+    return copyRecord(CONVENTION[key], pingMode)
+end
+
+--- Does the state declared by `raw` have to ping under `pingMode`?
+--- @return boolean|nil shouldPing, string|nil error
+function Intermission.shouldPing(raw, pingMode)
+    local rec, err = Intermission.getDeclaration(raw, pingMode)
+    if rec == nil then
+        return nil, err
+    end
+    return rec.shouldPing
+end
+
+--- Localized explanation of a ping policy (pure, never raises): used by the UI
+--- and by /gr ping so the player always sees WHY a role does or does not ping.
+--- @param pingMode string|nil raw policy
+--- @return string line, string resolvedMode
+function Intermission.pingPolicyLine(pingMode)
+    local mode = Config.resolvePingMode(pingMode)
+    return Locale.t("pingMode." .. mode), mode
 end
 
 --- The state that MUST join `raw` to make 4 green + 4 red.
@@ -476,11 +614,17 @@ end
 
 --- Generates the macro text to paste (the player triggers it: a macro is secure
 --- code, the only way to call the #protected API).
+--- The macro is PROPOSED ONLY to a state whose role must ping under the
+--- configured policy: under "anchors" only the 1V3R anchors get one, under
+--- "color" all three states, under "none" nobody (nil + explanation).
 --- @return table|nil { primary, fallback, ping, target, note }, string|nil error
-function Intermission.buildMacro(raw, targetToken)
-    local rec, err = Intermission.getDeclaration(raw)
+function Intermission.buildMacro(raw, targetToken, pingMode)
+    local rec, err = Intermission.getDeclaration(raw, pingMode)
     if rec == nil then
         return nil, err
+    end
+    if not rec.shouldPing then
+        return nil, Locale.format("err.pingNotAllowed", rec.roleName, rec.pingPolicy)
     end
     local target = targetToken
     if type(target) ~= "string" or target == "" then
@@ -490,6 +634,7 @@ function Intermission.buildMacro(raw, targetToken)
         primary = "/run C_Ping.SendMacroPing({type = Enum.PingSubjectType." .. rec.ping .. ', targetToken = "' .. target .. '"})',
         fallback = "/ping " .. rec.pingToken,
         ping = rec.ping,
+        role = rec.role,
         target = target,
         note = Locale.t("macro.note"),
     }
@@ -627,7 +772,10 @@ function Intermission.remainingVisibility(state)
 end
 
 --- Displayable state, fully computed here: the UI layer only renders.
-function Intermission.snapshot(state)
+--- `pingMode` is the configured ping policy (injected: Core never reads the
+--- SavedVariables). An unknown value behaves like "anchors".
+function Intermission.snapshot(state, pingMode)
+    local mode = Config.resolvePingMode(pingMode)
     local phase = PHASE_IDLE
     local declaration, elapsed, timeline = nil, 0, Intermission.validateTimeline(nil)
     if type(state) == "table" then
@@ -637,6 +785,7 @@ function Intermission.snapshot(state)
         timeline = state.timeline or timeline
     end
 
+    local policyLine = Locale.t("pingMode." .. mode)
     local snap = {
         phase = phase,
         visible = phase ~= PHASE_IDLE,
@@ -648,6 +797,15 @@ function Intermission.snapshot(state)
         macroPrimary = nil,
         macroFallback = nil,
         macroNote = nil,
+        -- Ping role / policy: filled once the player has declared.
+        role = nil,
+        roleName = nil,
+        shouldPing = false,
+        macroAllowed = false,
+        pingText = nil,
+        pingColorHex = nil,
+        pingPolicy = mode,
+        policyLine = policyLine,
         caveat = Locale.t("inter.caveat"),
         prompt = Locale.t("inter.prompt"),
         ambiguity = Locale.t("inter.ambiguity"),
@@ -658,6 +816,7 @@ function Intermission.snapshot(state)
         snap.headline = Locale.t("inter.headline.idle")
         lines[#lines + 1] = Locale.format("inter.line.idleTimeline", timeline.visibilitySeconds)
         lines[#lines + 1] = Locale.t("inter.line.idleTrigger")
+        lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
         lines[#lines + 1] = Locale.t("inter.prompt")
         lines[#lines + 1] = Locale.t("inter.ambiguity")
         return snap
@@ -669,12 +828,14 @@ function Intermission.snapshot(state)
         snap.headline = Locale.format("inter.headline.visible", left)
         if declaration == nil then
             lines[#lines + 1] = Locale.t("inter.line.visibleIndicators")
+            lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
             lines[#lines + 1] = Locale.t("inter.prompt")
         end
     elseif phase == PHASE_DARK then
         snap.headline = Locale.t("inter.headline.dark")
         if declaration == nil then
             lines[#lines + 1] = Locale.t("inter.line.darkIndicators")
+            lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
             lines[#lines + 1] = Locale.t("inter.prompt")
         end
     else
@@ -684,21 +845,36 @@ function Intermission.snapshot(state)
     local rec = declaration and CONVENTION[declaration] or nil
     if rec ~= nil then
         -- copyRecord resolves the locale keys: only the copy is displayed.
-        local shown = copyRecord(rec)
+        local shown = copyRecord(rec, mode)
         snap.instruction = shown
+        snap.role = shown.role
+        snap.roleName = shown.roleName
+        snap.shouldPing = shown.shouldPing
+        snap.macroAllowed = shown.shouldPing
+        snap.pingText = Locale.format("ui.pingBanner", shown.pingDecision)
+        snap.pingColorHex = shown.shouldPing and shown.pingColorHex or nil
         lines[#lines + 1] = Locale.format("inter.line.youSee", shown.display, shown.key)
         local numberSuffix = shown.numberAmbiguous and Locale.t("inter.suffix.ambiguous") or Locale.t("inter.suffix.unambiguous")
         lines[#lines + 1] = Locale.format("inter.line.number", shown.numberText, numberSuffix)
+        lines[#lines + 1] = Locale.format("inter.line.role", shown.roleName, shown.key)
+        lines[#lines + 1] = Locale.format("inter.line.roleOrder", shown.roleOrder)
         lines[#lines + 1] = Locale.format("inter.line.action", shown.action)
         lines[#lines + 1] = Locale.format("inter.line.position", shown.positionLabel)
-        lines[#lines + 1] = Locale.format("inter.line.join", shown.complement, shown.find)
-        lines[#lines + 1] = Locale.format("inter.line.ping", shown.pingColor, shown.ping)
+        -- The ANCHOR waits: the other state is the one that joins it.
+        local joinKey = (shown.role == Intermission.ROLES.ANCHOR) and "inter.line.joinedBy" or "inter.line.join"
+        lines[#lines + 1] = Locale.format(joinKey, shown.complement, shown.find)
+        lines[#lines + 1] = Locale.format("inter.line.ping", shown.pingDecision, shown.pingLine)
+        lines[#lines + 1] = Locale.format("inter.line.pingPolicy", shown.policyLine)
         lines[#lines + 1] = Locale.format("inter.line.guildRule", shown.numberRule)
-        local macro = Intermission.buildMacro(shown.key, nil)
-        if macro ~= nil then
-            snap.macroPrimary = macro.primary
-            snap.macroFallback = macro.fallback
-            snap.macroNote = macro.note
+        -- The macro is generated ONLY for a role that must ping: it is never
+        -- proposed to a CHASER or to a MIDDLE under the "anchors" policy.
+        if shown.shouldPing then
+            local macro = Intermission.buildMacro(shown.key, nil, mode)
+            if macro ~= nil then
+                snap.macroPrimary = macro.primary
+                snap.macroFallback = macro.fallback
+                snap.macroNote = macro.note
+            end
         end
     end
     lines[#lines + 1] = Locale.t("inter.ambiguity")
@@ -798,16 +974,20 @@ end
 
 --- Builds the pre-pull view: partner, prepared role/position, sorted pairs.
 --- No API read: everything comes from the already validated GIDEON block.
+--- `pingMode` is the configured ping policy: it decides the ping role deduced
+--- from the prepared composition, and whether a ping macro is shown at all.
 --- @param assignment table block validated by Pairing.validateAssignment
 --- @param playerName string name of the current player (string provided by the wiring)
+--- @param pingMode string|nil configured ping policy ("anchors" by default)
 --- @return table|nil plan, string|nil error
-function Intermission.buildPlan(assignment, playerName)
+function Intermission.buildPlan(assignment, playerName, pingMode)
     if type(assignment) ~= "table" or type(assignment.pairs) ~= "table" then
         return nil, Locale.t("err.invalidAssignment")
     end
     if type(playerName) ~= "string" or playerName == "" then
         return nil, Locale.t("err.invalidPlayerName")
     end
+    local mode = Config.resolvePingMode(pingMode)
 
     local plan = Intermission.validatePlan(assignment.plan)
     local pairsList = sortedPairs(assignment)
@@ -826,6 +1006,11 @@ function Intermission.buildPlan(assignment, playerName)
         planErrors = plan.errors,
         planCount = #plan.order,
         meeting = nil,
+        pingRole = nil,
+        shouldPing = nil,
+        pingPolicy = mode,
+        macroPrimary = nil,
+        macroFallback = nil,
         lines = {},
     }
 
@@ -862,6 +1047,28 @@ function Intermission.buildPlan(assignment, playerName)
         end
     end
 
+    -- PING ROLE deduced from the PREPARED composition, under the configured
+    -- policy: displayed only when GIDEON prepared an ORB COMPOSITION (a free
+    -- raid role such as "Tank" deduces nothing), and the macro only when that
+    -- role must ping.
+    if out.me ~= nil and out.me.role ~= nil then
+        local shown = Intermission.getDeclaration(out.me.role, mode)
+        if shown ~= nil then
+            out.pingRole = shown.role
+            out.shouldPing = shown.shouldPing
+            lines[#lines + 1] = Locale.format("plan.yourPingRole", shown.roleName, shown.key, shown.pingDecision)
+            lines[#lines + 1] = Locale.format("plan.roleOrder", shown.roleOrder)
+            if shown.shouldPing then
+                local macro = Intermission.buildMacro(shown.key, nil, mode)
+                if macro ~= nil then
+                    out.macroPrimary = macro.primary
+                    out.macroFallback = macro.fallback
+                    lines[#lines + 1] = Locale.format("plan.pingMacro", macro.primary)
+                end
+            end
+        end
+    end
+
     lines[#lines + 1] = Locale.format("plan.pairsHeader", #pairsList)
     for index = 1, #pairsList do
         local pair = pairsList[index]
@@ -881,6 +1088,8 @@ function Intermission.buildPlan(assignment, playerName)
     if #plan.errors > 0 then
         lines[#lines + 1] = Locale.format("plan.errorsLine", #plan.errors)
     end
+    -- The current ping policy is recalled with the plan (it decides the roles).
+    lines[#lines + 1] = Locale.t("pingMode." .. mode)
     lines[#lines + 1] = Locale.t("plan.disclaimer")
     return out
 end

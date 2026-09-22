@@ -255,17 +255,50 @@ describe("Intermission : collisions (addition de couleurs)", function()
 end)
 
 describe("Intermission : macro de ping", function()
-    local I = wowenv.loadCore().Intermission
+    local ns = wowenv.loadCore()
+    local I = ns.Intermission
 
     it("genere l'appel API documente pour chaque etat (par couleur dominante)", function()
+        -- Under the DEFAULT policy ("anchors") only the ANCHOR (1V3R) may ping:
+        -- the other two states are refused, so the color variant is requested
+        -- explicitly here.
         local m1 = assert(I.buildMacro("1V3R"))
         assert.matches("C_Ping%.SendMacroPing", m1.primary)
         assert.matches("Enum%.PingSubjectType%.Warning", m1.primary)
         assert.matches('targetToken = "player"', m1.primary)
-        local m2 = assert(I.buildMacro("2V2R"))
+        assert.are.equal("ANCHOR", m1.role)
+        local m2 = assert(I.buildMacro("2V2R", nil, "color"))
         assert.matches("Enum%.PingSubjectType%.OnMyWay", m2.primary)
-        local m3 = assert(I.buildMacro("3V1R"))
+        assert.are.equal("MID", m2.role)
+        local m3 = assert(I.buildMacro("3V1R", nil, "color"))
         assert.matches("Enum%.PingSubjectType%.Assist", m3.primary)
+        assert.are.equal("CHASER", m3.role)
+    end)
+
+    it("ne propose la macro QU'AUX etats autorises par la politique", function()
+        -- anchors (default): 1V3R only.
+        assert.is_table(I.buildMacro("1V3R"))
+        local noMid, errMid = I.buildMacro("2V2R")
+        assert.is_nil(noMid)
+        assert.matches("no ping for MIDDLE", errMid)
+        assert.matches("anchors", errMid)
+        assert.is_nil(I.buildMacro("3V1R"))
+        assert.matches("no ping for CHASER", select(2, I.buildMacro("3V1R")))
+        -- color: the three states.
+        for _, key in ipairs(I.STATES) do
+            assert.is_table(I.buildMacro(key, nil, "color"), key)
+        end
+        -- none: nobody, not even the anchor.
+        for _, key in ipairs(I.STATES) do
+            local macro, err = I.buildMacro(key, nil, "none")
+            assert.is_nil(macro, key)
+            assert.matches("none", err)
+        end
+        assert.is_nil(I.buildMacro("1V3R", nil, "none"))
+        -- An unknown policy is resolved to "anchors" (never an error).
+        assert.is_table(I.buildMacro("1V3R", nil, "bidon"))
+        assert.is_nil(I.buildMacro("2V2R", nil, "bidon"))
+        assert.is_table(I.buildMacro("1V3R", nil, "ANCHORS"))
     end)
 
     it("refuse un numero ambigu : aucune macro inventee", function()
@@ -278,14 +311,14 @@ describe("Intermission : macro de ping", function()
     end)
 
     it("fournit une variante /ping et une note « a confirmer »", function()
-        local m = assert(I.buildMacro("3V1R"))
+        local m = assert(I.buildMacro("3V1R", nil, "color"))
         assert.matches("^/ping ", m.fallback)
         assert.matches("Assist", m.fallback)
         assert.matches("confirmed", m.note)
     end)
 
     it("accepte un autre jeton de cible", function()
-        local m = assert(I.buildMacro("2V2R", "target"))
+        local m = assert(I.buildMacro("2V2R", "target", "color"))
         assert.matches('targetToken = "target"', m.primary)
     end)
 
@@ -294,7 +327,7 @@ describe("Intermission : macro de ping", function()
         assert.is_nil(m)
         assert.matches("unknown", err)
         for _, key in ipairs(I.DECLARATIONS) do
-            local ok = I.buildMacro(key)
+            local ok = assert(I.buildMacro(key, nil, "color"))
             assert.is_nil(string.find(ok.primary, FORBIDDEN_EVENT, 1, true))
             assert.is_nil(string.find(ok.fallback, FORBIDDEN_EVENT, 1, true))
         end
@@ -387,11 +420,83 @@ describe("Intermission : machine d'etat", function()
         assert.is_true(contains(text, "NUMBER ABOVE YOUR HEAD: 2"))
         assert.matches("unambiguous", text)
         assert.matches("MIDDLE", text)
-        assert.matches("BLUE", text)
-        assert.matches("OnMyWay", text)
         assert.matches("STATE TO JOIN: 2V2R", text)
         assert.are.equal("2V2R", snap.declaration)
+        -- Politique par defaut ("anchors") : le MILIEU ne ping PAS et ne recoit
+        -- donc AUCUNE macro (elle ne doit pas etre proposee a tort).
+        assert.are.equal("MID", snap.role)
+        assert.are.equal("MIDDLE", snap.roleName)
+        assert.is_false(snap.shouldPing)
+        assert.is_false(snap.macroAllowed)
+        assert.is_nil(snap.macroPrimary)
+        assert.matches("PING: NO", text)
+        assert.matches("PING POLICY: ANCHORS", text)
+        assert.is_false(contains(text, "C_Ping.SendMacroPing"))
+    end)
+
+    it("affiche la consigne de l'ANCRE et sa macro en politique par defaut", function()
+        local st = I.newState()
+        I.start(st)
+        I.declare(st, "1V3R") -- 1 vert + 3 rouges = ANCRE
+        local snap = I.snapshot(st)
+        local text = table.concat(snap.lines, "\n")
+        assert.are.equal("ANCHOR", snap.role)
+        assert.is_true(snap.shouldPing)
+        assert.is_true(snap.macroAllowed)
+        assert.matches("PING: YES", text)
+        assert.matches("YOUR ROLE: ANCHOR %(1V3R%)", text)
+        assert.matches("STAY WHERE YOU ARE", text)
+        assert.is_true(contains(text, "DO NOT MOVE"))
+        assert.matches("STATE THAT JOINS YOU: 3V1R", text)
         assert.matches("C_Ping%.SendMacroPing", snap.macroPrimary)
+        assert.matches("Enum%.PingSubjectType%.Warning", snap.macroPrimary)
+    end)
+
+    it("en politique « color », les trois etats ping et recoivent la macro", function()
+        for _, key in ipairs(I.STATES) do
+            local st = I.newState()
+            I.start(st)
+            I.declare(st, key)
+            local snap = I.snapshot(st, "color")
+            local text = table.concat(snap.lines, "\n")
+            assert.is_true(snap.shouldPing, key)
+            assert.is_true(snap.macroAllowed, key)
+            assert.matches("PING: YES", text)
+            assert.is_string(snap.macroPrimary)
+            assert.matches("C_Ping%.SendMacroPing", snap.macroPrimary)
+            assert.matches("PING POLICY: COLOR", text)
+        end
+        -- La couleur annoncee reste celle de la couleur dominante.
+        local red = I.getDeclaration("1V3R", "color")
+        assert.are.equal("RED", red.pingColor)
+        assert.matches("Warning", red.pingLine)
+        local blue = I.getDeclaration("2V2R", "color")
+        assert.are.equal("BLUE", blue.pingColor)
+        assert.matches("OnMyWay", blue.pingLine)
+        local green = I.getDeclaration("3V1R", "color")
+        assert.are.equal("GREEN", green.pingColor)
+        assert.matches("Assist", green.pingLine)
+    end)
+
+    it("en politique « none », PERSONNE ne ping ni ne recoit de macro", function()
+        for _, key in ipairs(I.STATES) do
+            local st = I.newState()
+            I.start(st)
+            I.declare(st, key)
+            local snap = I.snapshot(st, "none")
+            local text = table.concat(snap.lines, "\n")
+            assert.is_false(snap.shouldPing, key)
+            assert.is_false(snap.macroAllowed, key)
+            assert.is_nil(snap.macroPrimary, key)
+            assert.matches("PING: NO", text)
+            assert.matches("PING POLICY: NONE", text)
+            assert.is_false(contains(text, "C_Ping.SendMacroPing"))
+        end
+        -- L'ANCRE garde malgre tout sa consigne de survie : sur place, sans bouger.
+        local anchor = I.getDeclaration("1V3R", "none")
+        assert.are.equal("ANCHOR", anchor.role)
+        assert.matches("STAY WHERE YOU ARE", anchor.roleOrder)
+        assert.is_true(contains(anchor.roleOrder, "DO NOT MOVE"))
     end)
 
     it("dit ce qu'il FAIT, QUI rejoindre, le PING et que 1/3 ne suffit pas", function()
@@ -406,9 +511,16 @@ describe("Intermission : machine d'etat", function()
         assert.matches("it does NOT reveal the color", text)
         assert.matches("DO:", text)
         assert.matches("STATE TO JOIN: 1V3R", text)
-        assert.matches("PING TO SEND: GREEN", text)
         assert.matches("1 or 3 IS NOT ENOUGH", text)
         assert.are.equal("1V3R", snap.instruction.complement)
+        -- Le CHASSEUR (3V1R) ne ping pas dans la politique par defaut : la
+        -- consigne le dit et aucune macro ne lui est proposee.
+        assert.are.equal("CHASER", snap.role)
+        assert.matches("YOUR ROLE: CHASER %(3V1R%)", text)
+        assert.matches("PING: NO %- the CHASER does not ping", text)
+        assert.matches("run to it", text)
+        assert.is_false(snap.shouldPing)
+        assert.is_nil(snap.macroPrimary)
     end)
 
     it("rappelle explicitement ce qui n'est PAS transmissible", function()
@@ -527,6 +639,39 @@ describe("Intermission : plan prepare hors jeu", function()
         assert.is_true(plan2.meeting.ok)
         assert.are.equal("1V3R+3V1R", plan2.meeting.label)
         assert.matches("1V3R%+3V1R", table.concat(plan2.lines, "\n"))
+    end)
+
+    it("deduit le ROLE de ping du role prepare, selon la politique", function()
+        local clean = assert(Pairing.validateAssignment(loadFixture()))
+        -- Bathman is prepared as 1V3R = ANCHOR: under the default policy it is
+        -- the one that pings, and the ping macro is shown to it.
+        local anchor = assert(I.buildPlan(clean, "Bathman"))
+        assert.are.equal("ANCHOR", anchor.pingRole)
+        local anchorText = table.concat(anchor.lines, "\n")
+        assert.matches("Your intermission role: ANCHOR", anchorText)
+        assert.matches("ping: YES", anchorText)
+        assert.matches("Ping macro to prepare: /run C_Ping%.SendMacroPing", anchorText)
+        assert.are.equal("anchors", anchor.pingPolicy)
+        assert.matches("ANCHORS: only the 1V3R anchors ping", anchorText)
+        -- Velna is prepared as 2V2R = MIDDLE: no ping, no macro under "anchors".
+        local mid = assert(I.buildPlan(clean, "Velna"))
+        assert.are.equal("MID", mid.pingRole)
+        assert.is_false(mid.shouldPing)
+        assert.is_nil(mid.macroPrimary)
+        local midText = table.concat(mid.lines, "\n")
+        assert.matches("Your intermission role: MIDDLE", midText)
+        assert.matches("ping: NO", midText)
+        assert.is_false(contains(midText, "Ping macro to prepare"))
+        -- Under "color" the MIDDLE pings too and gets its macro.
+        local colored = assert(I.buildPlan(clean, "Velna", "color"))
+        assert.is_true(colored.shouldPing)
+        assert.is_string(colored.macroPrimary)
+        assert.matches("Enum%.PingSubjectType%.OnMyWay", colored.macroPrimary)
+        -- Under "none" nobody pings, not even the anchor.
+        local none = assert(I.buildPlan(clean, "Bathman", "none"))
+        assert.is_false(none.shouldPing)
+        assert.is_nil(none.macroPrimary)
+        assert.is_false(contains(table.concat(none.lines, "\n"), "Ping macro to prepare"))
     end)
 
     it("signale une rencontre mortelle (3V1R + 2V2R = 5 verts)", function()

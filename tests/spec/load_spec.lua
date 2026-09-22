@@ -115,8 +115,47 @@ describe("chargement de l'addon", function()
         local text = panel.body:GetText()
         assert.matches("YOU SEE: 2 GREEN %+ 2 RED", text)
         assert.matches("MIDDLE", text)
-        assert.matches("PING TO SEND: BLUE", text)
+        -- Politique par defaut ("anchors") : le MILIEU ne ping pas -> banniere
+        -- PING: NO et AUCUNE macro proposee (la zone macro est masquee).
+        assert.are.equal("PING: NO", panel.pingBanner:GetText())
+        assert.is_true(panel.pingBanner:IsShown())
+        assert.is_false(panel.macroBox:IsShown())
+        assert.matches("PING: NO %- the MIDDLE does not ping", text)
+        assert.are.equal("", panel.macroBox:GetText())
+        assert.matches("No ping for this role", panel.note:GetText())
+    end)
+
+    it("/gr ping color fait apparaitre la macro du MILIEU", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("ping color")
+        assert.equals("color", _G.GideonRaidDB.intermission.pingMode)
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[2]:Click() -- 2V2R
+        assert.are.equal("PING: YES", panel.pingBanner:GetText())
         assert.matches("C_Ping%.SendMacroPing", panel.macroBox:GetText())
+        assert.matches("OnMyWay", panel.macroBox:GetText())
+        assert.is_true(panel.macroBox:IsShown())
+    end)
+
+    it("/gr ping none masque la macro meme pour une ANCRE", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("ping none")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[1]:Click() -- 1V3R = ANCRE
+        assert.are.equal("PING: NO", panel.pingBanner:GetText())
+        assert.are.equal("", panel.macroBox:GetText())
+        assert.is_false(panel.macroBox:IsShown())
+        assert.matches("PING POLICY: NONE", panel.body:GetText())
+    end)
+
+    it("/gr ping refuse une valeur inconnue et n'ecrit rien", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("ping magenta")
+        assert.equals("anchors", _G.GideonRaidDB.intermission.pingMode)
+        local messages = table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
+        assert.matches("Unknown ping policy", messages)
     end)
 
     it("les trois boutons portent le numero affiche en indice", function()

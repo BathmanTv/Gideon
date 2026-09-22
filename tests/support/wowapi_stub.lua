@@ -76,6 +76,21 @@ function stub.install()
         function fs:SetShown(shown)
             fs.__shown = shown and true or false
         end
+        -- Visibility of a FontString (real API: Show/Hide/IsShown). The ping
+        -- banner and the macro zone of the intermission panel use them to show
+        -- ONLY what the current role has to read.
+        function fs:Show()
+            fs.__shown = true
+        end
+        function fs:Hide()
+            fs.__shown = false
+        end
+        function fs:IsShown()
+            return fs.__shown ~= false
+        end
+        function fs:SetTextColor(r, g, b)
+            fs.__color = { r, g, b }
+        end
         return fs
     end
     function Frame:Show()
