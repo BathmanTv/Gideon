@@ -4,7 +4,7 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
-## [Unreleased]
+## [0.4.0] - 2026-09-22
 
 ### Added
 - **Ping roles by STATE** in the Intermission Coach (raid-lead decision): the
@@ -98,6 +98,7 @@ uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
   (`Core/Pairing.lua`) shared with the GIDEON Discord bot.
 - CI and release workflows (BigWigs packager), offline test suite with busted.
 
+[0.4.0]: https://github.com/BathmanTv/Gideon/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/BathmanTv/Gideon/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/BathmanTv/Gideon/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/BathmanTv/Gideon/compare/v0.2.0...v0.2.1
