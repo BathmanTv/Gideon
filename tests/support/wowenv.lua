@@ -7,7 +7,7 @@
 ----------------------------------------------------------------------------]]
 local wowenv = {}
 
-local ROOT = "GideonRaid/"
+local ROOT = ""
 local ADDON = "GideonRaid"
 
 --- Cree un namespace vide (equivalent de la table passee en 2e argument).

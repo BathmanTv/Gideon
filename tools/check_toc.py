@@ -35,9 +35,23 @@ def main(path: str) -> int:
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
 
-    # 1. Nom du fichier == dossier parent
-    if os.path.basename(path)[: -len(".toc")] != os.path.basename(addon_dir):
-        errors.append("le nom du .toc doit etre identique au nom du dossier parent")
+    # 1. Nom du fichier == 'package-as' du .pkgmeta (ou nom du dossier parent)
+    expected = None
+    for candidate in (
+        os.path.join(addon_dir, ".pkgmeta"),
+        os.path.join(os.path.dirname(addon_dir), ".pkgmeta"),
+    ):
+        if os.path.isfile(candidate):
+            with open(candidate, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip().startswith("package-as:"):
+                        expected = line.split(":", 1)[1].strip()
+                        break
+            break
+    if expected is None:
+        expected = os.path.basename(addon_dir)
+    if os.path.basename(path)[: -len(".toc")] != expected:
+        errors.append(f"le nom du .toc doit etre '{expected}' (package-as / nom du dossier)")
 
     directives: dict[str, str] = {}
     files: list[str] = []

@@ -23,7 +23,7 @@ lint:
 
 ## Verification syntaxique Lua 5.1 == runtime du client WoW
 syntax:
-	@find GideonRaid tests tools -name '*.lua' | while read -r f; do \
+	@find . -name '*.lua' -not -path './libs/*' -not -path './.git/*' | while read -r f; do \
 		$(LUA) -e "local c,e=loadfile('$$f'); if not c then io.stderr:write(e..'\n'); os.exit(1) end" || exit 1; \
 		echo "OK $$f"; \
 	done
@@ -32,9 +32,9 @@ syntax:
 test:
 	$(BUSTED)
 
-## ETAPE 2 : cohérence du .toc (directives + fichiers listes existent)
+## ETAPE 2 : coherence du .toc (directives + fichiers listes existent)
 toc:
-	$(PYTHON) tools/check_toc.py GideonRaid/GideonRaid.toc
+	$(PYTHON) tools/check_toc.py GideonRaid.toc
 
 ## ETAPE 4 : appariement d'un roster, executable par GIDEON
 cli:

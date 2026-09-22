@@ -22,7 +22,7 @@ jobs:
           sudo luarocks install busted
           luacheck .
           busted
-          python3 tools/check_toc.py GideonRaid/GideonRaid.toc
+          python3 tools/check_toc.py GideonRaid.toc
 
       - name: Package + upload (BigWigs packager)
         uses: BigWigsMods/packager@v2
