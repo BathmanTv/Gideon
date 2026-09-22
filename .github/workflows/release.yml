@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Garde-fou : on ne publie jamais un tag si les tests echouent.
+      - name: Tests avant release
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 luarocks lua-check
+          sudo luarocks install busted
+          luacheck .
+          busted
+          python3 tools/check_toc.py GideonRaid/GideonRaid.toc
+
+      - name: Package + upload (BigWigs packager)
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -g 12.1.0
+        env:
+          # Renseigner uniquement ce qu'on utilise :
+          #  - GitHub release : GITHUB_OAUTH (token par defaut, aucun secret a creer)
+          #  - Wago Addons   : WAGO_API_TOKEN
+          #  - CurseForge    : CF_API_TOKEN
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

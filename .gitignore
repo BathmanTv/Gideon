@@ -1,0 +1,8 @@
+# Ignore les artefacts locaux et de packaging
+.release/
+*.zip
+*.bak
+.DS_Store
+luacov.stats.out
+luacov.report.out
+.luarocks/

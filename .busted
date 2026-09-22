@@ -1,0 +1,9 @@
+-- Configuration busted : permet de lancer simplement `busted` depuis la racine.
+-- ROOT = dossier des specs ; lpath = permet require("tests.support.wowenv").
+return {
+    default = {
+        ROOT = { "tests/spec" },
+        lpath = "./?.lua;./?/init.lua",
+        verbose = false,
+    },
+}

@@ -1,0 +1,41 @@
+# .pkgmeta — BigWigsMods/packager (release.sh) ou action BigWigsMods/packager@v2
+#
+# Directives verifiees contre :
+# https://github.com/BigWigsMods/packager (README, section "The PackageMeta file")
+
+package-as: GideonRaid
+
+# Le dossier package = GideonRaid/ (contient GideonRaid.toc). Le depot contient
+# en plus tests/, tools/, docs/ : tout doit etre exclu du zip de distribution.
+ignore:
+  - .busted
+  - .github
+  - .gitignore
+  - .luacheckrc
+  - .pkgmeta
+  - docs
+  - tests
+  - tools
+  - Makefile
+  - README.md
+  - stylua.toml
+  - .release
+
+# Pas de lib externe pour l'instant. Decommenter quand une lib sera embarquee.
+# externals:
+#   LibStub:
+#     url: https://repos.wowace.com/wow/libstub/trunk
+#   CallbackHandler-1.0:
+#     url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+
+# On ne produit QUE la version avec libs (une guilde installe depuis le zip).
+enable-nolib-creation: no
+
+# Une seule save : pas besoin de generer des TOC par type de client.
+enable-toc-creation: no
+
+# Metadonnees utilisees par CurseForge / Wago pour les dependances.
+required-dependencies: []
+optional-dependencies: []
+
+tools-used: []

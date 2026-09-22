@@ -1,0 +1,18 @@
+## Interface: 120100
+## Title: GideonRaid
+## Notes: Aide a l'appariement des debuffs pendant les intermissions de raid. Integre au bot Discord GIDEON.
+## Notes-frFR: Aide a l'appariement des debuffs pendant les intermissions de raid.
+## Version: @project-version@
+## Author: Guilde (via GIDEON)
+## SavedVariables: GideonRaidDB
+## SavedVariablesPerCharacter: GideonRaidCharDB
+## Category: Combat
+## IconTexture: Interface\ICONS\Spell_Shadow_ShadowWordPain
+## X-Curse-Project-ID: 0
+## X-Wago-ID: 0
+
+# Fichiers charges dans l'ordre. Separateur = backslash, jamais de slash.
+GideonRaid.lua
+Core\Config.lua
+Core\Pairing.lua
+UI\Panel.lua
