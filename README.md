@@ -94,7 +94,9 @@ macros only). The module therefore does what is still possible:
 
 **Nothing is automatic.** The interface states it explicitly: *who declared what
 is UNKNOWN* (no addon→addon channel in an instance, the UI is local to the
-client); **the ping is the only signal visible to the other players**.
+client); **the ping is the only signal visible to the other players** — and the
+player is the one who places it: the addon only prepares the macro and says which
+ping to use, because the ping API is `#protected` (an addon cannot ping for you).
 
 ```bash
 make inter    # convention + macros, out of game
