@@ -8,7 +8,14 @@
     Aucun stub d'API de combat n'existe ici (ni UniteAura, ni journal de combat) :
     l'addon n'en appelle aucune, et le jour ou il en appellerait une, les tests
     echoueraient faute de stub - c'est la garde.
+
+    GetBindingKey n'est PAS defini ici, volontairement : hors client ce raccourci
+    n'existe pas, donc le cas par defaut teste est « aucun raccourci connu » (le
+    panneau demande alors au joueur de binder une touche). Une spec qui veut
+    tester l'affichage d'une touche l'installe elle-meme explicitement
+    (_G.GetBindingKey = function(name) ... end).
 ----------------------------------------------------------------------------]]
+--
 local stub = {}
 
 function stub.install()

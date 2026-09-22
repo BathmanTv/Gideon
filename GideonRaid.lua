@@ -108,6 +108,7 @@ local function setLanguage(mode)
     end
     applyLanguage()
     applyBindingLabel()
+    ns.UI.ApplyStaticText()
     ns.UI.IntermissionApplyStaticText()
     ns.UI.Print(ns.Locale.format("cmd.lang.updated", accepted, GR.locale))
     return accepted
@@ -185,8 +186,10 @@ local function slashHandler(cmd)
         ns.UI.IntermissionReset()
     elseif cmd == "inter status" then
         ns.UI.IntermissionStatus()
-    elseif cmd == "inter macro" then
-        ns.UI.IntermissionPrintMacro()
+    elseif cmd == "inter ping" then
+        ns.UI.IntermissionPrintPing()
+    elseif cmd == "inter place" or cmd == "inter setup" then
+        ns.UI.IntermissionSetup()
     elseif cmd == "inter on" then
         ns.UI.IntermissionSetEnabled(true)
     elseif cmd == "inter off" then
@@ -222,7 +225,9 @@ _G.SlashCmdList["GIDEONRAID"] = slashHandler
 -- API ref 12.1.0: https://warcraft.wiki.gg/wiki/Creating_key_bindings
 -- Bindings.xml is loaded AUTOMATICALLY by the client and must NOT be listed in
 -- the .toc. The body of a binding is Lua executed insecurely: it only opens the
--- panel (the addon can NOT send a ping, see C_Ping.SendMacroPing #protected).
+-- panel. This addon NEVER pings (the ping API is restricted to Blizzard's own
+-- UI): the player pings themselves with the native ping keybind (Options >
+-- Keybindings > ping system), and the addon only READS that key to display it.
 -- The two globals below provide the labels shown in Options > Keybindings. They
 -- are set in ENGLISH here (GideonRaid.lua is the FIRST file of the .toc, before
 -- Core/Locale.lua) and refreshed in the effective language after ADDON_LOADED

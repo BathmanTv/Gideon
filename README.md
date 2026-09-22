@@ -83,32 +83,40 @@ rule is a **color addition**: the sum of the two players must make
 everyone then sees only their own orbs.
 
 The addon can read **neither the other players' indicators nor its own** (secret
-values) and **cannot send a ping** (`C_Ping.SendMacroPing` is `#protected`:
-macros only). The module therefore does what is still possible:
+values) and **cannot send a ping** — measured in game: `C_Ping.SendMacroPing`
+is refused by the client ("this action can only be used by the Blizzard UI"),
+from a macro as well as from an addon. The module therefore does what is still
+possible:
 
 | Screen | Content | Data source |
 |---|---|---|
-| Main panel (`/gr`) | ping policy, partner, role, position, pairs | `assignment` block prepared out of game by GIDEON + `pingMode` |
-| Intermission panel (`/gr inter` or the keybinding) | very large reminder, 3 s countdown, a **"PING: YES/NO" banner**, **three buttons named after the visible composition** (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
-| After the click | role + **role order** (what you must do), state to join, ping decision/color, **ping macro — only if your role has to ping** | convention frozen in `Core/Intermission.lua` |
+| Main panel (`/gr`) | partner, role, position, pairs, and the **PLACE INTERMISSION PANEL** button | `assignment` block prepared out of game by GIDEON |
+| Placement mode (before the pull) | the panel is dragged where you want it, **OK** validates and closes | the player's drag (persisted) |
+| Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
+| After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button | convention frozen in `Core/Intermission.lua` |
+| Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
+
+The panel shows the essential only (state, role, `PING: OUI/NON`, one action
+line); the explanations and the way each decision is justified live in
+[`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md), never on screen.
 
 ### 3.1 Ping roles by STATE (instead of one duty per number)
 
 A state carries a **role**, and the role decides what the player does:
 
-| State | Role | Does it ping? (default policy) | Order |
+| State | Role | Does it ping? (default policy) | The ONE action line |
 |---|---|---|---|
-| `1V3R` | **ANCHOR** | **YES** — pings itself with the macro, or is pinged by another player | stay where you are, **do not move** |
-| `2V2R` | **MIDDLE** | no | go to the middle / under the boss, pair up with another 2V2R |
-| `3V1R` | **CHASER** | no | spot a ping and run to it (any 1V3R anchor works) |
+| `1V3R` | **ANCHOR** | **YES** — pings itself with the native ping keybind, or is pinged by another player | "STAY WHERE YOU ARE - ping yourself (Warning) and jump on the spot" |
+| `2V2R` | **MIDDLE** | no | "DO NOT PING - go to the middle / under the boss" |
+| `3V1R` | **CHASER** | no | "DO NOT PING - run to a ping (a 1V3R)" |
 
 **Why:** every state pinging used to flood the channel with ~20 pings; with one
 ping per anchor (4 per side) the raid sends **at most ~8 pings**, which stays
-readable — the client also rate-limits pings per player (`C_Ping.SendMacroPing`
-has its own limit, see `docs/TESTPLAN.md`). An ANCHOR may also simply **be pinged
-by another player** of the raid: only one signal per anchor is needed, and since
-patch **12.1 pings are visible on the raid frames**, so a chaser finds the anchor
-without any addon-to-addon communication.
+readable — the client also rate-limits pings per player (exact limit **to be
+confirmed in game**, see `docs/TESTPLAN.md`). An ANCHOR may also simply **be
+pinged by another player** of the raid: only one signal per anchor is needed, and
+since patch **12.1 pings are visible on the raid frames**, so a chaser finds the
+anchor without any addon-to-addon communication.
 
 The policy is **configurable** (`/gr ping`, persisted in
 `GideonRaidDB.intermission.pingMode`):
@@ -119,23 +127,39 @@ The policy is **configurable** (`/gr ping`, persisted in
 | `color` (raidstrats variant) | every state, with its own color: `1V3R` red/Warning, `2V2R` blue/OnMyWay, `3V1R` green/Assist |
 | `none` | nobody: the raid plays on positions only |
 
-The addon **never sends a ping itself** (`C_Ping.SendMacroPing` is `#protected`):
-it generates the macro text **only for a role that has to ping** under the
-current policy, and displays the reason for the other roles.
+The addon **never sends a ping and no longer generates any macro** (that route is
+refused by the client): it says **which ping to use** and, when it can read it,
+**which key to press**. Pressing it is the player's job — Blizzard's own UI then
+sends the ping. If no key is bound, the panel displays no key and points to
+*Options > Keybindings > ping system*, never a shortcut that does not exist.
 
 **Nothing is automatic.** The interface states it explicitly: *who declared what
 is UNKNOWN* (no addon→addon channel in an instance, the UI is local to the
 client); **the ping is the only signal visible to the other players** — and the
-player is the one who places it: the addon only prepares the macro and says which
-ping to use, because the ping API is `#protected` (an addon cannot ping for you).
+player is the one who places it.
+
+### 3.2 Evening flow
+
+1. before the pull, `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`):
+   drag the panel where it must appear, prepare your ping keybind in
+   *Options > Keybindings*, press **OK** (the position is saved);
+2. pull the boss: `ENCOUNTER_START` starts the **pre-computed schedule**
+   (46.3 s, then 148.9 / 251.5 / 353.2 s) — its arguments are never read;
+3. **1–2 s before each intermission the panel opens by itself** with the three
+   choices;
+4. click your composition: state, role, `PING: OUI/NON` and one action line —
+   **REDO** brings the three choices back, as many times as needed;
+5. at the end of the intermission the panel **closes by itself**; the next one
+   reopens it automatically.
 
 ```bash
-make inter    # convention + macros, out of game
+make inter    # convention + action lines, out of game
 make plan     # pre-pull view from the contract fixture
 ```
 
-Full detail (convention, `plan` contract, configuration, "to be confirmed in
-game" items): [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
+Full detail (convention, ping keybinds, `plan` contract, configuration, "to be
+confirmed in game" items):
+[`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
 
 ---
 
@@ -207,23 +231,29 @@ make syntax   # Lua 5.1 syntax check (the client runtime)
 make test     # out-of-game unit tests (busted)
 make toc      # .toc consistency
 make cli      # pairing of the sample roster
-make inter    # Intermission Coach convention + macros (out of game)
+make inter    # Intermission Coach: convention + action lines (out of game)
 make plan     # pre-pull view from the assignment fixture
 make fmt      # automatic reformatting
 ```
 
-Reference result (after the color-model fix and the bilingual language layer):
+Reference result (after the Intermission Coach redesign: no ping macro, minimal
+panel, REDO, full evening flow with the pre-computed schedule):
 
 ```
 $ make check
+stylua --check .
+luacheck .
 Total: 0 warnings / 0 errors in 18 files        # luacheck
+python3 tools/check_toc.py GideonRaid.toc
 OK GideonRaid.toc                              # check_toc (7 files listed)
-138 successes / 0 failures / 0 errors           # busted
+busted
+162 successes / 0 failures / 0 errors / 0 pending : 0.462049 seconds
 ```
 
-The 138 tests are spread over `pairing_spec.lua` (11),
-`intermission_spec.lua` (65), `load_spec.lua` (19), `guard_spec.lua` (4),
-`locale_spec.lua` (20) and `pingpolicy_spec.lua` (19 — ping roles and policies).
+The 162 tests are spread over `intermission_spec.lua` (80),
+`load_spec.lua` (24 — real loading, `.toc` order, evening flow), `locale_spec.lua`
+(21), `pingpolicy_spec.lua` (20 — ping roles and policies), `pairing_spec.lua`
+(11) and `guard_spec.lua` (6 — anti-forbidden-API guard).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 
@@ -287,8 +317,8 @@ remaining step is to create the GitHub repository and push a tag.
 - [`docs/TESTPLAN.md`](docs/TESTPLAN.md) — 4-step test plan, data sets and
   expected results.
 - [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md) — *Entombed
-  Sentinels* module: mechanic, ping convention, macro, `plan` contract,
-  configuration and the list of items **to be confirmed in game**.
+  Sentinels* module: mechanic, ping roles and **native ping keybinds**, `plan`
+  contract, configuration and the list of items **to be confirmed in game**.
 - [`docs/AGENT-RULES.md`](docs/AGENT-RULES.md) — what every code agent
   (Claude Code, Codex, OpenCode) must read before touching this repository.
   *(Named like that because the environment blocks the creation of an

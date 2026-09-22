@@ -6,9 +6,21 @@
     Le chargement passe par wowenv.loadAddon() : la liste des fichiers vient du
     .toc lui-meme, donc un fichier oublie, renomme ou mal ordonne fait echouer ce
     fichier de test (c'est le bug n°1 des addons).
+
+    Le FLUX DE SOIREE du raid lead est verifie ici de bout en bout, avec l'horloge
+    du moteur (ticker) avancee a la main :
+      placement du panneau + OK -> validation ; ENCOUNTER_START = coup de depart
+      du planning -> ouverture automatique avant l'intermission -> clic de la
+      composition -> CORRIGER -> fermeture automatique a la fin -> reouverture a
+      l'intermission suivante.
 ----------------------------------------------------------------------------]]
+--
 local stub = require("tests.support.wowapi_stub")
 local wowenv = require("tests.support.wowenv")
+
+local function contains(text, needle)
+    return string.find(text, needle, 1, true) ~= nil
+end
 
 describe("chargement de l'addon", function()
     local ns
@@ -20,11 +32,16 @@ describe("chargement de l'addon", function()
         _G.GideonRaidPanel = nil
         _G.GideonRaidIntermissionPanel = nil
         _G.SlashCmdList = nil
+        _G.GetBindingKey = nil
         stub.install()
 
         -- Meme ordre que le client : celui du .toc.
         ns = wowenv.loadAddon()
     end)
+
+    local function messages()
+        return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
+    end
 
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
@@ -45,12 +62,16 @@ describe("chargement de l'addon", function()
         assert.is_table(ns.GR)
     end)
 
-    it("ADDON_LOADED initialise les SavedVariables", function()
+    it("ADDON_LOADED initialise les SavedVariables (planning inclus)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.is_table(_G.GideonRaidDB)
         assert.is_true(_G.GideonRaidDB.enabled)
         assert.is_table(_G.GideonRaidCharDB)
         assert.is_table(_G.GideonRaidDB.intermission)
+        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, _G.GideonRaidDB.intermission.scheduleSeconds)
+        assert.are.equal(2, _G.GideonRaidDB.intermission.leadSeconds)
+        -- Plus aucun champ de macro dans les defaults.
+        assert.is_nil(_G.GideonRaidDB.intermission.macroTargetToken)
     end)
 
     it("ADDON_LOADED ignore les autres addons", function()
@@ -80,6 +101,21 @@ describe("chargement de l'addon", function()
         assert.matches("Your partner", text)
         assert.matches("MIDDLE", text)
         assert.matches("2V2R%+2V2R", text)
+        -- Plus aucune macro de ping, nulle part.
+        assert.is_false(contains(text, "SendMacroPing"))
+        assert.is_false(contains(text, "C_Ping"))
+    end)
+
+    it("sans plan hors jeu : phrase discrete, JAMAIS une commande inexistante", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("show")
+        local text = _G.GideonRaidPanel.body:GetText()
+        assert.are.equal("No out-of-game plan loaded (optional).", text)
+        assert.is_false(contains(text, "roster assign"))
+        assert.is_false(contains(text, "Ask GIDEON"))
+        assert.is_false(contains(text, "No GIDEON assignment"))
+        -- La politique de ping n'est plus affichee en permanence non plus.
+        assert.is_false(contains(text, "ANCHORS"))
     end)
 
     it("le slash handler repond et ne leve pas", function()
@@ -88,91 +124,197 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("status")
         _G.SlashCmdList["GIDEONRAID"]("plan")
         _G.SlashCmdList["GIDEONRAID"]("inter status")
+        _G.SlashCmdList["GIDEONRAID"]("inter ping")
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
-        local msgs = _G.DEFAULT_CHAT_FRAME.messages
-        assert.is_truthy(#msgs >= 1)
+        assert.is_truthy(#_G.DEFAULT_CHAT_FRAME.messages >= 1)
     end)
 
-    it("ENCOUNTER_START lance l'intermission sans lire ses arguments", function()
+    it("le menu d'aide ne renvoie plus vers une commande inexistante", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inconnu")
+        local text = messages()
+        assert.matches("/gr inter", text)
+        assert.matches("place", text)
+        assert.is_false(contains(text, "macro"))
+        assert.is_false(contains(text, "roster assign"))
+    end)
+
+    it("mode placement : bouton du panneau principal, OK ferme et sauvegarde", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GideonRaidPanel.place:Click()
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.matches("BEFORE THE PULL", panel.headline:GetText())
+        assert.is_true(contains(panel.body:GetText(), "Options > Keybindings"))
+        assert.is_true(contains(panel.body:GetText(), "No out-of-game plan loaded (optional)."))
+        assert.is_true(panel.ok:IsShown())
+        assert.is_false(panel.buttons[1]:IsShown())
+        panel.ok:Click()
+        assert.is_false(panel:IsShown())
+        assert.is_table(_G.GideonRaidDB.intermission.position)
+        assert.matches("Placement saved", messages())
+    end)
+
+    it("/gr inter place ouvre aussi le mode placement et Close annule", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.matches("BEFORE THE PULL", panel.headline:GetText())
+        panel.close:Click()
+        assert.is_false(panel:IsShown())
+    end)
+
+    it("ENCOUNTER_START arme le planning sans ouvrir le panneau ni lire ses arguments", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START", 1234, "Entombed Sentinels", 16, 20)
         local panel = _G.GideonRaidIntermissionPanel
-        assert.is_true(panel:IsShown())
-        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
+        assert.is_false(panel:IsShown(), "le panneau ne s'ouvre qu'avant l'intermission")
+        assert.matches("armed: 4 intermission", messages())
+        assert.matches("opens 2 s before", messages())
     end)
 
-    it("le clic sur un bouton du panneau affiche la consigne", function()
+    it("le panneau s'ouvre TOUT SEUL avant la 1re intermission (44,3 s) et ferme a la fin", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START")
         local panel = _G.GideonRaidIntermissionPanel
-        -- Les boutons sont les TROIS etats de couleur, dans l'ordre deterministe
-        -- 1V3R / 2V2R / 3V1R : le bouton 2 est donc 2V2R.
+        -- 40 s : toujours ferme (ouverture a 44,3 s).
+        stub.fireTickers(400)
+        assert.is_false(panel:IsShown())
+        -- 45 s : ouvert, en attente du debut de l'intermission.
+        stub.fireTickers(50)
+        assert.is_true(panel:IsShown())
+        assert.matches("GET READY", panel.headline:GetText())
+        assert.are.equal("", panel.state:GetText())
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_false(panel.redo:IsShown())
+        -- + 2 s : l'intermission commence (compte a rebours de visibilite).
+        stub.fireTickers(20)
+        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
+        -- + 3,5 s : salle obscurcie.
+        stub.fireTickers(35)
+        assert.matches("DARKENED", panel.headline:GetText())
+        -- Fin de l'intermission (duree par defaut 20 s) : fermeture automatique.
+        stub.fireTickers(200)
+        assert.is_false(panel:IsShown(), "le panneau se ferme tout seul a la fin")
+    end)
+
+    it("clic sur une composition : etat en gros, role, PING et UNE action", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
         assert.matches("2 green %+ 2 red", panel.buttons[2]:GetText())
         assert.matches("1 or 3", panel.buttons[1]:GetText())
-        assert.matches("2 green %+ 2 red", panel.buttons[2]:GetText())
-        assert.matches("1 or 3", panel.buttons[3]:GetText())
-        panel.buttons[2]:Click()
-        local text = panel.body:GetText()
-        assert.matches("YOU SEE: 2 GREEN %+ 2 RED", text)
-        assert.matches("MIDDLE", text)
-        -- Politique par defaut ("anchors") : le MILIEU ne ping pas -> banniere
-        -- PING: NO et AUCUNE macro proposee (la zone macro est masquee).
+        panel.buttons[2]:Click() -- 2V2R
+        assert.are.equal("2V2R", panel.state:GetText())
         assert.are.equal("PING: NO", panel.pingBanner:GetText())
         assert.is_true(panel.pingBanner:IsShown())
-        assert.is_false(panel.macroBox:IsShown())
-        assert.matches("PING: NO %- the MIDDLE does not ping", text)
-        assert.are.equal("", panel.macroBox:GetText())
-        assert.matches("No ping for this role", panel.note:GetText())
+        local text = panel.body:GetText()
+        assert.is_true(contains(text, "ROLE: MIDDLE"))
+        assert.is_true(contains(text, "DO NOT PING - go to the middle / under the boss"))
+        -- Le pave technique a disparu : plus aucune de ces lignes.
+        for _, banned in ipairs({ "ROLE ORDER", "PING POLICY", "STATE THAT JOINS YOU", "GUILD CONVENTION", "UNKNOWN" }) do
+            assert.is_false(contains(text, banned), banned)
+        end
     end)
 
-    it("/gr ping color fait apparaitre la macro du MILIEU", function()
+    it("bouton CORRIGER : ramene aux trois choix, utilisable plusieurs fois", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        _G.SlashCmdList["GIDEONRAID"]("ping color")
-        assert.equals("color", _G.GideonRaidDB.intermission.pingMode)
         stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[2]:Click() -- 2V2R
+        panel.buttons[1]:Click()
+        assert.are.equal("1V3R", panel.state:GetText())
+        assert.is_true(panel.redo:IsShown())
         assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.matches("C_Ping%.SendMacroPing", panel.macroBox:GetText())
-        assert.matches("OnMyWay", panel.macroBox:GetText())
-        assert.is_true(panel.macroBox:IsShown())
+        panel.redo:Click()
+        assert.are.equal("", panel.state:GetText())
+        assert.is_false(panel.redo:IsShown())
+        assert.is_true(contains(panel.body:GetText(), "Click the composition you see"))
+        -- Deuxieme corrige, puis troisieme : toujours possible.
+        panel.buttons[3]:Click()
+        assert.are.equal("3V1R", panel.state:GetText())
+        panel.redo:Click()
+        panel.buttons[2]:Click()
+        assert.are.equal("2V2R", panel.state:GetText())
+        panel.redo:Click()
+        panel.buttons[1]:Click()
+        assert.are.equal("1V3R", panel.state:GetText())
     end)
 
-    it("/gr ping none masque la macro meme pour une ANCRE", function()
+    it("affiche la touche de ping quand le joueur en a bindi une", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        _G.SlashCmdList["GIDEONRAID"]("ping none")
+        _G.GetBindingKey = function(name)
+            if name == "PING_WARNING" then
+                return "Q"
+            end
+            return nil
+        end
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[1]:Click()
+        assert.are.equal("PING: YES", panel.pingBanner:GetText())
+        assert.is_true(contains(panel.body:GetText(), "PING: Warning - press Q"))
+    end)
+
+    it("sans raccourci bindi (ou GetBindingKey absent) : demande un raccourci", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        assert.is_nil(_G.GetBindingKey, "le harnais ne definit PAS GetBindingKey")
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[1]:Click()
+        assert.are.equal("PING: YES", panel.pingBanner:GetText())
+        assert.is_true(contains(panel.body:GetText(), "PING: Warning - set a keybind in Options > Keybindings"))
+    end)
+
+    it("survit a un GetBindingKey qui leve une erreur", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GetBindingKey = function()
+            error("GetBindingKey a leve")
+        end
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[1]:Click()
+        assert.is_true(contains(panel.body:GetText(), "set a keybind in Options > Keybindings"))
+    end)
+
+    it("rouvre le panneau a l'intermission SUIVANTE (cycle complet)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click() -- 1V3R = ANCRE
-        assert.are.equal("PING: NO", panel.pingBanner:GetText())
-        assert.are.equal("", panel.macroBox:GetText())
-        assert.is_false(panel.macroBox:IsShown())
-        assert.matches("PING POLICY: NONE", panel.body:GetText())
+        stub.fireTickers(450) -- 1re intermission, panneau ouvert
+        assert.is_true(panel:IsShown())
+        stub.fireTickers(255) -- fin de l'intermission (20 s) : ferme
+        assert.is_false(panel:IsShown())
+        -- La 2e intermission du planning est a 148,9 s : ouverture a 146,9 s.
+        stub.fireTickers(740) -- 144,5 s : encore ferme
+        assert.is_false(panel:IsShown())
+        stub.fireTickers(25) -- 147,0 s : reouverture automatique
+        assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
+        assert.matches("GET READY", panel.headline:GetText())
+        assert.are.equal("", panel.state:GetText())
     end)
 
-    it("/gr ping refuse une valeur inconnue et n'ecrit rien", function()
-        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        _G.SlashCmdList["GIDEONRAID"]("ping magenta")
-        assert.equals("anchors", _G.GideonRaidDB.intermission.pingMode)
-        local messages = table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
-        assert.matches("Unknown ping policy", messages)
-    end)
-
-    it("les trois boutons portent le numero affiche en indice", function()
+    it("ENCOUNTER_END ferme le panneau et desarme le planning", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         stub.mainFrame():Fire("ENCOUNTER_START")
-        local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("1 green %+ 3 red", panel.buttons[1]:GetText())
-        assert.matches("1V3R", panel.buttons[1]:GetText())
-        assert.matches("3 green %+ 1 red", panel.buttons[3]:GetText())
-        assert.matches("3V1R", panel.buttons[3]:GetText())
+        stub.fireTickers(450)
+        assert.is_true(_G.GideonRaidIntermissionPanel:IsShown())
+        stub.mainFrame():Fire("ENCOUNTER_END")
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
+        -- Plus aucune ouverture apres la fin du combat.
+        stub.fireTickers(1000)
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
     end)
 
     it("publie la decision du joueur dans les SavedVariables (lue par le kit diag)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
-        local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[3]:Click() -- 3V1R
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        _G.GideonRaidIntermissionPanel.buttons[3]:Click() -- 3V1R
         local decision = _G.GideonRaidDB.intermission.lastDecision
         assert.is_not_nil(decision)
         assert.equals("3V1R", decision.composition)
@@ -183,37 +325,21 @@ describe("chargement de l'addon", function()
 
     it("une declaration ambigue n'est ni acceptee ni publiee (aucune saisie de chat)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         _G.SlashCmdList["GIDEONRAID"]("inter 1")
-        local messages = table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
-        assert.matches("ambiguous", messages)
+        assert.matches("ambiguous", messages())
         assert.is_nil(_G.GideonRaidDB.intermission.lastDecision)
     end)
 
-    it("le ticker fait basculer la salle en obscurci apres 3 s", function()
-        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
-        local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
-        -- 35 ticks de 0,1 s = 3,5 s : au-dela de la fenetre de 3 s.
-        stub.fireTickers(35)
-        assert.matches("DARKENED", panel.headline:GetText())
-    end)
-
-    it("ENCOUNTER_END ferme le panneau", function()
-        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
-        stub.mainFrame():Fire("ENCOUNTER_END")
-        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
-    end)
-
-    it("respecte la desactivation du module", function()
+    it("respecte la desactivation du module (y compris le planning)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter off")
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
-        local messages = _G.DEFAULT_CHAT_FRAME.messages
-        assert.matches("disabled", messages[#messages])
+        assert.matches("disabled", _G.DEFAULT_CHAT_FRAME.messages[#_G.DEFAULT_CHAT_FRAME.messages])
+        stub.mainFrame():Fire("ENCOUNTER_START")
+        stub.fireTickers(600)
+        assert.is_false(_G.GideonRaidIntermissionPanel:IsShown(), "desactive = aucune ouverture automatique")
     end)
 
     it("le panneau reste lisible et n'affiche aucune valeur dynamique", function()

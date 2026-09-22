@@ -2,18 +2,26 @@
     tests/spec/intermission_spec.lua   (busted)
     Tests HORS JEU du module « Intermission Coach ».
 
-    Deux familles de tests :
+    Familles de tests :
       1. la CONNAISSANCE du module : les TROIS etats de couleur (3V1R / 2V2R /
          1V3R), les numeros affiches (2 non ambigu, 1 et 3 ambigus), la regle de
          survie en ADDITION DE COULEURS (4 verts + 4 rouges), la normalisation
-         des declarations, la generation de la macro de ping, la lecture du plan
-         prepare hors jeu ;
-      2. la MACHINE D'ETAT : phases de l'intermission (visibilite 3 s puis salle
-         obscurcie), declaration du joueur, compte a rebours, sortie de phase.
+         des declarations, le PING du joueur (raccourci natif, aucune macro), le
+         planning pre-calcule des intermissions, la lecture du plan prepare hors
+         jeu ;
+      2. la MACHINE D'ETAT : phases de l'intermission (PENDING = panneau ouvert
+         avant l'intermission, visibilite 3 s puis salle obscurcie, DONE =
+         fermeture automatique), declaration du joueur, CORRIGER, compte a
+         rebours, sortie de phase ;
+      3. le PANNEAU DE PLACEMENT (avant le pull) et le contenu MINIMAL du
+         panneau de combat.
 
     Aucun mock d'API WoW ici : Core/Intermission.lua est du Lua 5.1 pur.
     Le temps est INJECTE (dt en secondes) : le module n'appelle jamais GetTime.
+    La touche de ping est INJECTEE (resolver) : le module n'appelle jamais
+    GetBindingKey (c'est la couche de rendu qui lit le raccourci).
 ----------------------------------------------------------------------------]]
+--
 local wowenv = require("tests.support.wowenv")
 
 local INTERMISSION_FIXTURE = "tests/fixtures/assignment_sample.lua"
@@ -85,24 +93,47 @@ describe("Intermission : etats de couleur (modele corrige)", function()
         assert.are.equal("GREEN", I.getDeclaration("3V1R").pingColor)
     end)
 
-    it("donne le complement, la position et la consigne de chaque etat", function()
+    it("donne le complement, la position, le role et le libelle du bouton", function()
         assert.are.equal("3V1R", I.getDeclaration("1V3R").complement)
         assert.are.equal("2V2R", I.getDeclaration("2V2R").complement)
         assert.are.equal("1V3R", I.getDeclaration("3V1R").complement)
         for _, key in ipairs(I.STATES) do
             local rec = I.getDeclaration(key)
-            assert.is_string(rec.action)
-            assert.is_true(#rec.action > 10)
-            assert.is_string(rec.find)
-            assert.is_true(#rec.find > 10)
+            assert.is_string(rec.actionLine)
+            assert.is_true(#rec.actionLine > 10)
+            assert.is_string(rec.roleLine)
             assert.is_string(rec.positionLabel)
-            assert.is_string(rec.numberRule)
             assert.is_string(rec.buttonLabel)
             assert.is_true(#rec.buttonLabel > 10)
         end
         assert.matches("HOLD", I.getDeclaration("1V3R").positionLabel)
         assert.matches("MIDDLE", I.getDeclaration("2V2R").positionLabel)
         assert.matches("1V3R", I.getDeclaration("3V1R").positionLabel)
+    end)
+
+    it("expose UNE SEULE ligne d'action, celle demandee par le raid lead", function()
+        -- Politique par defaut (« anchors ») : seule l'ANCRE ping.
+        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "STAY WHERE YOU ARE"))
+        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "ping yourself (Warning)"))
+        assert.is_true(contains(I.getDeclaration("1V3R").actionLine, "jump on the spot"))
+        assert.are.equal("DO NOT PING - go to the middle / under the boss", I.getDeclaration("2V2R").actionLine)
+        assert.are.equal("DO NOT PING - run to a ping (a 1V3R)", I.getDeclaration("3V1R").actionLine)
+        -- Role : une seule ligne courte, l'etat etant affiche en tres gros a part.
+        assert.are.equal("ROLE: ANCHOR", I.getDeclaration("1V3R").roleLine)
+        assert.are.equal("ROLE: MIDDLE", I.getDeclaration("2V2R").roleLine)
+        assert.are.equal("ROLE: CHASER", I.getDeclaration("3V1R").roleLine)
+    end)
+
+    it("ne fabrique PLUS de macro de ping (API reservee a l'UI Blizzard)", function()
+        -- Le test de jeu reel a tranche : la macro renvoyait « action utilisable
+        -- uniquement par l'UI de Blizzard ». La generation a disparu du module.
+        assert.is_nil(I.buildMacro)
+        for _, key in ipairs(I.STATES) do
+            local rec = I.getDeclaration(key, "color")
+            for _, field in ipairs({ "macroPrimary", "macroFallback", "macroNote", "pingToken" }) do
+                assert.is_nil(rec[field], key .. "." .. field)
+            end
+        end
     end)
 
     it("complementOf renvoie l'etat qui DOIT rejoindre", function()
@@ -118,6 +149,8 @@ describe("Intermission : etats de couleur (modele corrige)", function()
         assert.are.equal("1 VERT + 3 ROUGES", nsFr.Intermission.getDeclaration("1V3R").display)
         assert.are.equal("1 ou 3", nsFr.Intermission.getDeclaration("3V1R").numberText)
         assert.are.equal("ROUGE", nsFr.Intermission.getDeclaration("1V3R").pingColor)
+        assert.are.equal("ROLE : ANCRE", nsFr.Intermission.getDeclaration("1V3R").roleLine)
+        assert.are.equal("NE PING PAS - va au milieu / sous le boss", nsFr.Intermission.getDeclaration("2V2R").actionLine)
         local _, err = nsFr.Intermission.getDeclaration("1")
         assert.matches("numero 1 ambigu", err)
     end)
@@ -254,82 +287,139 @@ describe("Intermission : collisions (addition de couleurs)", function()
     end)
 end)
 
-describe("Intermission : macro de ping", function()
+describe("Intermission : ping du joueur (raccourci natif, aucune macro)", function()
     local ns = wowenv.loadCore()
     local I = ns.Intermission
 
-    it("genere l'appel API documente pour chaque etat (par couleur dominante)", function()
-        -- Under the DEFAULT policy ("anchors") only the ANCHOR (1V3R) may ping:
-        -- the other two states are refused, so the color variant is requested
-        -- explicitly here.
-        local m1 = assert(I.buildMacro("1V3R"))
-        assert.matches("C_Ping%.SendMacroPing", m1.primary)
-        assert.matches("Enum%.PingSubjectType%.Warning", m1.primary)
-        assert.matches('targetToken = "player"', m1.primary)
-        assert.are.equal("ANCHOR", m1.role)
-        local m2 = assert(I.buildMacro("2V2R", nil, "color"))
-        assert.matches("Enum%.PingSubjectType%.OnMyWay", m2.primary)
-        assert.are.equal("MID", m2.role)
-        local m3 = assert(I.buildMacro("3V1R", nil, "color"))
-        assert.matches("Enum%.PingSubjectType%.Assist", m3.primary)
-        assert.are.equal("CHASER", m3.role)
-    end)
-
-    it("ne propose la macro QU'AUX etats autorises par la politique", function()
-        -- anchors (default): 1V3R only.
-        assert.is_table(I.buildMacro("1V3R"))
-        local noMid, errMid = I.buildMacro("2V2R")
-        assert.is_nil(noMid)
-        assert.matches("no ping for MIDDLE", errMid)
-        assert.matches("anchors", errMid)
-        assert.is_nil(I.buildMacro("3V1R"))
-        assert.matches("no ping for CHASER", select(2, I.buildMacro("3V1R")))
-        -- color: the three states.
+    it("porte les noms de raccourci candidats par etat", function()
+        assert.are.same({ "PING_WARNING", "PINGTYPE_WARNING", "PINGSUBJECTTYPE_WARNING", "BINDING_PING_WARNING" }, I.bindNames("1V3R"))
+        assert.are.same({ "PING_ONMYWAY", "PING_ON_MY_WAY", "PINGTYPE_ONMYWAY", "BINDING_PING_ONMYWAY" }, I.bindNames("2V2R"))
+        assert.are.same({ "PING_ASSIST", "PING_HELP", "PINGTYPE_ASSIST", "BINDING_PING_ASSIST" }, I.bindNames("3V1R"))
+        -- Aucun candidat n'emprunte la touche d'un AUTRE ping ("Attaque").
         for _, key in ipairs(I.STATES) do
-            assert.is_table(I.buildMacro(key, nil, "color"), key)
+            for _, name in ipairs(I.bindNames(key)) do
+                assert.is_nil(string.find(name, "ATTACK", 1, true), name)
+            end
         end
-        -- none: nobody, not even the anchor.
+        assert.is_nil(I.bindNames("banane"))
+        -- Copie : muter le resultat ne corrompt pas la table du module.
+        local list = I.bindNames("1V3R")
+        list[1] = "corrompu"
+        assert.are.equal("PING_WARNING", I.bindNames("1V3R")[1])
+        -- Le premier candidat est aussi expose sur la fiche de l'etat.
+        assert.are.equal("PING_WARNING", I.getDeclaration("1V3R").bindName)
+    end)
+
+    it("traduit le NOM du ping affiche, jamais l'identifiant canonique", function()
+        -- Langue par defaut : anglais (libelles du systeme de ping).
+        assert.are.equal("Warning", I.pingLabel("Warning"))
+        assert.are.equal("On My Way", I.pingLabel("OnMyWay"))
+        assert.are.equal("Assist", I.pingLabel("Assist"))
+        -- Identifiant inconnu ou vide : jamais de chaine cassee, jamais "nil".
+        assert.are.equal("Banane", I.pingLabel("Banane"))
+        assert.are.equal("", I.pingLabel(""))
+        assert.are.equal("", I.pingLabel(nil))
+        -- Libelles FRANCAIS, mesures en jeu par le raid lead (2026-09-22,
+        -- Options > Raccourcis) : « Avertissement », « En route », « Aide ».
+        local fr = wowenv.loadCore()
+        fr.Locale.setActive("fr")
+        assert.are.equal("Avertissement", fr.Intermission.pingLabel("Warning"))
+        assert.are.equal("En route", fr.Intermission.pingLabel("OnMyWay"))
+        assert.are.equal("Aide", fr.Intermission.pingLabel("Assist"))
+    end)
+
+    it("la ligne de politique « color » nomme les pings dans la langue du joueur", function()
+        local rec = I.getDeclaration("1V3R", "color")
+        assert.is_true(contains(rec.policyLine, "Warning"))
+        assert.is_true(contains(rec.policyLine, "On My Way"))
+        assert.is_true(contains(rec.policyLine, "Assist"))
+        -- La meme ligne, en francais, ne garde AUCUN nom anglais.
+        local fr = wowenv.loadCore()
+        fr.Locale.setActive("fr")
+        local frRec = fr.Intermission.getDeclaration("1V3R", "color")
+        assert.is_true(contains(frRec.policyLine, "Avertissement"))
+        assert.is_true(contains(frRec.policyLine, "En route"))
+        assert.is_true(contains(frRec.policyLine, "Aide"))
+        assert.is_nil(string.find(frRec.policyLine, "OnMyWay", 1, true))
+    end)
+
+    it("sans touche bindi : nomme le ping et demande un raccourci", function()
+        local hint = assert(I.pingHint("1V3R"))
+        assert.are.equal("Warning", hint.ping)
+        assert.is_nil(hint.key)
+        assert.are.equal("PING: Warning - set a keybind in Options > Keybindings", hint.line)
+        -- Une touche vide/absurde est traitee comme « pas de raccourci ».
+        assert.is_nil(I.pingHint("1V3R", "anchors", "").key)
+        assert.is_nil(I.pingHint("1V3R", "anchors", 42).key)
+        assert.are.equal("PING: Warning - set a keybind in Options > Keybindings", I.pingHint("1V3R", nil, nil).line)
+    end)
+
+    it("avec une touche bindi : dit quelle touche presser", function()
+        local hint = assert(I.pingHint("1V3R", "anchors", "Q"))
+        assert.are.equal("Q", hint.key)
+        assert.are.equal("Warning", hint.ping)
+        assert.are.equal("PING_WARNING", hint.bindName)
+        assert.are.equal("PING: Warning - press Q", hint.line)
+        assert.are.equal("PING: Assist - press ALT-F", I.pingHint("3V1R", "color", "ALT-F").line)
+    end)
+
+    it("refuse un etat qui ne ping pas et un numero ambigu", function()
+        local hint, err = I.pingHint("2V2R")
+        assert.is_nil(hint)
+        assert.matches("no ping for MIDDLE", err)
+        assert.matches("anchors", err)
+        assert.is_nil(I.pingHint("3V1R"))
+        local ambiguous, errAmbiguous = I.pingHint("1")
+        assert.is_nil(ambiguous)
+        assert.matches("ambiguous", errAmbiguous)
+        -- En politique « color », les trois etats ping : plus de refus.
         for _, key in ipairs(I.STATES) do
-            local macro, err = I.buildMacro(key, nil, "none")
-            assert.is_nil(macro, key)
-            assert.matches("none", err)
+            assert.is_table(I.pingHint(key, "color", "Q"), key)
         end
-        assert.is_nil(I.buildMacro("1V3R", nil, "none"))
-        -- An unknown policy is resolved to "anchors" (never an error).
-        assert.is_table(I.buildMacro("1V3R", nil, "bidon"))
-        assert.is_nil(I.buildMacro("2V2R", nil, "bidon"))
-        assert.is_table(I.buildMacro("1V3R", nil, "ANCHORS"))
+        -- En politique « none », personne.
+        assert.is_nil(I.pingHint("1V3R", "none", "Q"))
     end)
 
-    it("refuse un numero ambigu : aucune macro inventee", function()
-        local m, err = I.buildMacro("1")
-        assert.is_nil(m)
-        assert.matches("ambiguous", err)
-        local m3, err3 = I.buildMacro("3")
-        assert.is_nil(m3)
-        assert.matches("ambiguous", err3)
+    it("le snapshot injecte la touche lue par la couche de rendu (resolver)", function()
+        local st = I.newState({ leadSeconds = 0 })
+        I.start(st)
+        I.declare(st, "1V3R")
+        local seen
+        local snap = I.snapshot(st, "anchors", function(bindNames)
+            seen = bindNames
+            return "Q"
+        end)
+        assert.are.same({ "PING_WARNING", "PINGTYPE_WARNING", "PINGSUBJECTTYPE_WARNING", "BINDING_PING_WARNING" }, seen)
+        assert.are.equal("Q", snap.pingHint.key)
+        assert.are.equal("PING: Warning - press Q", snap.pingHint.line)
+        assert.is_true(contains(table.concat(snap.lines, "\n"), "PING: Warning - press Q"))
     end)
 
-    it("fournit une variante /ping et une note « a confirmer »", function()
-        local m = assert(I.buildMacro("3V1R", nil, "color"))
-        assert.matches("^/ping ", m.fallback)
-        assert.matches("Assist", m.fallback)
-        assert.matches("confirmed", m.note)
+    it("le snapshot sans resolver (ou avec un resolver en erreur) retombe sur le raccourci manquant", function()
+        local st = I.newState({ leadSeconds = 0 })
+        I.start(st)
+        I.declare(st, "1V3R")
+        local noResolver = I.snapshot(st, "anchors").pingHint
+        assert.is_nil(noResolver.key)
+        assert.are.equal("PING: Warning - set a keybind in Options > Keybindings", noResolver.line)
+        local failing = I.snapshot(st, "anchors", function()
+            error("GetBindingKey a leve")
+        end).pingHint
+        assert.is_nil(failing.key)
+        assert.are.equal("PING: Warning - set a keybind in Options > Keybindings", failing.line)
+        -- Un resolver qui ne renvoie pas de chaine est ignore aussi.
+        local weird = I.snapshot(st, "anchors", function()
+            return 42
+        end).pingHint
+        assert.is_nil(weird.key)
     end)
 
-    it("accepte un autre jeton de cible", function()
-        local m = assert(I.buildMacro("2V2R", "target", "color"))
-        assert.matches('targetToken = "target"', m.primary)
-    end)
-
-    it("refuse une declaration inconnue et ne fabrique jamais de texte interdit", function()
-        local m, err = I.buildMacro("banane")
-        assert.is_nil(m)
-        assert.matches("unknown", err)
-        for _, key in ipairs(I.DECLARATIONS) do
-            local ok = assert(I.buildMacro(key, nil, "color"))
-            assert.is_nil(string.find(ok.primary, FORBIDDEN_EVENT, 1, true))
-            assert.is_nil(string.find(ok.fallback, FORBIDDEN_EVENT, 1, true))
+    it("ne fabrique jamais un texte d'API de ping ni un evenement interdit", function()
+        for _, key in ipairs(I.STATES) do
+            local hint = assert(I.pingHint(key, "color", "Q"))
+            assert.is_nil(string.find(hint.line, "SendMacroPing", 1, true))
+            assert.is_nil(string.find(hint.line, "C_Ping", 1, true))
+            assert.is_nil(string.find(hint.line, FORBIDDEN_EVENT, 1, true))
         end
     end)
 end)
@@ -337,24 +427,28 @@ end)
 describe("Intermission : timeline pre-calculee", function()
     local I = wowenv.loadCore().Intermission
 
-    it("applique les valeurs par defaut (3 s de visibilite)", function()
+    it("applique les valeurs par defaut (3 s de visibilite, 2 s de lead)", function()
         local t = assert(I.validateTimeline(nil))
         assert.are.equal(3, t.visibilitySeconds)
+        assert.are.equal(I.LEAD_SECONDS, t.leadSeconds)
         assert.are.equal(I.DEFAULT_DURATION_SECONDS, t.durationSeconds)
     end)
 
     it("accepte une timeline preparee hors jeu", function()
-        local t = assert(I.validateTimeline({ name = "Intermission 1", visibilitySeconds = 4, durationSeconds = 25 }))
+        local t = assert(I.validateTimeline({ name = "Intermission 1", leadSeconds = 1, visibilitySeconds = 4, durationSeconds = 25 }))
         assert.are.equal("Intermission 1", t.name)
+        assert.are.equal(1, t.leadSeconds)
         assert.are.equal(4, t.visibilitySeconds)
         assert.are.equal(25, t.durationSeconds)
     end)
 
     it("borne les valeurs absurdes et garde duree > visibilite", function()
-        local t = assert(I.validateTimeline({ visibilitySeconds = -5, durationSeconds = 0 }))
+        local t = assert(I.validateTimeline({ leadSeconds = -5, visibilitySeconds = -5, durationSeconds = 0 }))
+        assert.are.equal(0, t.leadSeconds)
         assert.are.equal(1, t.visibilitySeconds)
         assert.is_true(t.durationSeconds > t.visibilitySeconds)
-        local t2 = assert(I.validateTimeline({ visibilitySeconds = 99, durationSeconds = 9999 }))
+        local t2 = assert(I.validateTimeline({ leadSeconds = 99, visibilitySeconds = 99, durationSeconds = 9999 }))
+        assert.are.equal(10, t2.leadSeconds)
         assert.are.equal(10, t2.visibilitySeconds)
         assert.are.equal(120, t2.durationSeconds)
     end)
@@ -363,6 +457,109 @@ describe("Intermission : timeline pre-calculee", function()
         local t, err = I.validateTimeline("3 secondes")
         assert.is_nil(t)
         assert.matches("timeline", err)
+    end)
+end)
+
+describe("Intermission : planning des intermissions (machine pure)", function()
+    local ns = wowenv.loadCore()
+    local I, Config = ns.Intermission, ns.Config
+
+    it("porte le planning pre-calcule du raid lead, dans l'ordre", function()
+        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, I.SCHEDULE_SECONDS)
+        local schedule = I.validateSchedule(nil)
+        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, schedule)
+        assert.are.same(Config.DEFAULT_SCHEDULE_SECONDS, I.SCHEDULE_SECONDS)
+    end)
+
+    it("normalise un planning persiste (tri, valeurs absurdes, borne)", function()
+        assert.are.same({ 10, 20.5 }, I.validateSchedule({ 20.5, -3, 10, "x", 0 }))
+        assert.are.same({ 5 }, I.validateSchedule({ 5 }))
+        -- Un planning vide/absurde retombe sur le planning par defaut.
+        assert.are.same(I.SCHEDULE_SECONDS, I.validateSchedule({}))
+        assert.are.same(I.SCHEDULE_SECONDS, I.validateSchedule("nope"))
+        assert.are.same(I.SCHEDULE_SECONDS, I.validateSchedule({ -1, 0 }))
+        -- Plafond du nombre d'entrees (SavedVariables edite a la main).
+        local huge = {}
+        for index = 1, 40 do
+            huge[index] = index
+        end
+        assert.are.equal(Config.MAX_SCHEDULE_ENTRIES, #I.validateSchedule(huge))
+    end)
+
+    it("calcule l'heure d'ouverture du panneau (lead de 2 s)", function()
+        local run = I.newRun(nil, 2)
+        assert.are.equal(46.3, I.runNextAt(run))
+        assert.are.equal(44.3, I.runOpenAt(run))
+        assert.are.equal(4, I.runRemaining(run))
+        assert.is_false(I.runFinished(run))
+        -- Un lead absurde est borne (jamais negatif, jamais enorme).
+        assert.are.equal(0, I.newRun({ 10 }, -3).lead)
+        assert.are.equal(10, I.newRun({ 10 }, 999).lead)
+        -- Un lead de 0 ouvre exactement a l'intermission.
+        assert.are.equal(10, I.runOpenAt(I.newRun({ 10 }, 0)))
+    end)
+
+    it("n'ouvre RIEN avant l'heure et ouvre UNE fois par intermission", function()
+        local run = I.newRun({ 10, 20 }, 2)
+        local _, opened = I.advanceRun(run, 7.9)
+        assert.is_nil(opened)
+        local _, first = I.advanceRun(run, 0.1) -- 8.0 s = 10 - 2
+        assert.are.equal(1, first)
+        local _, again = I.advanceRun(run, 3)
+        assert.is_nil(again)
+        assert.are.equal(1, I.runRemaining(run))
+        local _, second = I.advanceRun(run, 8)
+        assert.are.equal(2, second)
+        assert.are.equal(0, I.runRemaining(run))
+        assert.is_true(I.runFinished(run))
+        assert.is_nil(I.runOpenAt(run))
+        local _, extra = I.advanceRun(run, 100)
+        assert.is_nil(extra, "un planning epuise n'ouvre plus rien")
+    end)
+
+    it("un dt enorme n'ouvre qu'UNE intermission a la fois (jamais de saut)", function()
+        local run = I.newRun({ 10, 20, 30 }, 2)
+        local _, first = I.advanceRun(run, 1000)
+        assert.are.equal(1, first)
+        assert.are.equal(2, I.runRemaining(run))
+        local _, second = I.advanceRun(run, 0.1)
+        assert.are.equal(2, second)
+        local _, third = I.advanceRun(run, 0.1)
+        assert.are.equal(3, third)
+        local _, extra = I.advanceRun(run, 0.1)
+        assert.is_nil(extra)
+    end)
+
+    it("ignore un dt negatif ou non numerique et reste deterministe", function()
+        local run = I.newRun({ 10 }, 2)
+        assert.is_nil(select(2, I.advanceRun(run, -5)))
+        assert.is_nil(select(2, I.advanceRun(run, "beaucoup")))
+        assert.are.equal(0, run.elapsed)
+        local function replay()
+            local r = I.newRun({ 10, 20 }, 2)
+            local openings = {}
+            for _ = 1, 400 do
+                local _, opened = I.advanceRun(r, 0.1)
+                if opened ~= nil then
+                    openings[#openings + 1] = opened
+                end
+            end
+            return openings
+        end
+        assert.are.same({ 1, 2 }, replay())
+        assert.are.same(replay(), replay())
+    end)
+
+    it("resetRun repart de zero en gardant planning et lead", function()
+        local run = I.newRun({ 10, 20 }, 2)
+        I.advanceRun(run, 12)
+        I.resetRun(run)
+        assert.are.equal(0, run.elapsed)
+        assert.are.equal(1, run.index)
+        assert.are.equal(2, run.lead)
+        assert.are.equal(10, I.runNextAt(run))
+        assert.are.equal(2, I.runRemaining(run))
+        assert.is_nil(I.resetRun(nil))
     end)
 end)
 
@@ -375,21 +572,41 @@ describe("Intermission : machine d'etat", function()
         assert.are.equal(I.PHASE.IDLE, snap.phase)
         assert.is_false(snap.visible)
         assert.is_false(snap.showButtons)
+        assert.is_false(snap.showRedo)
+        assert.are.equal("", snap.stateText)
+        assert.is_nil(snap.pingBanner)
+        assert.are.equal("INTERMISSION PANEL READY", snap.headline)
     end)
 
-    it("passe en phase VISIBLE au demarrage avec un compte a rebours de 3 s", function()
-        local st = I.newState()
+    it("ouvre en PENDING (lead 2 s) puis demarre l'intermission a la fin du lead", function()
+        local st = I.newState({ leadSeconds = 2, visibilitySeconds = 3, durationSeconds = 20 })
         assert(I.start(st))
-        assert.are.equal(I.PHASE.VISIBLE, st.phase)
+        assert.are.equal(I.PHASE.PENDING, st.phase)
         local snap = I.snapshot(st)
         assert.is_true(snap.visible)
-        assert.is_true(snap.showButtons)
-        assert.are.equal("3", snap.countdownText)
-        assert.are.equal(3, I.remainingVisibility(st))
+        assert.is_true(snap.showButtons, "les trois choix sont visibles des l'ouverture")
+        assert.are.equal("GET READY: 2 s", snap.headline)
+        assert.are.equal("2", snap.countdownText)
+        I.tick(st, 1)
+        assert.are.equal(I.PHASE.PENDING, st.phase)
+        assert.are.equal("1", I.snapshot(st).countdownText)
+        I.tick(st, 1)
+        assert.are.equal(I.PHASE.VISIBLE, st.phase)
+        assert.are.equal(0, st.elapsed, "le compteur de l'intermission repart de zero")
+        assert.are.equal("3", I.snapshot(st).countdownText)
+    end)
+
+    it("avec un lead de 0 s, demarre directement en VISIBLE", function()
+        local st = I.newState({ leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
+        I.start(st)
+        assert.are.equal(I.PHASE.VISIBLE, st.phase)
+        assert.are.equal("3", I.snapshot(st).countdownText)
+        assert.matches("LOOK AT THE ORB COLOR", I.snapshot(st).headline)
+        assert.is_true(I.snapshot(st).showButtons)
     end)
 
     it("decompte puis bascule en salle obscurcie a 3 s", function()
-        local st = I.newState()
+        local st = I.newState({ leadSeconds = 0 })
         I.start(st)
         I.tick(st, 1)
         assert.are.equal(I.PHASE.VISIBLE, st.phase)
@@ -402,145 +619,174 @@ describe("Intermission : machine d'etat", function()
         assert.matches("DARKENED", I.snapshot(st).headline)
     end)
 
-    it("garde les boutons actifs en phase DARK", function()
-        local st = I.newState()
+    it("garde les boutons actifs en PENDING et DARK, jamais en IDLE/DONE", function()
+        local st = I.newState({ leadSeconds = 2, visibilitySeconds = 3, durationSeconds = 10 })
         I.start(st)
+        assert.is_true(I.snapshot(st).showButtons, "PENDING")
+        I.tick(st, 2)
+        assert.is_true(I.snapshot(st).showButtons, "VISIBLE")
         I.tick(st, 5)
         assert.are.equal(I.PHASE.DARK, st.phase)
-        assert.is_true(I.snapshot(st).showButtons)
+        assert.is_true(I.snapshot(st).showButtons, "DARK")
+        I.tick(st, 10)
+        assert.are.equal(I.PHASE.DONE, st.phase)
+        assert.is_false(I.snapshot(st).showButtons, "DONE")
+        assert.is_true(I.snapshot(st).autoClose, "DONE doit fermer le panneau")
     end)
 
-    it("affiche la consigne complete apres declaration", function()
-        local st = I.newState()
+    it("affiche l'ESSENTIEL apres declaration : etat, role, PING, UNE action", function()
+        local st = I.newState({ leadSeconds = 0 })
         I.start(st)
         assert(I.declare(st, "2"))
         local snap = I.snapshot(st)
-        local text = table.concat(snap.lines, "\n")
-        assert.matches("YOU SEE: 2 GREEN %+ 2 RED", text)
-        assert.is_true(contains(text, "NUMBER ABOVE YOUR HEAD: 2"))
-        assert.matches("unambiguous", text)
-        assert.matches("MIDDLE", text)
-        assert.matches("STATE TO JOIN: 2V2R", text)
         assert.are.equal("2V2R", snap.declaration)
-        -- Politique par defaut ("anchors") : le MILIEU ne ping PAS et ne recoit
-        -- donc AUCUNE macro (elle ne doit pas etre proposee a tort).
+        assert.are.equal("2V2R", snap.stateText)
+        assert.are.equal("2 GREEN + 2 RED", snap.stateLong)
         assert.are.equal("MID", snap.role)
         assert.are.equal("MIDDLE", snap.roleName)
+        assert.are.equal("ROLE: MIDDLE", snap.roleLine)
         assert.is_false(snap.shouldPing)
-        assert.is_false(snap.macroAllowed)
-        assert.is_nil(snap.macroPrimary)
-        assert.matches("PING: NO", text)
-        assert.matches("PING POLICY: ANCHORS", text)
-        assert.is_false(contains(text, "C_Ping.SendMacroPing"))
+        assert.are.equal("NO", snap.pingDecision)
+        assert.are.equal("PING: NO", snap.pingBanner)
+        assert.is_nil(snap.pingColorHex)
+        assert.are.equal("DO NOT PING - go to the middle / under the boss", snap.actionLine)
+        assert.is_true(snap.showRedo)
+        -- Le panneau ne montre QUE le role et l'action quand ce role ne ping pas.
+        assert.are.equal(2, #snap.lines)
+        local text = table.concat(snap.lines, "\n")
+        assert.are.equal("ROLE: MIDDLE\nDO NOT PING - go to the middle / under the boss", text)
     end)
 
-    it("affiche la consigne de l'ANCRE et sa macro en politique par defaut", function()
-        local st = I.newState()
+    it("naffiche AUCUN pave technique (lignes supprimees a la demande du raid lead)", function()
+        local st = I.newState({ leadSeconds = 0 })
         I.start(st)
-        I.declare(st, "1V3R") -- 1 vert + 3 rouges = ANCRE
+        I.declare(st, "1V3R")
         local snap = I.snapshot(st)
         local text = table.concat(snap.lines, "\n")
-        assert.are.equal("ANCHOR", snap.role)
-        assert.is_true(snap.shouldPing)
-        assert.is_true(snap.macroAllowed)
-        assert.matches("PING: YES", text)
-        assert.matches("YOUR ROLE: ANCHOR %(1V3R%)", text)
-        assert.matches("STAY WHERE YOU ARE", text)
-        assert.is_true(contains(text, "DO NOT MOVE"))
-        assert.matches("STATE THAT JOINS YOU: 3V1R", text)
-        assert.matches("C_Ping%.SendMacroPing", snap.macroPrimary)
-        assert.matches("Enum%.PingSubjectType%.Warning", snap.macroPrimary)
+        for _, banned in ipairs({
+            "ROLE ORDER",
+            "PING POLICY",
+            "STATE THAT JOINS YOU",
+            "STATE TO JOIN",
+            "GUILD CONVENTION",
+            "NUMBER ABOVE YOUR HEAD",
+            "UNKNOWN",
+            "caveat",
+        }) do
+            assert.is_false(contains(text, banned), banned)
+        end
+        assert.is_true(#snap.lines <= 3, "au plus 3 lignes courtes")
+        assert.is_false(contains(text, FORBIDDEN_EVENT))
     end)
 
-    it("en politique « color », les trois etats ping et recoivent la macro", function()
+    it("affiche l'ANCRE et sa touche de ping en politique par defaut", function()
+        local st = I.newState({ leadSeconds = 0 })
+        I.start(st)
+        I.declare(st, "1V3R")
+        local snap = I.snapshot(st, "anchors", function()
+            return "Q"
+        end)
+        assert.are.equal("ANCHOR", snap.role)
+        assert.are.equal("ROLE: ANCHOR", snap.roleLine)
+        assert.is_true(snap.shouldPing)
+        assert.are.equal("YES", snap.pingDecision)
+        assert.are.equal("PING: YES", snap.pingBanner)
+        assert.are.equal("|cffff4040", snap.pingColorHex)
+        assert.are.equal("PING: Warning - press Q", snap.pingHint.line)
+        assert.is_true(contains(snap.actionLine, "STAY WHERE YOU ARE"))
+        assert.are.equal(3, #snap.lines)
+    end)
+
+    it("en politique « color », les trois etats ping et nomment leur ping", function()
+        local expected = { ["1V3R"] = "Warning", ["2V2R"] = "On My Way", ["3V1R"] = "Assist" }
+        local canonical = { ["1V3R"] = "Warning", ["2V2R"] = "OnMyWay", ["3V1R"] = "Assist" }
         for _, key in ipairs(I.STATES) do
-            local st = I.newState()
+            local st = I.newState({ leadSeconds = 0 })
             I.start(st)
             I.declare(st, key)
             local snap = I.snapshot(st, "color")
-            local text = table.concat(snap.lines, "\n")
             assert.is_true(snap.shouldPing, key)
-            assert.is_true(snap.macroAllowed, key)
-            assert.matches("PING: YES", text)
-            assert.is_string(snap.macroPrimary)
-            assert.matches("C_Ping%.SendMacroPing", snap.macroPrimary)
-            assert.matches("PING POLICY: COLOR", text)
+            assert.are.equal("PING: YES", snap.pingBanner, key)
+            assert.are.equal(canonical[key], snap.pingHint.ping, key)
+            assert.are.equal(expected[key], snap.pingHint.label, key)
+            assert.is_true(contains(snap.actionLine, expected[key]), key)
         end
-        -- La couleur annoncee reste celle de la couleur dominante.
         local red = I.getDeclaration("1V3R", "color")
         assert.are.equal("RED", red.pingColor)
         assert.matches("Warning", red.pingLine)
         local blue = I.getDeclaration("2V2R", "color")
-        assert.are.equal("BLUE", blue.pingColor)
-        assert.matches("OnMyWay", blue.pingLine)
+        assert.matches("On My Way", blue.pingLine)
         local green = I.getDeclaration("3V1R", "color")
-        assert.are.equal("GREEN", green.pingColor)
         assert.matches("Assist", green.pingLine)
     end)
 
-    it("en politique « none », PERSONNE ne ping ni ne recoit de macro", function()
+    it("en politique « none », PERSONNE ne ping et la consigne reste survivable", function()
         for _, key in ipairs(I.STATES) do
-            local st = I.newState()
+            local st = I.newState({ leadSeconds = 0 })
             I.start(st)
             I.declare(st, key)
             local snap = I.snapshot(st, "none")
-            local text = table.concat(snap.lines, "\n")
             assert.is_false(snap.shouldPing, key)
-            assert.is_false(snap.macroAllowed, key)
-            assert.is_nil(snap.macroPrimary, key)
-            assert.matches("PING: NO", text)
-            assert.matches("PING POLICY: NONE", text)
-            assert.is_false(contains(text, "C_Ping.SendMacroPing"))
+            assert.are.equal("PING: NO", snap.pingBanner, key)
+            assert.is_nil(snap.pingHint, key)
+            assert.is_nil(snap.pingColorHex, key)
         end
-        -- L'ANCRE garde malgre tout sa consigne de survie : sur place, sans bouger.
-        local anchor = I.getDeclaration("1V3R", "none")
-        assert.are.equal("ANCHOR", anchor.role)
-        assert.matches("STAY WHERE YOU ARE", anchor.roleOrder)
-        assert.is_true(contains(anchor.roleOrder, "DO NOT MOVE"))
+        -- L'ANCRE garde malgre tout sa consigne de survie : sur place.
+        local anchor = I.snapshot(
+            (function()
+                local st = I.newState({ leadSeconds = 0 })
+                I.start(st)
+                I.declare(st, "1V3R")
+                return st
+            end)(),
+            "none"
+        )
+        assert.is_true(contains(anchor.actionLine, "STAY WHERE YOU ARE"))
+        assert.is_false(contains(anchor.actionLine, "ping yourself"))
+        -- Le CHASSEUR et le MILIEU ne recoivent jamais un ordre contradictoire.
+        assert.is_false(contains(anchor.pingBanner, "YES"))
+        local chaser = I.getDeclaration("3V1R", "none")
+        assert.is_true(contains(chaser.actionLine, "run to a ping"))
+        assert.is_true(contains(chaser.actionLine, "DO NOT PING"))
+        local mid = I.getDeclaration("2V2R", "none")
+        assert.is_true(contains(mid.actionLine, "middle"))
+        assert.is_true(contains(mid.actionLine, "DO NOT PING"))
     end)
 
-    it("dit ce qu'il FAIT, QUI rejoindre, le PING et que 1/3 ne suffit pas", function()
-        local st = I.newState()
+    it("CORRIGER (clearDeclaration) ramene aux trois choix, autant de fois qu'on veut", function()
+        local st = I.newState({ leadSeconds = 0 })
         I.start(st)
-        I.declare(st, "3 verts")
-        local snap = I.snapshot(st)
-        local text = table.concat(snap.lines, "\n")
-        assert.are.equal("3V1R", snap.declaration)
-        assert.matches("YOU SEE: 3 GREEN %+ 1 RED", text)
-        assert.is_true(contains(text, "NUMBER ABOVE YOUR HEAD: 1 or 3"))
-        assert.matches("it does NOT reveal the color", text)
-        assert.matches("DO:", text)
-        assert.matches("STATE TO JOIN: 1V3R", text)
-        assert.matches("1 or 3 IS NOT ENOUGH", text)
-        assert.are.equal("1V3R", snap.instruction.complement)
-        -- Le CHASSEUR (3V1R) ne ping pas dans la politique par defaut : la
-        -- consigne le dit et aucune macro ne lui est proposee.
-        assert.are.equal("CHASER", snap.role)
-        assert.matches("YOUR ROLE: CHASER %(3V1R%)", text)
-        assert.matches("PING: NO %- the CHASER does not ping", text)
-        assert.matches("run to it", text)
-        assert.is_false(snap.shouldPing)
-        assert.is_nil(snap.macroPrimary)
-    end)
-
-    it("rappelle explicitement ce qui n'est PAS transmissible", function()
-        local st = I.newState()
-        I.start(st)
-        I.declare(st, "1V3R")
-        local text = table.concat(I.snapshot(st).lines, "\n")
-        assert.matches("UNKNOWN", text)
-        assert.matches("ping", text)
-        assert.is_nil(string.find(text, FORBIDDEN_EVENT, 1, true))
-    end)
-
-    it("change de declaration sans redemarrer l'intermission", function()
-        local st = I.newState()
-        I.start(st)
-        I.tick(st, 1)
         I.declare(st, "3V1R")
+        local snap = I.snapshot(st)
+        assert.are.equal("3V1R", snap.stateText)
+        assert.is_true(snap.showRedo)
+        assert(I.clearDeclaration(st))
+        assert.is_nil(st.declaration)
+        local after = I.snapshot(st)
+        assert.are.equal("", after.stateText)
+        assert.is_false(after.showRedo)
+        assert.is_nil(after.pingBanner)
+        assert.are.equal(1, #after.lines, "le panneau redemande la composition")
+        assert.are.equal("Click the composition you see above your head.", after.lines[1])
+        -- Deuxieme puis troisieme correction : la correction est idempotente.
         I.declare(st, "1V3R")
-        assert.are.equal("1V3R", st.declaration)
-        assert.are.equal(1, st.elapsed)
+        assert(I.clearDeclaration(st))
+        I.declare(st, "2V2R")
+        assert(I.clearDeclaration(st))
+        assert.is_nil(st.declaration)
+        assert.are.equal(0, st.elapsed, "la correction ne relance pas le chrono")
+    end)
+
+    it("refuse CORRIGER quand rien n'est declare ou hors intermission", function()
+        local st = I.newState({ leadSeconds = 0 })
+        local res, err = I.clearDeclaration(st)
+        assert.is_nil(res)
+        assert.matches("not started", err)
+        I.start(st)
+        local res2, err2 = I.clearDeclaration(st)
+        assert.is_nil(res2)
+        assert.matches("nothing to correct", err2)
+        assert.is_nil(I.clearDeclaration(nil))
     end)
 
     it("refuse une declaration invalide, ambigue, ou hors intermission", function()
@@ -560,7 +806,7 @@ describe("Intermission : machine d'etat", function()
     end)
 
     it("termine (DONE) a la fin de la timeline en gardant la consigne", function()
-        local st = I.newState({ visibilitySeconds = 3, durationSeconds = 6 })
+        local st = I.newState({ leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 6 })
         I.start(st)
         I.declare(st, "3V1R")
         I.tick(st, 5)
@@ -569,7 +815,9 @@ describe("Intermission : machine d'etat", function()
         assert.are.equal(I.PHASE.DONE, st.phase)
         local snap = I.snapshot(st)
         assert.is_false(snap.showButtons)
-        assert.matches("3 GREEN %+ 1 RED", table.concat(snap.lines, "\n"))
+        assert.is_true(snap.autoClose)
+        assert.are.equal("3V1R", snap.stateText)
+        assert.matches("INTERMISSION OVER", snap.headline)
         local res, err = I.declare(st, "1V3R")
         assert.is_nil(res)
         assert.matches("over", err)
@@ -583,10 +831,11 @@ describe("Intermission : machine d'etat", function()
         assert.are.equal(I.PHASE.IDLE, st.phase)
         assert.is_nil(st.declaration)
         assert.are.equal(0, st.elapsed)
+        assert.is_nil(I.reset("pas une table"))
     end)
 
     it("ignore un dt negatif ou non numerique", function()
-        local st = I.newState()
+        local st = I.newState({ leadSeconds = 0 })
         I.start(st)
         I.tick(st, -5)
         I.tick(st, "beaucoup")
@@ -596,14 +845,43 @@ describe("Intermission : machine d'etat", function()
 
     it("est deterministe : memes entrees, meme rapport", function()
         local function run()
-            local st = I.newState()
+            local st = I.newState({ leadSeconds = 1 })
             I.start(st)
             I.tick(st, 1.5)
             I.declare(st, "2")
             I.tick(st, 2)
-            return I.snapshot(st)
+            return I.snapshot(st, "color", function()
+                return "Q"
+            end)
         end
         assert.are.same(run(), run())
+    end)
+end)
+
+describe("Intermission : panneau de placement (avant le pull)", function()
+    local I = wowenv.loadCore().Intermission
+
+    it("explique le placement, le raccourci de ping et la suite du flux", function()
+        local view = I.setupView({ leadSeconds = 2, pairs = 2 })
+        assert.are.equal("BEFORE THE PULL - PLACE THE PANEL", view.headline)
+        assert.are.equal("OK", view.okLabel)
+        assert.are.equal("Close", view.closeLabel)
+        local text = table.concat(view.lines, "\n")
+        assert.is_true(contains(text, "Drag this frame"))
+        assert.is_true(contains(text, "Options > Keybindings"))
+        assert.is_true(contains(text, "2 s before each intermission"))
+        assert.is_true(contains(text, "Out-of-game plan loaded (2 pairs)."))
+    end)
+
+    it("dit que le plan hors jeu est optionnel quand il n'y en a pas", function()
+        local view = I.setupView({})
+        local text = table.concat(view.lines, "\n")
+        assert.is_true(contains(text, "No out-of-game plan loaded (optional)."))
+        assert.is_true(contains(text, "2 s before each intermission"), "lead par defaut")
+        local zero = I.setupView({ leadSeconds = 0, pairs = 0 })
+        assert.is_true(contains(table.concat(zero.lines, "\n"), "0 s before each intermission"))
+        -- Aucun argument : jamais d'erreur.
+        assert.is_table(I.setupView(nil).lines)
     end)
 end)
 
@@ -641,37 +919,41 @@ describe("Intermission : plan prepare hors jeu", function()
         assert.matches("1V3R%+3V1R", table.concat(plan2.lines, "\n"))
     end)
 
-    it("deduit le ROLE de ping du role prepare, selon la politique", function()
+    it("deduit le ROLE de ping du role prepare, avec le ping a utiliser", function()
         local clean = assert(Pairing.validateAssignment(loadFixture()))
         -- Bathman is prepared as 1V3R = ANCHOR: under the default policy it is
-        -- the one that pings, and the ping macro is shown to it.
-        local anchor = assert(I.buildPlan(clean, "Bathman"))
+        -- the one that pings, and its ping/key are named (no macro any more).
+        local anchor = assert(I.buildPlan(clean, "Bathman", "anchors", function()
+            return "Q"
+        end))
         assert.are.equal("ANCHOR", anchor.pingRole)
         local anchorText = table.concat(anchor.lines, "\n")
         assert.matches("Your intermission role: ANCHOR", anchorText)
         assert.matches("ping: YES", anchorText)
-        assert.matches("Ping macro to prepare: /run C_Ping%.SendMacroPing", anchorText)
+        assert.is_true(contains(anchorText, "PING: Warning - press Q"))
+        assert.is_false(contains(anchorText, "SendMacroPing"))
         assert.are.equal("anchors", anchor.pingPolicy)
         assert.matches("ANCHORS: only the 1V3R anchors ping", anchorText)
-        -- Velna is prepared as 2V2R = MIDDLE: no ping, no macro under "anchors".
+        -- Sans touche bindi, la ligne demande un raccourci.
+        local noKey = assert(I.buildPlan(clean, "Bathman"))
+        assert.is_true(contains(table.concat(noKey.lines, "\n"), "set a keybind in Options > Keybindings"))
+        -- Velna is prepared as 2V2R = MIDDLE: no ping under "anchors".
         local mid = assert(I.buildPlan(clean, "Velna"))
         assert.are.equal("MID", mid.pingRole)
         assert.is_false(mid.shouldPing)
-        assert.is_nil(mid.macroPrimary)
+        assert.is_nil(mid.pingHint)
         local midText = table.concat(mid.lines, "\n")
         assert.matches("Your intermission role: MIDDLE", midText)
         assert.matches("ping: NO", midText)
-        assert.is_false(contains(midText, "Ping macro to prepare"))
-        -- Under "color" the MIDDLE pings too and gets its macro.
+        -- Under "color" the MIDDLE pings too and its ping is named.
         local colored = assert(I.buildPlan(clean, "Velna", "color"))
         assert.is_true(colored.shouldPing)
-        assert.is_string(colored.macroPrimary)
-        assert.matches("Enum%.PingSubjectType%.OnMyWay", colored.macroPrimary)
+        assert.are.equal("OnMyWay", colored.pingHint.ping)
         -- Under "none" nobody pings, not even the anchor.
         local none = assert(I.buildPlan(clean, "Bathman", "none"))
         assert.is_false(none.shouldPing)
-        assert.is_nil(none.macroPrimary)
-        assert.is_false(contains(table.concat(none.lines, "\n"), "Ping macro to prepare"))
+        assert.is_nil(none.pingHint)
+        assert.is_false(contains(table.concat(none.lines, "\n"), "PING: Warning"))
     end)
 
     it("signale une rencontre mortelle (3V1R + 2V2R = 5 verts)", function()
@@ -779,10 +1061,13 @@ describe("Config : bloc intermission", function()
         local b = Config.defaultIntermission()
         assert.are_not.equal(a, b)
         assert.are_not.equal(a.position, b.position)
+        assert.are_not.equal(a.scheduleSeconds, b.scheduleSeconds)
         a.scale = 3
         a.position.x = 99
+        a.scheduleSeconds[1] = 1
         assert.are.equal(1.0, Config.defaultIntermission().scale)
         assert.are.equal(0, Config.defaultIntermission().position.x)
+        assert.are.equal(46.3, Config.defaultIntermission().scheduleSeconds[1])
     end)
 
     it("remplit le bloc au chargement de l'addon sans ecraser l'existant", function()
@@ -797,6 +1082,8 @@ describe("Config : bloc intermission", function()
         assert.is_true(resolved.enabled)
         assert.are.equal(2.0, resolved.scale)
         assert.are.equal(3, resolved.visibilitySeconds)
+        assert.are.equal(2, resolved.leadSeconds)
+        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, resolved.scheduleSeconds)
         assert.are.equal(0, resolved.position.x)
         -- Un bloc absent est cree frais, et jamais partage avec les defaults.
         local db2 = Config.ensureDB({})
@@ -804,26 +1091,30 @@ describe("Config : bloc intermission", function()
         assert.are_not.equal(db2.intermission, db.intermission)
     end)
 
-    it("borne l'echelle et les durees", function()
-        local c = Config.resolveIntermission({ scale = 99, visibilitySeconds = 0, durationSeconds = 1 })
+    it("borne l'echelle, les durees et le lead", function()
+        local c = Config.resolveIntermission({ scale = 99, leadSeconds = 99, visibilitySeconds = 0, durationSeconds = 1 })
         assert.are.equal(3.0, c.scale)
+        assert.are.equal(10, c.leadSeconds)
         assert.are.equal(1, c.visibilitySeconds)
         assert.is_true(c.durationSeconds > c.visibilitySeconds)
-        local c2 = Config.resolveIntermission({ scale = 0.01 })
+        local c2 = Config.resolveIntermission({ scale = 0.01, leadSeconds = -4 })
         assert.are.equal(0.5, c2.scale)
+        assert.are.equal(0, c2.leadSeconds)
     end)
 
-    it("ignore les types incoherents", function()
+    it("ignore les types incoherents et normalise le planning", function()
         local c = Config.resolveIntermission({
             enabled = "oui",
             scale = "grand",
+            leadSeconds = "deux",
             durationSeconds = {},
-            macroTargetToken = 12,
+            scheduleSeconds = { 30, "x", -1 },
         })
         assert.is_true(c.enabled)
         assert.are.equal(1.0, c.scale)
         assert.are.equal(20, c.durationSeconds)
-        assert.are.equal("player", c.macroTargetToken)
+        assert.are.equal(2, c.leadSeconds)
+        assert.are.same({ 30 }, c.scheduleSeconds)
     end)
 
     it("accepte une valeur explicite valide", function()
@@ -832,18 +1123,20 @@ describe("Config : bloc intermission", function()
             startOnEncounterStart = false,
             autoShowPanel = false,
             scale = 1.25,
+            leadSeconds = 1,
             visibilitySeconds = 5,
             durationSeconds = 30,
-            macroTargetToken = "target",
+            scheduleSeconds = { 40, 90.5 },
             position = { point = "TOPLEFT", relativePoint = "TOPLEFT", x = -120, y = -40 },
         })
         assert.is_false(c.enabled)
         assert.is_false(c.startOnEncounterStart)
         assert.is_false(c.autoShowPanel)
         assert.are.equal(1.25, c.scale)
+        assert.are.equal(1, c.leadSeconds)
         assert.are.equal(5, c.visibilitySeconds)
         assert.are.equal(30, c.durationSeconds)
-        assert.are.equal("target", c.macroTargetToken)
+        assert.are.same({ 40, 90.5 }, c.scheduleSeconds)
         assert.are.equal("TOPLEFT", c.position.point)
         assert.are.equal(-120, c.position.x)
     end)
@@ -853,7 +1146,9 @@ describe("Config : bloc intermission", function()
         assert.is_true(c.enabled)
         assert.is_true(c.startOnEncounterStart)
         assert.are.equal(3, c.visibilitySeconds)
-        assert.are.equal("player", c.macroTargetToken)
+        assert.are.equal(2, c.leadSeconds)
         assert.are.equal("CENTER", c.position.point)
+        -- L'ancien champ de macro a disparu : plus aucune trace dans les defaults.
+        assert.is_nil(c.macroTargetToken)
     end)
 end)

@@ -15,6 +15,9 @@ read_globals = {
     "DEFAULT_CHAT_FRAME", "BackdropTemplate", "SlashCmdList",
     -- allowed unit API (player name only, never a combat value)
     "UnitName", "GetLocale",
+    -- Ping keybind READ-ONLY: UI/ only, under pcall, to display the key the
+    -- player bound to a native ping (the addon never pings).
+    "GetBindingKey",
     -- Misc
     "C_Timer",
     -- CLIENT clock: used ONLY by UI/ to timestamp the decision published in the

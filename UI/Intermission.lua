@@ -2,20 +2,37 @@
     GideonRaid / UI / Intermission.lua
 
     RENDERING LAYER ONLY ("Intermission Coach"). This file may call the WoW API
-    (frames, fonts, C_Timer). It contains NO business computation: everything
-    comes from ns.Intermission.snapshot() / ns.Intermission.buildPlan().
+    (frames, fonts, C_Timer, GetBindingKey). It contains NO business computation:
+    everything comes from ns.Intermission (snapshot / setupView / run machine).
 
     12.x prohibitions (see docs/CONVENTIONS.md):
       - no read of aura / health / resource (possible SECRET value);
       - no combat log event;
-      - no addon -> addon message in an instance;
-      - no ping sent by the addon: C_Ping.SendMacroPing is #protected
-        (https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing). The addon only
-        DISPLAYS the text of a macro that the player triggers.
+      - no addon -> addon message in an instance.
 
-    What the player sees here is LOCAL to their client: the addon cannot know
-    what other players see or what they declare.
+    PING: THE PLAYER PINGS, WITH THE NATIVE BLIZZARD PING KEYBIND. Measured in
+    game by the raid lead: an addon CANNOT ping at all - neither from a macro nor
+    from a binding - the ping API is restricted to Blizzard's own UI ("action
+    usable only by the Blizzard UI"). This file therefore:
+      - READS the key the player bound (GetBindingKey, under pcall) to tell them
+        which key to press;
+      - NEVER pings and NEVER prepares a macro: no ping call exists here;
+      - shows "set a keybind in Options > Keybindings" as long as no key is bound
+        (the exact binding names are still TO BE CONFIRMED IN GAME: the candidate
+        list comes from Core/Intermission.lua, PING_BINDINGS).
+
+    FLOW OF A RAID EVENING (no argument of any combat event is ever read):
+      a. before the pull, /gr -> "PLACE INTERMISSION PANEL": the frame is shown
+         in placement mode, dragged where the player wants it and the position is
+         saved in the SavedVariables;
+      b. the player prepares the ping keybind and confirms with OK -> panel closed;
+      c. ENCOUNTER_START arms the pre-computed schedule (it is only a starting
+         gun): the panel opens BY ITSELF shortly before each intermission;
+      d. the player clicks the composition they see (REDO corrects a mistake);
+      e. at the end of the intermission the panel closes BY ITSELF;
+      f. the next intermission follows the same cycle, automatically.
 ----------------------------------------------------------------------------]]
+--
 local _, ns = ...
 
 --- Core/Locale.lua is loaded BEFORE this file by the .toc (every string
@@ -25,18 +42,57 @@ local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before UI/Inter
 local UI = ns.UI or {}
 ns.UI = UI
 
+--- Constant local time step (never read from the client): Core/ stays pure and
+--- deterministic, testable with an injected dt.
 local TICK_SECONDS = 0.1
 
+local panel, ticker, state, run, setupMode
+
 --- API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
---- Constraint: this panel only displays strings written by the player
---- (1/2/3 click) or prepared out of game (GIDEON SavedVariables). No unit value
---- is read, hence no comparison on a secret value.
+--- Constraint: this panel only displays strings written by the player (a click
+--- on a composition) or prepared out of game (GIDEON SavedVariables). No unit
+--- value is read, hence no comparison on a secret value.
 local function config()
     local db = _G.GideonRaidDB
     return ns.Config.resolveIntermission(db and db.intermission)
 end
 
-local panel, ticker, state
+--- Reads the key the PLAYER bound to one of the native ping keybinds
+--- (Options > Keybindings > ping system) - API:
+--- https://warcraft.wiki.gg/wiki/API_GetBindingKey
+--- READ ONLY, under pcall, and it is the ONLY ping-related API this addon
+--- touches: it never sends a ping (the ping API is restricted to Blizzard's UI).
+--- The candidates come from Core (their exact names are still to be confirmed in
+--- game); a wrong candidate or a missing API simply means "no key known", and the
+--- panel then asks for a keybind instead of showing a shortcut that does not
+--- exist.
+--- @param bindNames table|nil candidate binding names, ordered
+--- @return string|nil key ("Q", "ALT-F", ...)
+local function resolveBindingKey(bindNames)
+    if type(bindNames) ~= "table" then
+        return nil
+    end
+    if type(_G.GetBindingKey) ~= "function" then
+        return nil
+    end
+    for index = 1, #bindNames do
+        local ok, key = pcall(_G.GetBindingKey, bindNames[index])
+        if ok and type(key) == "string" and key ~= "" then
+            return key
+        end
+    end
+    return nil
+end
+
+--- The engine ticks only while something is timed: the encounter clock (waiting
+--- for the next intermission) or the intermission itself.
+local function engineActive()
+    if run ~= nil then
+        return true
+    end
+    local phase = state ~= nil and state.phase or nil
+    return phase == ns.Intermission.PHASE.PENDING or phase == ns.Intermission.PHASE.VISIBLE or phase == ns.Intermission.PHASE.DARK
+end
 
 local function stopTicker()
     if ticker then
@@ -49,8 +105,6 @@ local function ensureTicker()
     if ticker then
         return ticker
     end
-    -- The time step is a LOCAL CONSTANT: no value read from the client, so the
-    --- Core module stays pure and deterministic (testable with an injected dt).
     ticker = C_Timer.NewTicker(TICK_SECONDS, function()
         UI.IntermissionTick(TICK_SECONDS)
     end)
@@ -63,7 +117,7 @@ local function ensurePanel()
     end
 
     local p = CreateFrame("Frame", "GideonRaidIntermissionPanel", UIParent, "BackdropTemplate")
-    p:SetSize(560, 520)
+    p:SetSize(560, 360)
     p:SetMovable(true)
     p:EnableMouse(true)
     p:RegisterForDrag("LeftButton")
@@ -88,21 +142,29 @@ local function ensurePanel()
     p.title:SetPoint("TOP", 0, -14)
     p.title:SetText(Locale.t("ui.panelTitle"))
 
-    -- The convention reminder, in very large type (module requirement).
-    p.headline = p:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    p.headline:SetPoint("TOP", 0, -40)
+    -- The STATE, in very large type: the only thing to read first in combat
+    -- ("3V1R"). It stays empty until the player declares.
+    p.state = p:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    p.state:SetPoint("TOP", 0, -34)
+    p.state:SetText("")
+
+    -- The phase line: "GET READY: 2 s", "LOOK AT THE ORB COLOR...: 3 s",
+    -- "ROOM DARKENED...", or the placement headline before the pull.
+    p.headline = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    p.headline:SetPoint("TOP", 0, -74)
     p.headline:SetText("")
 
-    -- The ping banner: the FIRST thing the player must read ("PING: YES/NO").
-    -- Its text and its color come from Core (role + configured policy).
+    -- The ping banner: the SECOND thing to read ("PING: YES/NO"), colored with
+    -- the ping color of the state. Text and color come from Core.
     p.pingBanner = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.pingBanner:SetPoint("TOPLEFT", 24, -78)
+    p.pingBanner:SetPoint("TOPLEFT", 24, -110)
     p.pingBanner:SetText("")
     p.pingBanner:Hide()
 
+    -- The essential, at most three short lines (role, ping/key, action).
     p.body = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.body:SetPoint("TOPLEFT", 24, -104)
-    p.body:SetWidth(492)
+    p.body:SetPoint("TOPLEFT", 24, -140)
+    p.body:SetWidth(512)
     p.body:SetJustifyH("LEFT")
     p.body:SetJustifyV("TOP")
     p.body:SetText("")
@@ -118,7 +180,7 @@ local function ensurePanel()
         local rec = ns.Intermission.getDeclaration(key)
         local button = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
         button:SetSize(168, 64)
-        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -300)
+        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -230)
         button:SetText(rec ~= nil and rec.buttonLabel or key)
         button:SetScript("OnClick", function()
             UI.IntermissionDeclare(key)
@@ -126,28 +188,26 @@ local function ensurePanel()
         p.buttons[index] = button
     end
 
-    p.macroLabel = p:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    p.macroLabel:SetPoint("TOPLEFT", 24, -372)
-    p.macroLabel:SetText(Locale.t("ui.macroLabel"))
-
-    p.macroBox = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
-    p.macroBox:SetSize(492, 24)
-    p.macroBox:SetPoint("TOPLEFT", 24, -390)
-    p.macroBox:SetAutoFocus(false)
-    p.macroBox:SetText("")
-    p.macroBox:SetTextInsets(6, 6, 0, 0)
-    p.macroBox:SetScript("OnEditFocusGained", function(self)
-        self:HighlightText()
+    -- REDO / CORRECT: forgets the declaration and brings the three choices back.
+    -- Usable as many times as needed (the state machine stays untouched).
+    p.redo = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+    p.redo:SetSize(130, 22)
+    p.redo:SetPoint("BOTTOMLEFT", 16, 14)
+    p.redo:SetText(Locale.t("ui.redo"))
+    p.redo:SetScript("OnClick", function()
+        UI.IntermissionRedo()
     end)
-    p.macroBox:SetScript("OnEscapePressed", function(self)
-        self:ClearFocus()
-    end)
+    p.redo:Hide()
 
-    p.note = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    p.note:SetPoint("TOPLEFT", 24, -420)
-    p.note:SetWidth(492)
-    p.note:SetJustifyH("LEFT")
-    p.note:SetText("")
+    -- OK: validates the placement (step b of the flow) and closes the panel.
+    p.ok = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+    p.ok:SetSize(90, 22)
+    p.ok:SetPoint("BOTTOMRIGHT", -114, 14)
+    p.ok:SetText(Locale.t("ui.ok"))
+    p.ok:SetScript("OnClick", function()
+        UI.IntermissionConfirmSetup()
+    end)
+    p.ok:Hide()
 
     p.close = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
     p.close:SetSize(90, 22)
@@ -203,71 +263,106 @@ local function parseColor(hex)
     return 1.0, 0.33, 0.33
 end
 
---- Shows/hides the ping macro zone: the macro is DISPLAYED ONLY when the role
---- must ping under the configured policy. A CHASER or a MIDDLE under "anchors"
---- sees the reason instead of a macro it must not use.
-local function applyMacroArea(p, snap)
-    if snap.macroPrimary then
-        p.macroLabel:Show()
-        p.macroBox:Show()
-        p.macroBox:SetText(snap.macroPrimary)
-        p.note:SetText(Locale.format("ui.macroFallback", tostring(snap.macroFallback), tostring(snap.macroNote)))
-        return
+--- Number of pairs prepared out of game (0 when there is no assignment block).
+--- Trivial data presence, no business rule.
+local function preparedPairs()
+    local assignment = ns.Config.getAssignment()
+    if type(assignment) == "table" and type(assignment.pairs) == "table" then
+        return #assignment.pairs
     end
-    p.macroBox:SetText("")
-    if snap.declaration ~= nil and not snap.macroAllowed then
-        p.macroLabel:Hide()
-        p.macroBox:Hide()
-        p.note:SetText(Locale.t("ui.macroForbidden"))
-        return
-    end
-    p.macroLabel:Show()
-    p.macroBox:Show()
-    p.note:SetText(Locale.t("ui.macroPrompt"))
+    return 0
 end
 
---- Rebuilds the display from the state computed by Core/.
+--- Rebuilds the display from what Core/ computed. The panel NEVER shows more
+--- than the essential during a fight (state, role, PING: YES/NO, ONE action
+--- line): the long explanations live in docs/, not on screen.
 function UI.IntermissionRefresh()
     local p = ensurePanel()
     local c = config()
+
+    if setupMode then
+        -- Placement mode (before the pull): drag + ping keybind reminder + OK.
+        local view = ns.Intermission.setupView({ leadSeconds = c.leadSeconds, pairs = preparedPairs() })
+        p.state:SetText("")
+        p.headline:SetText(view.headline)
+        p.body:SetText(table.concat(view.lines, "\n"))
+        p.pingBanner:Hide()
+        for _, button in ipairs(p.buttons) do
+            button:Hide()
+        end
+        p.redo:Hide()
+        p.ok:SetText(view.okLabel)
+        p.ok:Show()
+        return view
+    end
+
     -- The ping policy is INJECTED into Core (Core never reads the SavedVariables)
-    -- and decides the role order, the "PING: YES/NO" banner and the macro.
-    local snap = ns.Intermission.snapshot(state, c.pingMode)
+    -- and decides the role order, the "PING: YES/NO" banner and the ping line.
+    -- The binding resolver is injected too: Core stays free of any API call.
+    local snap = ns.Intermission.snapshot(state, c.pingMode, resolveBindingKey)
+    p.state:SetText(snap.stateText)
     p.headline:SetText(snap.headline)
     p.body:SetText(table.concat(snap.lines, "\n"))
     for _, button in ipairs(p.buttons) do
-        -- Label already set at creation (it comes from Core and never changes):
-        -- here we only show/hide.
         button:SetShown(snap.showButtons)
     end
-    if snap.pingText then
-        p.pingBanner:SetText(snap.pingText)
+    if snap.pingBanner ~= nil then
+        p.pingBanner:SetText(snap.pingBanner)
         p.pingBanner:SetTextColor(parseColor(snap.pingColorHex))
         p.pingBanner:Show()
     else
         p.pingBanner:Hide()
     end
-    applyMacroArea(p, snap)
+    p.redo:SetShown(snap.showRedo)
+    p.ok:Hide()
     return snap
 end
 
 function UI.IntermissionShow()
     local p = ensurePanel()
+    setupMode = false
     UI.IntermissionApplyConfig()
-    UI.IntermissionRefresh()
     p:Show()
+    UI.IntermissionRefresh()
 end
 
 function UI.IntermissionHide()
     local p = ensurePanel()
+    setupMode = false
     p:Hide()
+end
+
+--- Enters PLACEMENT MODE: the intermission panel is shown before the pull so the
+--- player can drag it where they want it (position saved) and read how to
+--- prepare the ping keybind. Pressing OK closes it (step b of the flow).
+function UI.IntermissionSetup()
+    local c = config()
+    if not c.enabled then
+        UI.Print(Locale.t("ui.disabled"))
+        return
+    end
+    local p = ensurePanel()
+    UI.IntermissionApplyConfig()
+    setupMode = true
+    p:Show()
+    UI.IntermissionRefresh()
+end
+
+--- OK button of the placement panel: saves the position and closes.
+function UI.IntermissionConfirmSetup()
+    if not setupMode then
+        return
+    end
+    UI.IntermissionSavePosition()
+    UI.IntermissionHide()
+    UI.Print(Locale.t("ui.setupDone"))
 end
 
 --- Manual key/button: shows (or hides) the intermission panel.
 function UI.IntermissionToggle()
     local p = ensurePanel()
     if p:IsShown() then
-        p:Hide()
+        UI.IntermissionHide()
         return
     end
     local c = config()
@@ -275,35 +370,39 @@ function UI.IntermissionToggle()
         UI.Print(Locale.t("ui.disabled"))
         return
     end
-    if state == nil or state.phase == ns.Intermission.PHASE.IDLE then
-        UI.IntermissionStart()
-        return
-    end
     UI.IntermissionShow()
 end
 
---- Starts the intermission (trigger: key, button, or ENCOUNTER_START).
+--- Starts ONE intermission (silent): state machine in PENDING, then VISIBLE...
+--- Used by the schedule (step c) and by the manual commands.
+--- @return boolean started
+local function beginIntermission(c)
+    if state == nil then
+        state = ns.Intermission.newState()
+    end
+    local started, err = ns.Intermission.start(state, {
+        leadSeconds = c.leadSeconds,
+        visibilitySeconds = c.visibilitySeconds,
+        durationSeconds = c.durationSeconds,
+    })
+    if not started then
+        UI.Print(Locale.format("ui.intermissionError", tostring(err)))
+        return false
+    end
+    ensureTicker()
+    UI.IntermissionShow()
+    return true
+end
+
+--- Manual start (`/gr inter start`): verbose, the player asked for it.
 function UI.IntermissionStart()
     local c = config()
     if not c.enabled then
         UI.Print(Locale.t("ui.disabled"))
         return
     end
-    if state == nil then
-        state = ns.Intermission.newState()
-    end
-    local started, err = ns.Intermission.start(state, {
-        visibilitySeconds = c.visibilitySeconds,
-        durationSeconds = c.durationSeconds,
-    })
-    if not started then
-        UI.Print(Locale.format("ui.intermissionError", tostring(err)))
-        return
-    end
-    ensureTicker()
-    UI.Print(Locale.format("ui.started", c.visibilitySeconds))
-    if c.autoShowPanel then
-        UI.IntermissionShow()
+    if beginIntermission(c) then
+        UI.Print(Locale.format("ui.started", c.visibilitySeconds))
     end
 end
 
@@ -312,8 +411,7 @@ function UI.IntermissionStop()
     if state ~= nil then
         ns.Intermission.reset(state)
     end
-    local p = ensurePanel()
-    p:Hide()
+    UI.IntermissionHide()
 end
 
 function UI.IntermissionReset()
@@ -324,15 +422,35 @@ function UI.IntermissionReset()
     UI.IntermissionRefresh()
 end
 
---- Advances by one tick. dt is injected by the ticker (local constant): Core
+--- Advances by one tick. dt is injected by the engine (local constant): Core
 --- never reads the client clock.
+---   1. the encounter clock (ENCOUNTER_START is the origin, its arguments are
+---      never read) opens the panel shortly before each pre-computed intermission;
+---   2. the intermission clock counts the lead time, the visibility window, the
+---      darkened room, then DONE -> the panel CLOSES BY ITSELF.
 function UI.IntermissionTick(dt)
-    if state == nil then
-        return
+    if run ~= nil then
+        local _, opened = ns.Intermission.advanceRun(run, dt)
+        if opened ~= nil then
+            beginIntermission(config())
+        end
+        if ns.Intermission.runFinished(run) then
+            run = nil
+        end
     end
-    ns.Intermission.tick(state, dt)
-    UI.IntermissionRefresh()
-    if state.phase == ns.Intermission.PHASE.DONE then
+    if state ~= nil then
+        local phase = state.phase
+        if phase == ns.Intermission.PHASE.PENDING or phase == ns.Intermission.PHASE.VISIBLE or phase == ns.Intermission.PHASE.DARK then
+            ns.Intermission.tick(state, dt)
+            if state.phase == ns.Intermission.PHASE.DONE then
+                UI.IntermissionHide()
+            end
+        end
+    end
+    if panel ~= nil and panel:IsShown() then
+        UI.IntermissionRefresh()
+    end
+    if not engineActive() then
         stopTicker()
     end
 end
@@ -346,8 +464,11 @@ function UI.IntermissionDeclare(declaration)
         UI.Print(Locale.t("ui.disabled"))
         return
     end
-    if state == nil or state.phase == ns.Intermission.PHASE.IDLE then
-        UI.IntermissionStart()
+    if state == nil or state.phase == ns.Intermission.PHASE.IDLE or state.phase == ns.Intermission.PHASE.DONE then
+        -- Manual use outside a scheduled intermission (key, button, command).
+        if not beginIntermission(c) then
+            return
+        end
     end
     local _, err = ns.Intermission.declare(state, declaration)
     if err ~= nil then
@@ -373,17 +494,36 @@ function UI.IntermissionDeclare(declaration)
     UI.IntermissionRefresh()
 end
 
+--- REDO / CORRECT button: forgets the declaration and shows the three
+--- composition choices again. Usable as many times as the player wants.
+function UI.IntermissionRedo()
+    if state == nil then
+        return
+    end
+    local _, err = ns.Intermission.clearDeclaration(state)
+    if err ~= nil then
+        UI.Print(Locale.format("ui.redoFailed", tostring(err)))
+        return
+    end
+    UI.IntermissionRefresh()
+end
+
 --- ENCOUNTER_START is an instance event, not a combat log one. Its arguments
---- are NOT read (no secret value risk): only the trigger is used.
+--- are NOT read (no secret value risk): it is only the STARTING GUN of the
+--- pre-computed schedule. The panel then opens by itself shortly before each
+--- intermission and closes at the end of each one.
 function UI.IntermissionOnEncounterStart()
     local c = config()
     if not c.enabled or not c.startOnEncounterStart then
         return
     end
-    UI.IntermissionStart()
+    run = ns.Intermission.newRun(c.scheduleSeconds, c.leadSeconds)
+    ensureTicker()
+    UI.Print(Locale.format("ui.armed", ns.Intermission.runRemaining(run), c.leadSeconds))
 end
 
 function UI.IntermissionOnEncounterEnd()
+    run = nil
     UI.IntermissionStop()
 end
 
@@ -399,7 +539,7 @@ end
 
 function UI.IntermissionStatus()
     local c = config()
-    local snap = ns.Intermission.snapshot(state, c.pingMode)
+    local snap = ns.Intermission.snapshot(state, c.pingMode, resolveBindingKey)
     UI.Print(
         Locale.format(
             "ui.statusLine",
@@ -410,23 +550,24 @@ function UI.IntermissionStatus()
     )
     UI.Print(Locale.format("ui.timelineLine", c.visibilitySeconds, c.durationSeconds, c.scale))
     UI.Print(Locale.format("ui.pingPolicyLine", c.pingMode, snap.policyLine))
+    UI.Print(Locale.format("ui.scheduleLine", #c.scheduleSeconds, c.leadSeconds))
 end
 
-function UI.IntermissionPrintMacro()
+--- `/gr inter ping`: which ping to use and which key to press, plus the binding
+--- names tried (that is exactly what the in-game confirmation has to check).
+function UI.IntermissionPrintPing()
     local c = config()
-    local snap = ns.Intermission.snapshot(state, c.pingMode)
-    if snap.macroPrimary then
-        UI.Print(Locale.format("ui.macroToPaste", snap.macroPrimary))
-        UI.Print(Locale.format("ui.macroFallbackLine", tostring(snap.macroFallback), tostring(snap.macroNote)))
+    local snap = ns.Intermission.snapshot(state, c.pingMode, resolveBindingKey)
+    if snap.declaration == nil then
+        UI.Print(Locale.t("ui.noDeclaration"))
         return
     end
-    -- No macro to print: either nothing is declared yet, or the role must not
-    -- ping under the current policy (the reason is always stated, never silent).
-    if snap.declaration ~= nil and not snap.macroAllowed then
-        UI.Print(Locale.format("ui.noMacroForbidden", tostring(snap.roleName), tostring(snap.pingPolicy)))
+    if snap.pingHint == nil then
+        UI.Print(Locale.format("err.pingNotAllowed", tostring(snap.roleName), tostring(c.pingMode)))
         return
     end
-    UI.Print(Locale.t("ui.noMacro"))
+    UI.Print(snap.pingHint.line)
+    UI.Print(Locale.format("ui.pingCandidates", table.concat(snap.pingHint.bindNames, ", ")))
 end
 
 --- Prints the plan prepared out of game into the chat (same source as the panel).
@@ -438,7 +579,7 @@ function UI.PrintPlan()
         UI.Print(Locale.format("status.noAssignment", tostring(err)))
         return
     end
-    local plan, planErr = ns.Intermission.buildPlan(assignment, me, c.pingMode)
+    local plan, planErr = ns.Intermission.buildPlan(assignment, me, c.pingMode, resolveBindingKey)
     if not plan then
         UI.Print(Locale.format("ui.unreadablePlan", tostring(planErr)))
         return
@@ -454,8 +595,9 @@ end
 function UI.IntermissionApplyStaticText()
     local p = ensurePanel()
     p.title:SetText(Locale.t("ui.panelTitle"))
-    p.macroLabel:SetText(Locale.t("ui.macroLabel"))
     p.close:SetText(Locale.t("ui.close"))
+    p.ok:SetText(Locale.t("ui.ok"))
+    p.redo:SetText(Locale.t("ui.redo"))
     for index = 1, #ns.Intermission.STATES do
         local key = ns.Intermission.STATES[index]
         local rec = ns.Intermission.getDeclaration(key)

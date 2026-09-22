@@ -5,16 +5,23 @@
 
     Decision du raid lead : un etat canonique (1V3R / 2V2R / 3V1R) ne porte plus
     un « role par numero » mais un ROLE :
-      - 1V3R = ANCRE  (ANCHOR) : sur place, ping (macro) ou se fait pinger ;
+      - 1V3R = ANCRE  (ANCHOR) : sur place, ping avec SON raccourci natif ;
       - 2V2R = MILIEU (MID)    : milieu / sous le boss, s'apparie a un 2V2R ;
       - 3V1R = CHASSEUR (CHASER) : fonce sur un ping, ne ping pas.
     La politique de ping est CONFIGURABLE (GideonRaidDB.intermission.pingMode,
     commande /gr ping) :
       - "anchors" (defaut) : seule l'ANCRE ping (~8 pings par raid au lieu de ~20) ;
-      - "color"            : chaque etat ping de sa propre couleur (guide raidstrats) ;
+      - "color"            : chaque etat ping son propre ping ;
       - "none"             : personne ne ping, on joue en positions.
+
+    Depuis le test en jeu reel : AUCUNE MACRO. La macro etait refusee par
+    Blizzard (« action utilisable uniquement par l'UI de Blizzard »). L'addon
+    affiche QUEL ping utiliser et, si le joueur a bindi une touche, LAQUELLE
+    presser (touche lue par la couche de rendu, injectee ici).
+
     La logique testee ici est PURE (Core/), puis le cablage en jeu (/gr ping).
 ----------------------------------------------------------------------------]]
+--
 local stub = require("tests.support.wowapi_stub")
 local wowenv = require("tests.support.wowenv")
 
@@ -79,18 +86,23 @@ describe("Ping : politiques (logique pure)", function()
             assert.are.equal("anchors", rec.pingPolicy)
             assert.are.equal(expected and "YES" or "NO", rec.pingDecision)
             assert.are.equal(expected, I.shouldPing(key))
-            assert.matches(expected and "ping yourself" or "does not ping", rec.pingLine)
+            if expected then
+                assert.is_string(rec.pingLine)
+                assert.matches("Warning", rec.pingLine)
+            else
+                assert.is_nil(rec.pingLine, key .. " ne doit porter AUCUNE consigne de ping")
+            end
         end
         assert.are.equal("ANCHOR", I.getDeclaration("1V3R").role)
         assert.are.equal("MID", I.getDeclaration("2V2R").role)
         assert.are.equal("CHASER", I.getDeclaration("3V1R").role)
     end)
 
-    it("politique « color » : les trois etats ping avec LEUR couleur", function()
+    it("politique « color » : les trois etats ping avec LEUR ping", function()
         local expected = {
-            ["1V3R"] = { "RED", "Warning" },
-            ["2V2R"] = { "BLUE", "OnMyWay" },
-            ["3V1R"] = { "GREEN", "Assist" },
+            ["1V3R"] = { "RED", "Warning", "Warning" },
+            ["2V2R"] = { "BLUE", "OnMyWay", "On My Way" },
+            ["3V1R"] = { "GREEN", "Assist", "Assist" },
         }
         for _, key in ipairs(I.STATES) do
             local rec = I.getDeclaration(key, "color")
@@ -98,17 +110,19 @@ describe("Ping : politiques (logique pure)", function()
             assert.are.equal("YES", rec.pingDecision, key)
             assert.are.equal(expected[key][1], rec.pingColor, key)
             assert.are.equal(expected[key][2], rec.ping, key)
-            assert.is_true(contains(rec.pingLine, expected[key][1]), key)
-            assert.is_true(contains(rec.pingLine, expected[key][2]), key)
+            assert.is_true(contains(rec.pingLine, expected[key][3]), key)
+            assert.is_true(contains(rec.pingLine, "Options > Keybindings"), key)
         end
     end)
 
-    it("politique « none » : PERSONNE ne ping", function()
+    it("politique « none » : PERSONNE ne ping ni ne porte de consigne de ping", function()
         for _, key in ipairs(I.STATES) do
             local rec = I.getDeclaration(key, "none")
             assert.is_false(rec.shouldPing, key)
             assert.are.equal("NO", rec.pingDecision, key)
             assert.are.equal("none", rec.pingPolicy, key)
+            assert.is_nil(rec.pingLine, key)
+            assert.is_nil(I.pingHint(key, "none", "Q"), key)
         end
         assert.is_false(I.shouldPing("1V3R", "none"))
         assert.is_true(I.shouldPing("1V3R", "anchors"))
@@ -117,57 +131,46 @@ describe("Ping : politiques (logique pure)", function()
 
     it("consigne operationnelle de l'ANCRE : sur place, ping, ne bouge pas", function()
         local anchor = I.getDeclaration("1V3R") -- anchors
-        assert.matches("STAY WHERE YOU ARE", anchor.roleOrder)
-        assert.is_true(contains(anchor.roleOrder, "DO NOT MOVE"))
-        assert.matches("ping", anchor.roleOrder)
-        -- Un AUTRE joueur du raid peut pinger l'ancre : la consigne le dit.
-        assert.is_true(contains(anchor.pingLine, "or let another player ping you"))
-        assert.is_true(contains(anchor.pingLine, "you are the ANCHOR"))
-        -- Sans ping (politique none), la consigne reste "ne bouge pas" et ne
+        assert.are.equal("ROLE: ANCHOR", anchor.roleLine)
+        assert.is_true(contains(anchor.actionLine, "STAY WHERE YOU ARE"))
+        assert.is_true(contains(anchor.actionLine, "ping yourself (Warning)"))
+        assert.is_true(contains(anchor.actionLine, "jump on the spot"))
+        assert.is_true(anchor.shouldPing)
+        local hint = assert(I.pingHint("1V3R", "anchors", "Q"))
+        assert.are.equal("PING: Warning - press Q", hint.line)
+        -- Sans ping (politique none), la consigne reste « ne bouge pas » et ne
         -- demande plus un ping impossible.
         local noPing = I.getDeclaration("1V3R", "none")
-        assert.matches("STAY WHERE YOU ARE", noPing.roleOrder)
-        assert.is_true(contains(noPing.roleOrder, "DO NOT MOVE"))
-        assert.is_false(contains(noPing.roleOrder, "place a ping"))
-        -- La ligne "rejoins" est adaptee : c'est l'autre etat qui rejoint l'ancre.
+        assert.is_true(contains(noPing.actionLine, "STAY WHERE YOU ARE"))
+        assert.is_true(contains(noPing.actionLine, "jump on the spot"))
+        assert.is_false(contains(noPing.actionLine, "ping yourself"))
         assert.are.equal("3V1R", anchor.complement)
-        assert.matches(
-            "STATE THAT JOINS YOU: 3V1R",
-            table.concat(
-                I.snapshot({ phase = I.PHASE.VISIBLE, elapsed = 0, declaration = "1V3R", timeline = I.validateTimeline(nil) }).lines,
-                "\n"
-            )
-        )
     end)
 
     it("consigne du CHASSEUR : ne ping pas, fonce sur un ping", function()
         local chaser = I.getDeclaration("3V1R") -- anchors
-        assert.matches("Do NOT ping", chaser.roleOrder)
-        assert.is_true(contains(chaser.roleOrder, "run to it"))
-        assert.is_true(contains(chaser.roleOrder, "any 1V3R works"))
+        assert.are.equal("DO NOT PING - run to a ping (a 1V3R)", chaser.actionLine)
         assert.is_false(chaser.shouldPing)
         assert.are.equal("1V3R", chaser.complement)
         -- En politique color il ping AUSSI, mais garde sa course vers un ping.
         local colored = I.getDeclaration("3V1R", "color")
         assert.is_true(colored.shouldPing)
-        assert.is_false(contains(colored.roleOrder, "Do NOT ping"))
-        assert.is_true(contains(colored.roleOrder, "run to it"))
+        assert.is_false(contains(colored.actionLine, "DO NOT PING"))
+        assert.is_true(contains(colored.actionLine, "run to a ping"))
+        assert.is_true(contains(colored.actionLine, "Assist"))
     end)
 
     it("consigne du MILIEU : ne ping pas, va au milieu et trouve un 2V2R", function()
         local mid = I.getDeclaration("2V2R") -- anchors
         assert.is_false(mid.shouldPing)
-        assert.is_true(contains(mid.roleOrder, "Do NOT ping"))
-        assert.is_true(contains(mid.roleOrder, "MIDDLE"))
-        assert.is_true(contains(mid.roleOrder, "another 2V2R"))
+        assert.are.equal("DO NOT PING - go to the middle / under the boss", mid.actionLine)
+        assert.is_true(contains(mid.actionLine, "middle"))
         assert.are.equal("2V2R", mid.complement)
-        assert.matches(
-            "STATE TO JOIN: 2V2R",
-            table.concat(
-                I.snapshot({ phase = I.PHASE.VISIBLE, elapsed = 0, declaration = "2V2R", timeline = I.validateTimeline(nil) }).lines,
-                "\n"
-            )
-        )
+        -- Le MILIEU aussi garde sa consigne en politique color, avec son ping.
+        local colored = I.getDeclaration("2V2R", "color")
+        assert.is_true(colored.shouldPing)
+        assert.is_true(contains(colored.actionLine, "PING (On My Way)"))
+        assert.is_true(contains(colored.actionLine, "middle"))
     end)
 
     it("sert les consignes en FRANCAIS quand la langue active est fr", function()
@@ -175,24 +178,37 @@ describe("Ping : politiques (logique pure)", function()
         fr.Locale.setActive("fr")
         local anchor = fr.Intermission.getDeclaration("1V3R")
         assert.are.equal("ANCRE", anchor.roleName)
-        assert.matches("RESTE SUR PLACE", anchor.roleOrder)
-        assert.is_true(contains(anchor.roleOrder, "NE BOUGE PAS"))
-        assert.is_true(contains(anchor.roleOrder, "fais-toi pinger"))
+        assert.are.equal("ROLE : ANCRE", anchor.roleLine)
+        assert.is_true(contains(anchor.actionLine, "RESTE SUR PLACE"))
+        -- Le libelle du ping suit la langue du client : « Avertissement » (mesure
+        -- en jeu par le raid lead), pas le nom canonique anglais.
+        assert.is_true(contains(anchor.actionLine, "ping-toi (Avertissement)"))
+        assert.are.equal("Avertissement", fr.Intermission.pingLabel("Warning"))
+        assert.are.equal("En route", fr.Intermission.pingLabel("OnMyWay"))
+        assert.are.equal("Aide", fr.Intermission.pingLabel("Assist"))
+        assert.is_true(contains(fr.Intermission.pingHint("1V3R").line, "PING : Avertissement"))
         assert.are.equal("CHASSEUR", fr.Intermission.getDeclaration("3V1R").roleName)
-        assert.is_true(contains(fr.Intermission.getDeclaration("3V1R").roleOrder, "fonce dessus"))
+        assert.is_true(contains(fr.Intermission.getDeclaration("3V1R").actionLine, "fonce sur un ping"))
         assert.are.equal("MILIEU", fr.Intermission.getDeclaration("2V2R").roleName)
-        assert.is_true(contains(fr.Intermission.getDeclaration("2V2R").roleOrder, "MILIEU"))
+        assert.is_true(contains(fr.Intermission.getDeclaration("2V2R").actionLine, "NE PING PAS"))
         assert.are.equal("OUI", fr.Intermission.getDeclaration("1V3R").pingDecision)
         assert.are.equal("NON", fr.Intermission.getDeclaration("2V2R").pingDecision)
+        -- La touche non bindi est dite en francais aussi.
+        assert.is_true(contains(fr.Intermission.pingHint("1V3R").line, "Options > Raccourcis"))
     end)
 
-    it("rappelle la politique courante dans le panneau, meme sans declaration", function()
-        local snap = I.snapshot(I.newState(), "none")
-        local text = table.concat(snap.lines, "\n")
-        assert.matches("PING POLICY: NONE", text)
-        assert.are.equal("none", snap.pingPolicy)
-        local colored = I.snapshot(I.newState(), "color")
-        assert.matches("PING POLICY: COLOR", table.concat(colored.lines, "\n"))
+    it("n'affiche PLUS la politique de ping en permanence sur le panneau", function()
+        for _, mode in ipairs(I.PING_MODES) do
+            local snap = I.snapshot(I.newState(), mode)
+            assert.are.equal(mode, snap.pingPolicy, mode)
+            assert.is_string(snap.policyLine, mode)
+            local text = table.concat(snap.lines, "\n")
+            assert.is_false(contains(text, "PING POLICY"), mode)
+            assert.is_false(contains(text, "ANCHORS:"), mode)
+            assert.is_false(contains(text, "COLOR:"), mode)
+        end
+        -- La politique reste interrogeable a la demande (/gr ping).
+        assert.matches("ANCHORS", I.pingPolicyLine("anchors"))
     end)
 end)
 
@@ -228,6 +244,7 @@ describe("Ping : commande en jeu /gr ping", function()
         _G.GideonRaidPanel = nil
         _G.GideonRaidIntermissionPanel = nil
         _G.SlashCmdList = nil
+        _G.GetBindingKey = nil
         stub.install()
         wowenv.loadAddon()
     end)
@@ -250,22 +267,25 @@ describe("Ping : commande en jeu /gr ping", function()
         _G.SlashCmdList["GIDEONRAID"]("ping color")
         assert.are.equal("color", _G.GideonRaidDB.intermission.pingMode)
         assert.matches("Ping policy = color", messages())
-        assert.matches("every state pings with its own color", messages())
-        stub.mainFrame():Fire("ENCOUNTER_START")
-        _G.GideonRaidIntermissionPanel.buttons[3]:Click() -- 3V1R
-        assert.matches("PING: YES", _G.GideonRaidIntermissionPanel.pingBanner:GetText())
-        assert.matches("C_Ping%.SendMacroPing", _G.GideonRaidIntermissionPanel.macroBox:GetText())
+        assert.matches("every state pings with its own ping", messages())
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[3]:Click() -- 3V1R
+        assert.are.equal("PING: YES", panel.pingBanner:GetText())
+        assert.is_true(contains(panel.body:GetText(), "PING: Assist"))
     end)
 
-    it("/gr ping none persistee : plus aucune macro", function()
+    it("/gr ping none persistee : plus aucune consigne de ping", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping none")
         assert.are.equal("none", _G.GideonRaidDB.intermission.pingMode)
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click() -- 1V3R = ANCRE, pourtant sans ping ici
         assert.are.equal("PING: NO", panel.pingBanner:GetText())
-        assert.is_false(panel.macroBox:IsShown())
+        local text = panel.body:GetText()
+        assert.is_false(contains(text, "PING: Warning"))
+        assert.is_true(contains(text, "STAY WHERE YOU ARE"))
     end)
 
     it("/gr ping avec une valeur inconnue est refuse et ne persiste rien", function()
@@ -285,14 +305,38 @@ describe("Ping : commande en jeu /gr ping", function()
         _G.GideonRaidDB = db
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.are.equal("color", ns2.Config.resolveIntermission(_G.GideonRaidDB.intermission).pingMode)
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         _G.GideonRaidIntermissionPanel.buttons[2]:Click()
-        assert.matches("C_Ping%.SendMacroPing", _G.GideonRaidIntermissionPanel.macroBox:GetText())
+        assert.are.equal("PING: YES", _G.GideonRaidIntermissionPanel.pingBanner:GetText())
+        assert.is_true(contains(_G.GideonRaidIntermissionPanel.body:GetText(), "On My Way"))
     end)
 
-    it("/gr inter status rappelle la politique de ping", function()
+    it("/gr inter status rappelle la politique de ping et le planning", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter status")
-        assert.matches("intermission ping policy: anchors", messages())
+        local text = messages()
+        assert.matches("intermission ping policy: anchors", text)
+        assert.matches("schedule: 4 intermission", text)
+    end)
+
+    it("/gr inter ping dit quel ping et quelle touche (et ce qui a ete essaye)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter ping")
+        assert.matches("No composition declared yet", messages())
+        _G.GetBindingKey = function(name)
+            if name == "PING_WARNING" then
+                return "Q"
+            end
+            return nil
+        end
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        _G.GideonRaidIntermissionPanel.buttons[1]:Click()
+        _G.SlashCmdList["GIDEONRAID"]("inter ping")
+        local text = messages()
+        assert.matches("PING: Warning %- press Q", text)
+        assert.is_true(contains(text, "PING_WARNING"), "les noms essayes sont listes")
+        -- Une ANCRE peut aussi etre pingee par quelqu'un d'autre : rien n'est
+        -- obligatoire, la touche est un confort.
+        assert.is_false(contains(text, "SendMacroPing"))
     end)
 end)

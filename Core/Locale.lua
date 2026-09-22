@@ -16,7 +16,13 @@
 
     Spell, orb and color NAMES (3V1R, Warning, OnMyWay, Assist) are identical in
     both languages and are therefore not translated.
+
+    The ping is placed by the PLAYER through the native Blizzard ping keybinds
+    (Options > Keybindings): the addon only says WHICH ping to use and, when the
+    player has bound a key, WHICH key to press (read with GetBindingKey by the
+    rendering layer, never by Core/).
 ----------------------------------------------------------------------------]]
+--
 local _, ns = ...
 
 ---@class Locale
@@ -47,10 +53,10 @@ Locale.STRINGS = {
     ["cmd.help"] = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|on|off|status|macro|3V1R|2V2R|1V3R]",
+            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|on|off|status|macro|3V1R|2V2R|1V3R]",
+            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]",
     },
     ["cmd.lang.status"] = {
         en = "Language: client detected = %s, effective = %s, preference = %s (/gr lang auto|en|fr to change).",
@@ -82,37 +88,34 @@ Locale.STRINGS = {
     },
 
     -- -------------------------------------------------------------- ping policy
-    -- One line per policy, used by /gr ping, by the intermission panel and by the
-    -- main panel (README/docs/INTERMISSION-COACH.md).
+    -- One line per policy, used by /gr ping and by /gr inter status. The policy
+    -- is NOT displayed permanently on screen any more: it only decides WHO has
+    -- to ping (by default the 1V3R ANCHOR alone).
     ["pingMode.anchors"] = {
         en = "ANCHORS: only the 1V3R anchors ping (one ping per anchor, ~8 pings per raid instead of ~20).",
         fr = "ANCRES : seules les ancres 1V3R ping (un ping par ancre, ~8 pings par raid au lieu de ~20).",
     },
     ["pingMode.color"] = {
-        en = "COLOR: every state pings with its own color (1V3R red/Warning, 2V2R blue/OnMyWay, 3V1R green/Assist).",
-        fr = "COULEUR : chaque etat ping de sa propre couleur (1V3R rouge/Warning, 2V2R bleu/OnMyWay, 3V1R vert/Assist).",
+        en = "COLOR: every state pings with its own ping (1V3R %s, 2V2R %s, 3V1R %s).",
+        fr = "COULEUR : chaque etat ping avec son propre ping (1V3R %s, 2V2R %s, 3V1R %s).",
     },
     ["pingMode.none"] = {
         en = "NONE: nobody pings, the raid plays on positions only.",
         fr = "AUCUN : personne ne ping, le raid joue uniquement en positions.",
     },
-    ["panel.pingPolicy"] = {
-        en = "Ping policy: %s",
-        fr = "Politique de ping : %s",
-    },
 
     -- ------------------------------------------------------------- main panel
-    ["panel.noAssignment"] = {
-        en = "No GIDEON assignment.",
-        fr = "Aucune assignation GIDEON.",
-    },
-    ["panel.askGideon"] = {
-        en = "Ask GIDEON:",
-        fr = "Demande a GIDEON :",
+    ["panel.noPlan"] = {
+        en = "No out-of-game plan loaded (optional).",
+        fr = "Aucun plan hors jeu charge (optionnel).",
     },
     ["panel.unreadablePlan"] = {
         en = "|cffff5555Unreadable plan|r",
         fr = "|cffff5555Plan illisible|r",
+    },
+    ["panel.placeButton"] = {
+        en = "PLACE INTERMISSION PANEL",
+        fr = "PLACER LE PANNEAU INTERMISSION",
     },
     ["status.noAssignment"] = {
         en = "no assignment (%s)",
@@ -128,37 +131,29 @@ Locale.STRINGS = {
         en = "GideonRaid - Intermission Coach",
         fr = "GideonRaid - Intermission Coach",
     },
-    ["ui.macroLabel"] = {
-        en = "Ping macro (click = select all, then Ctrl+C):",
-        fr = "Macro de ping (clic = tout selectionner, puis Ctrl+C) :",
-    },
     ["ui.close"] = {
         en = "Close",
         fr = "Fermer",
+    },
+    ["ui.ok"] = {
+        en = "OK",
+        fr = "OK",
+    },
+    ["ui.redo"] = {
+        en = "REDO",
+        fr = "CORRIGER",
     },
     ["ui.pingBanner"] = {
         en = "PING: %s",
         fr = "PING : %s",
     },
+    ["ui.roleLine"] = {
+        en = "ROLE: %s",
+        fr = "ROLE : %s",
+    },
     ["ui.bindingLabel"] = {
         en = "Intermission panel (Entombed Sentinels)",
         fr = "Panneau Intermission (Entombed Sentinels)",
-    },
-    ["ui.macroForbidden"] = {
-        en = "No ping for this role under the current policy (/gr ping anchors|color|none).",
-        fr = "Aucun ping pour ce role dans la politique courante (/gr ping anchors|color|none).",
-    },
-    ["ui.noMacroForbidden"] = {
-        en = "No macro to generate: no ping for %s under the %s policy.",
-        fr = "Aucune macro a generer : pas de ping pour %s dans la politique %s.",
-    },
-    ["ui.macroFallback"] = {
-        en = "Fallback: %s - %s",
-        fr = "Secours : %s - %s",
-    },
-    ["ui.macroPrompt"] = {
-        en = "Click the COMPOSITION you see (3 green + 1 red, 2-2, 1 green + 3 red): the macro appears here.",
-        fr = "Clique la COMPOSITION que tu vois (3 verts + 1 rouge, 2-2, 1 vert + 3 rouges) : la macro apparait ici.",
     },
     ["ui.disabled"] = {
         en = "Intermission Coach disabled (/gr inter on to enable it).",
@@ -204,18 +199,6 @@ Locale.STRINGS = {
         en = "intermission ping policy: %s - %s",
         fr = "politique de ping intermission : %s - %s",
     },
-    ["ui.noMacro"] = {
-        en = "No macro: declare your composition first (/gr inter 3V1R).",
-        fr = "Aucune macro : declare d'abord ta composition (/gr inter 3V1R).",
-    },
-    ["ui.macroToPaste"] = {
-        en = "macro to paste: %s",
-        fr = "macro a coller : %s",
-    },
-    ["ui.macroFallbackLine"] = {
-        en = "fallback: %s (%s)",
-        fr = "secours : %s (%s)",
-    },
     ["ui.intermissionError"] = {
         en = "Intermission: %s",
         fr = "Intermission : %s",
@@ -224,117 +207,135 @@ Locale.STRINGS = {
         en = "unreadable plan (%s)",
         fr = "plan illisible (%s)",
     },
+    ["ui.setupDone"] = {
+        en = "Placement saved. Pull when you want: the panel opens by itself before each intermission.",
+        fr = "Placement enregistre. Pull quand tu veux : le panneau s'ouvre tout seul avant chaque intermission.",
+    },
+    ["ui.armed"] = {
+        en = "Intermission coach armed: %d intermission(s) scheduled, the panel opens %d s before each one.",
+        fr = "Coach intermission arme : %d intermission(s) planifiee(s), le panneau s'ouvre %d s avant chacune.",
+    },
+    ["ui.redoFailed"] = {
+        en = "Cannot correct: %s",
+        fr = "Correction impossible : %s",
+    },
+    ["ui.noDeclaration"] = {
+        en = "No composition declared yet.",
+        fr = "Aucune composition declaree pour l'instant.",
+    },
+    ["ui.pingCandidates"] = {
+        en = "Binding names tried (to be confirmed in game): %s",
+        fr = "Noms de raccourci essayes (a confirmer en jeu) : %s",
+    },
+    ["ui.scheduleLine"] = {
+        en = "schedule: %d intermission(s), panel opens %d s before each one",
+        fr = "planning : %d intermission(s), le panneau s'ouvre %d s avant chacune",
+    },
+
+    -- -------------------------------------------- placement mode (before pull)
+    ["ui.setup.headline"] = {
+        en = "BEFORE THE PULL - PLACE THE PANEL",
+        fr = "AVANT LE PULL - PLACE LE PANNEAU",
+    },
+    ["ui.setup.drag"] = {
+        en = "Drag this frame where you want it during the fight (position saved).",
+        fr = "Deplace ce cadre la ou tu le veux pendant le combat (position enregistree).",
+    },
+    ["ui.setup.keys"] = {
+        en = "Prepare your ping: Options > Keybindings > ping system, one key per ping.",
+        fr = "Prepare ton ping : Options > Raccourcis > systeme de ping, une touche par ping.",
+    },
+    ["ui.setup.ready"] = {
+        en = "Press OK: the panel opens by itself %d s before each intermission and closes at the end.",
+        fr = "Appuie sur OK : le panneau s'ouvre tout seul %d s avant chaque intermission et se ferme a la fin.",
+    },
+    ["ui.setup.plan"] = {
+        en = "Out-of-game plan loaded (%d pairs).",
+        fr = "Plan hors jeu charge (%d paires).",
+    },
+    ["ui.setup.noPlan"] = {
+        en = "No out-of-game plan loaded (optional).",
+        fr = "Aucun plan hors jeu charge (optionnel).",
+    },
 
     -- ------------------------------------------- intermission headlines/lines
+    -- The panel shows the ESSENTIAL only: state, role, PING: YES/NO and ONE
+    -- action line. Long explanations live in docs/INTERMISSION-COACH.md.
     ["inter.headline.idle"] = {
-        en = "INTERMISSION: NOT STARTED",
-        fr = "INTERMISSION : PAS LANCEE",
+        en = "INTERMISSION PANEL READY",
+        fr = "PANNEAU INTERMISSION PRET",
     },
-    ["inter.line.idleTimeline"] = {
-        en = "Pre-computed timeline: %d s visible, then the room goes dark.",
-        fr = "Timeline pre-calculee : %d s visibles puis salle obscurcie.",
+    ["inter.line.idle"] = {
+        en = "The panel opens by itself before each intermission; you can also click your composition now.",
+        fr = "Le panneau s'ouvre tout seul avant chaque intermission ; tu peux aussi cliquer ta composition maintenant.",
     },
-    ["inter.line.idleTrigger"] = {
-        en = "Trigger: combat start on the boss, or key/button.",
-        fr = "Declenchement : debut de combat sur le boss, ou touche/bouton.",
+    ["inter.headline.getReady"] = {
+        en = "GET READY: %d s",
+        fr = "TIENS-TOI PRET : %d s",
     },
     ["inter.headline.visible"] = {
         en = "LOOK AT THE ORB COLOR ABOVE THE HEADS: %d s",
         fr = "REGARDE LA COULEUR DES ORBES AU-DESSUS DES TETES : %d s",
     },
-    ["inter.line.visibleIndicators"] = {
-        en = "The indicators of the other players are still visible.",
-        fr = "Les indicateurs des autres joueurs sont encore visibles.",
-    },
     ["inter.headline.dark"] = {
         en = "ROOM DARKENED: YOU ONLY SEE YOURSELF",
         fr = "SALLE OBSCURCIE : TU NE VOIS PLUS QUE TOI",
-    },
-    ["inter.line.darkIndicators"] = {
-        en = "The indicators of the other players are invisible.",
-        fr = "Les indicateurs des autres joueurs sont invisibles.",
     },
     ["inter.headline.done"] = {
         en = "INTERMISSION OVER",
         fr = "INTERMISSION TERMINEE",
     },
-    ["inter.line.youSee"] = {
-        en = "YOU SEE: %s  (%s)",
-        fr = "TU VOIS : %s  (%s)",
-    },
-    ["inter.line.number"] = {
-        en = "NUMBER ABOVE YOUR HEAD: %s%s",
-        fr = "NUMERO AU-DESSUS DE TA TETE : %s%s",
-    },
-    ["inter.suffix.ambiguous"] = {
-        en = "  -> it does NOT reveal the color",
-        fr = "  -> il ne dit PAS la couleur",
-    },
-    ["inter.suffix.unambiguous"] = {
-        en = "  -> unambiguous",
-        fr = "  -> non ambigu",
-    },
-    ["inter.line.action"] = {
-        en = "DO: %s",
-        fr = "FAIS : %s",
-    },
-    ["inter.line.position"] = {
-        en = "POSITION: %s",
-        fr = "POSITION : %s",
-    },
-    ["inter.line.join"] = {
-        en = "STATE TO JOIN: %s - %s",
-        fr = "ETAT A REJOINDRE : %s - %s",
-    },
-    ["inter.line.joinedBy"] = {
-        en = "STATE THAT JOINS YOU: %s - %s",
-        fr = "ETAT QUI TE REJOINT : %s - %s",
-    },
-    ["inter.line.role"] = {
-        en = "YOUR ROLE: %s (%s)",
-        fr = "TON ROLE : %s (%s)",
-    },
-    ["inter.line.roleOrder"] = {
-        en = "ROLE ORDER: %s",
-        fr = "CONSIGNE DE ROLE : %s",
-    },
-    ["inter.line.ping"] = {
-        en = "PING: %s - %s",
-        fr = "PING : %s - %s",
-    },
-    ["inter.line.pingPolicy"] = {
-        en = "PING POLICY: %s",
-        fr = "POLITIQUE DE PING : %s",
-    },
-    ["inter.line.guildRule"] = {
-        en = "GUILD CONVENTION: %s",
-        fr = "CONVENTION DE GUILDE : %s",
-    },
     ["inter.prompt"] = {
-        en = "Look at the COLOR of your 4 orbs above your head, then click the composition you see.",
-        fr = "Regarde la COULEUR de tes 4 orbes au-dessus de ta tete, puis clique la composition que tu vois.",
+        en = "Click the composition you see above your head.",
+        fr = "Clique la composition que tu vois au-dessus de ta tete.",
     },
-    ["inter.ambiguity"] = {
-        en = "1 or 3 IS NOT ENOUGH: the number does not reveal the color. Only number 2 is unambiguous (2 green + 2 red).",
-        fr = "1 ou 3 NE SUFFIT PAS : le numero ne dit pas la couleur. Seul le numero 2 est non ambigu (2 verts + 2 rouges).",
+
+    -- -------------------------------------------------- ping instruction lines
+    -- The player pings THEMSELVES with the native Blizzard ping keybind (the
+    -- addon can NOT ping: C_Ping.SendMacroPing is #protected). The key is read
+    -- by the rendering layer with GetBindingKey; when no key is bound, the line
+    -- says so instead of showing a shortcut that does not exist.
+    ["ping.press"] = {
+        en = "PING: %s - press %s",
+        fr = "PING : %s - appuie sur %s",
     },
-    ["inter.caveat"] = {
-        en = "UNKNOWN: nobody can read your number or tell you who declared what.",
-        fr = "INCONNU : personne ne peut lire ton numero ni te dire qui a declare quoi.",
+    ["ping.noKey"] = {
+        en = "PING: %s - set a keybind in Options > Keybindings",
+        fr = "PING : %s - definis un raccourci dans Options > Raccourcis",
     },
-    ["inter.channel"] = {
-        en = "The only signal visible to the other players: the PING (raid frames show pings since patch 12.1).",
-        fr = "Le seul signal visible par les autres joueurs : le PING (les cadres de raid affichent les pings depuis le patch 12.1).",
+
+    -- NAME OF EACH PING, as displayed to the player. The canonical identifier
+    -- stays English ("Warning", "OnMyWay", "Assist": configuration, binding
+    -- candidates, tests) and ONLY the display label is translated, because the
+    -- player reads the label of their own client.
+    --   - French labels MEASURED in game by the raid lead (2026-09-22,
+    --     Options > Raccourcis): « Ping », « Attaque », « Avertissement »
+    --     (= Warning), « En route » (= On My Way), « Aide » (= Assist/Help),
+    --     plus « Activer le ciblage de ping » ;
+    --   - English labels: Warning / On My Way / Assist
+    --     (<https://warcraft.wiki.gg/wiki/Ping_System>).
+    ["ping.name.Warning"] = {
+        en = "Warning",
+        fr = "Avertissement",
+    },
+    ["ping.name.OnMyWay"] = {
+        en = "On My Way",
+        fr = "En route",
+    },
+    ["ping.name.Assist"] = {
+        en = "Assist",
+        fr = "Aide",
     },
 
     -- -------------------------------------------------------- ping role texts
     -- PING ROLES BY STATE (raid-lead decision). The number displayed above the
     -- head does NOT choose the role: the ORB COMPOSITION does.
-    --   1V3R = ANCHOR  : does not move, pings itself (macro) or is pinged;
+    --   1V3R = ANCHOR  : does not move, pings itself with the native keybind (or
+    --                    is pinged by another player);
     --   2V2R = MIDDLE  : does not ping, goes to the middle and pairs with a 2V2R;
     --   3V1R = CHASER  : does not ping, runs to a ping (any 1V3R works).
-    -- `state.order.ping.<state>` / `state.order.noPing.<state>` are the two
-    -- variants of the operational order, selected by the ping policy: the same
+    -- `state.actionPing.<state>` / `state.actionNoPing.<state>` are the two
+    -- variants of the ONE action line, selected by the ping policy: the same
     -- role never receives a contradictory order in any policy.
     ["state.roleName.1V3R"] = {
         en = "ANCHOR",
@@ -348,29 +349,29 @@ Locale.STRINGS = {
         en = "CHASER",
         fr = "CHASSEUR",
     },
-    ["state.order.ping.1V3R"] = {
-        en = "STAY WHERE YOU ARE, place a ping on yourself (macro) or get pinged by another player, DO NOT MOVE.",
-        fr = "RESTE SUR PLACE, place un ping sur toi (macro) ou fais-toi pinger par un autre joueur, NE BOUGE PAS.",
+    ["state.actionPing.1V3R"] = {
+        en = "STAY WHERE YOU ARE - ping yourself (%s) and jump on the spot",
+        fr = "RESTE SUR PLACE - ping-toi (%s) et saute sur place",
     },
-    ["state.order.noPing.1V3R"] = {
-        en = "STAY WHERE YOU ARE, DO NOT MOVE: this policy disables pings, your position is the only signal left.",
-        fr = "RESTE SUR PLACE, NE BOUGE PAS : cette politique desactive les pings, ta position est le seul signal restant.",
+    ["state.actionNoPing.1V3R"] = {
+        en = "STAY WHERE YOU ARE - jump on the spot (no ping in this policy)",
+        fr = "RESTE SUR PLACE - saute sur place (aucun ping dans cette politique)",
     },
-    ["state.order.ping.2V2R"] = {
-        en = "Go to the MIDDLE / under the boss, find another 2V2R and pair up; ping your own color on the way.",
-        fr = "Va au MILIEU / sous le boss, trouve un autre 2V2R et apparie-toi ; ping ta propre couleur en chemin.",
+    ["state.actionPing.2V2R"] = {
+        en = "PING (%s), then go to the middle / under the boss",
+        fr = "PING (%s), puis va au milieu / sous le boss",
     },
-    ["state.order.noPing.2V2R"] = {
-        en = "Do NOT ping: go to the MIDDLE / under the boss and pair up with another 2V2R.",
-        fr = "Ne ping PAS : va au MILIEU / sous le boss et apparie-toi avec un autre 2V2R.",
+    ["state.actionNoPing.2V2R"] = {
+        en = "DO NOT PING - go to the middle / under the boss",
+        fr = "NE PING PAS - va au milieu / sous le boss",
     },
-    ["state.order.ping.3V1R"] = {
-        en = "Do NOT wait: spot a ping and run to it (any 1V3R works), ping your own color so your anchor sees you arrive.",
-        fr = "N'ATTENDS PAS : repere un ping et fonce dessus (n'importe quel 1V3R), ping ta couleur pour que ton ancre te voie arriver.",
+    ["state.actionPing.3V1R"] = {
+        en = "PING (%s), then run to a ping (a 1V3R)",
+        fr = "PING (%s), puis fonce sur un ping (un 1V3R)",
     },
-    ["state.order.noPing.3V1R"] = {
-        en = "Do NOT ping: spot a ping and run to it (any 1V3R works).",
-        fr = "Ne ping PAS : repere un ping et fonce dessus (n'importe quel 1V3R fait l'affaire).",
+    ["state.actionNoPing.3V1R"] = {
+        en = "DO NOT PING - run to a ping (a 1V3R)",
+        fr = "NE PING PAS - fonce sur un ping (un 1V3R)",
     },
     ["state.ping.yes"] = {
         en = "YES",
@@ -379,30 +380,6 @@ Locale.STRINGS = {
     ["state.ping.no"] = {
         en = "NO",
         fr = "NON",
-    },
-    ["state.ping.yes.1V3R"] = {
-        en = "you are the ANCHOR: ping yourself with the macro below (%s / %s), or let another player ping you.",
-        fr = "tu es l'ANCRE : ping-toi avec la macro ci-dessous (%s / %s), ou fais-toi pinger par un autre joueur.",
-    },
-    ["state.ping.yes.2V2R"] = {
-        en = "this policy has every state ping its own color: %s (%s).",
-        fr = "cette politique fait pinger chaque etat de sa propre couleur : %s (%s).",
-    },
-    ["state.ping.yes.3V1R"] = {
-        en = "this policy has every state ping its own color: %s (%s).",
-        fr = "cette politique fait pinger chaque etat de sa propre couleur : %s (%s).",
-    },
-    ["state.ping.no.1V3R"] = {
-        en = "this policy disables pings: keep your position, it is the only signal left.",
-        fr = "cette politique desactive les pings : garde ta position, c'est le seul signal restant.",
-    },
-    ["state.ping.no.2V2R"] = {
-        en = "the MIDDLE does not ping: go to the middle and find another 2V2R.",
-        fr = "le MILIEU ne ping pas : va au milieu et trouve un autre 2V2R.",
-    },
-    ["state.ping.no.3V1R"] = {
-        en = "the CHASER does not ping: run to an anchor's ping (any 1V3R works).",
-        fr = "le CHASSEUR ne ping pas : fonce sur le ping d'une ancre (n'importe quel 1V3R fait l'affaire).",
     },
 
     -- ------------------------------------------------------- color state texts
@@ -421,19 +398,6 @@ Locale.STRINGS = {
     ["state.positionLabel.1V3R"] = {
         en = "HOLD, where you are",
         fr = "SUR PLACE, la ou tu es",
-    },
-    ["state.action.1V3R"] = {
-        en = "STAY WHERE YOU ARE (HOLD): whether a 3V1R can find you depends on the ping, never on the number.",
-        fr = "RESTE SUR PLACE (HOLD) : le fait qu'un 3V1R te trouve depend du ping, jamais du numero.",
-    },
-    ["state.find.1V3R"] = {
-        en = "Only a 3V1R can join you: 1+3 green = 4 green, 3+1 red = 4 red.",
-        fr = "Seul un 3V1R peut te rejoindre : 1+3 verts = 4 verts, 3+1 rouges = 4 rouges.",
-    },
-    ["state.numberRule.1V3R"] = {
-        en = "the RED majority (1V3R) is the ANCHOR: it holds its position and pings itself. "
-            .. "The RED majority is what makes you recognizable.",
-        fr = "la dominante ROUGE (1V3R) est l'ANCRE : elle tient sa position et se ping. " .. "La dominante ROUGE te fait reconnaitre.",
     },
     ["state.buttonLabel.1V3R"] = {
         en = "1 green + 3 red\n1V3R\nnumber: 1 or 3",
@@ -463,18 +427,6 @@ Locale.STRINGS = {
         en = "MIDDLE / UNDER THE BOSS",
         fr = "MILIEU / SOUS LE BOSS",
     },
-    ["state.action.2V2R"] = {
-        en = "GO to the middle / under the boss and pair up with another 2V2R: same state, same color, 4 green + 4 red.",
-        fr = "VA au milieu / sous le boss et apparie-toi avec un autre 2V2R : meme etat, meme couleur, 4 verts + 4 rouges.",
-    },
-    ["state.find.2V2R"] = {
-        en = "Only another 2V2R can join you: 2+2 green = 4 green, 2+2 red = 4 red.",
-        fr = "Seul un autre 2V2R peut te rejoindre : 2+2 verts = 4 verts, 2+2 rouges = 4 rouges.",
-    },
-    ["state.numberRule.2V2R"] = {
-        en = "the '2' is the ONLY unambiguous number: 2 green + 2 red, always => MIDDLE role.",
-        fr = "le '2' est le SEUL numero non ambigu : 2 verts + 2 rouges, toujours => role MILIEU.",
-    },
     ["state.buttonLabel.2V2R"] = {
         en = "2 green + 2 red\n2V2R\nnumber: 2 (unambiguous)",
         fr = "2 verts + 2 rouges\n2V2R\nnumero : 2 (non ambigu)",
@@ -502,18 +454,6 @@ Locale.STRINGS = {
     ["state.positionLabel.3V1R"] = {
         en = "RUN TO A PING, ANY 1V3R ANCHOR",
         fr = "FONCE SUR UN PING, N'IMPORTE QUELLE ANCRE 1V3R",
-    },
-    ["state.action.3V1R"] = {
-        en = "RUN to the state that completes you: a 1V3R anchor (3 green + 1 red of your side = 4 green, 1 + 3 red = 4 red).",
-        fr = "FONCE sur l'etat qui te complete : une ancre 1V3R (3 verts + 1 rouge = 4 verts, 1 + 3 rouges = 4 rouges).",
-    },
-    ["state.find.3V1R"] = {
-        en = "Only a 1V3R can join you: 3+1 green = 4 green, 1+3 red = 4 red.",
-        fr = "Seul un 1V3R peut te rejoindre : 3+1 verts = 4 verts, 1+3 rouges = 4 rouges.",
-    },
-    ["state.numberRule.3V1R"] = {
-        en = "the GREEN majority (3V1R) is the CHASER: it runs to the ANCHOR of the complementary color. " .. "Your 3 green say WHICH one.",
-        fr = "la dominante VERTE (3V1R) est le CHASSEUR : il fonce sur l'ANCRE complementaire. " .. "Tes 3 verts disent LAQUELLE.",
     },
     ["state.buttonLabel.3V1R"] = {
         en = "3 green + 1 red\n3V1R\nnumber: 1 or 3",
@@ -554,12 +494,6 @@ Locale.STRINGS = {
         fr = "|cffff8080Rencontre non verifiable : %s|r",
     },
 
-    -- ------------------------------------------------------------- macro
-    ["macro.note"] = {
-        en = "Syntax to be confirmed in game (see docs/INTERMISSION-COACH.md).",
-        fr = "Syntaxe a confirmer en jeu (voir docs/INTERMISSION-COACH.md).",
-    },
-
     -- ------------------------------------------------------------- pre-pull view
     ["plan.notPaired"] = {
         en = "You are not in the GIDEON pairing.",
@@ -578,18 +512,10 @@ Locale.STRINGS = {
         fr = "Ta position (preparee hors jeu) : %s",
     },
     -- Pre-pull view: the ping role deduced from the prepared composition, under
-    -- the current ping policy (the macro is only shown when the role must ping).
+    -- the current ping policy (the ping to use is named, never a macro).
     ["plan.yourPingRole"] = {
         en = "Your intermission role: %s (%s) - ping: %s",
         fr = "Ton role d'intermission : %s (%s) - ping : %s",
-    },
-    ["plan.roleOrder"] = {
-        en = "Role order: %s",
-        fr = "Consigne de role : %s",
-    },
-    ["plan.pingMacro"] = {
-        en = "Ping macro to prepare: %s",
-        fr = "Macro de ping a preparer : %s",
     },
     ["plan.roleWord"] = {
         en = "role %s",
@@ -656,6 +582,10 @@ Locale.STRINGS = {
     ["err.finished"] = {
         en = "intermission over",
         fr = "intermission terminee",
+    },
+    ["err.nothingToRedo"] = {
+        en = "nothing to correct (no composition declared)",
+        fr = "rien a corriger (aucune composition declaree)",
     },
     ["err.invalidTimeline"] = {
         en = "invalid timeline (table expected)",

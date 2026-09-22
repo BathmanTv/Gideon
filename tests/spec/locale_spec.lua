@@ -57,7 +57,8 @@ describe("Locale : traductions", function()
         assert.are.equal("Fermer", L.t("ui.close", "fr"))
         -- Un code client complet ("frFR") est accepte aussi.
         assert.are.equal("Fermer", L.t("ui.close", "frFR"))
-        assert.are.equal("YOU SEE: %s  (%s)", L.t("inter.line.youSee", "en"))
+        assert.are.equal("ROLE: %s", L.t("ui.roleLine", "en"))
+        assert.are.equal("ROLE : %s", L.t("ui.roleLine", "fr"))
     end)
 
     it("sert la langue disponible quand la cle n'existe que dans l'autre", function()
@@ -77,7 +78,20 @@ describe("Locale : traductions", function()
         assert.are.equal("Close", L.format("ui.close"))
         -- Placeholders sans argument : le gabarit est renvoye tel quel.
         assert.are.equal("timeline: %d s visible, %d s in total, scale %.2f", L.format("ui.timelineLine"))
-        assert.are.equal("Fallback: pump - note", L.format("ui.macroFallback", "pump", "note"))
+        assert.are.equal("PING: %s - press %s", L.format("ping.press"))
+        assert.are.equal("PING: Warning - press Q", L.format("ping.press", "Warning", "Q"))
+    end)
+
+    it("sert TOUTES les cles dans les deux langues (aucun trou de traduction)", function()
+        local missing = {}
+        for key, entry in pairs(L.STRINGS) do
+            assert.is_string(entry.en, key .. " (en)")
+            assert.is_string(entry.fr, key .. " (fr)")
+            if entry.en == "" or entry.fr == "" then
+                missing[#missing + 1] = key
+            end
+        end
+        assert.are.same({}, missing)
     end)
 
     it("setActive accepte les langues servies et retombe sur l'anglais", function()
@@ -112,6 +126,7 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         _G.GideonRaidPanel = nil
         _G.GideonRaidIntermissionPanel = nil
         _G.SlashCmdList = nil
+        _G.GetBindingKey = nil
         stub.install()
         ns = wowenv.loadAddon()
     end)
@@ -126,10 +141,12 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("enUS", _G.GideonRaid.detectedLocale)
         assert.are.equal("en", _G.GideonRaid.locale)
         assert.are.equal("en", ns.Locale.getActive())
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
+        assert.matches("GET READY", panel.headline:GetText())
         assert.matches("Close", panel.close:GetText())
+        assert.matches("REDO", panel.redo:GetText())
+        assert.matches("OK", panel.ok:GetText())
     end)
 
     it("sert le francais automatiquement sur un client frFR", function()
@@ -139,10 +156,11 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.are.equal("fr", _G.GideonRaid.locale)
         assert.are.equal("auto", _G.GideonRaidDB.locale)
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("REGARDE LA COULEUR DES ORBES", panel.headline:GetText())
+        assert.is_truthy(string.find(panel.headline:GetText(), "TIENS-TOI PRET", 1, true))
         assert.matches("Fermer", panel.close:GetText())
+        assert.matches("CORRIGER", panel.redo:GetText())
         assert.matches("1 vert %+ 3 rouges", panel.buttons[1]:GetText())
     end)
 
@@ -180,9 +198,9 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("fr", _G.GideonRaidDB.locale)
         assert.are.equal("fr", _G.GideonRaid.locale)
         assert.matches("langue effective = fr", messages())
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("REGARDE", panel.headline:GetText())
+        assert.is_truthy(string.find(panel.headline:GetText(), "TIENS-TOI PRET", 1, true))
         assert.matches("Fermer", panel.close:GetText())
     end)
 
@@ -194,8 +212,8 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         _G.SlashCmdList["GIDEONRAID"]("lang en")
         assert.are.equal("en", _G.GideonRaidDB.locale)
         assert.are.equal("en", _G.GideonRaid.locale)
-        stub.mainFrame():Fire("ENCOUNTER_START")
-        assert.matches("LOOK AT THE ORB COLOR", _G.GideonRaidIntermissionPanel.headline:GetText())
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        assert.matches("GET READY", _G.GideonRaidIntermissionPanel.headline:GetText())
     end)
 
     it("/gr lang auto revient a la langue du client", function()

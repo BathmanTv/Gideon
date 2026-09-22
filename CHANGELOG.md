@@ -4,6 +4,91 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+Redesign of the Intermission Coach after the **first real in-game test** (raid
+lead, live raid): the ping macro route is dead by design of the client, the panel
+was too verbose, and a wrong click could not be corrected.
+
+### Removed
+- **The ping macro, entirely.** Measured in game:
+  `C_Ping.SendMacroPing({type = Enum.PingSubjectType.Warning, targetToken = "player"})`
+  is refused by the client (*"this action can only be used by the Blizzard UI"*),
+  from a macro as well as from an addon. Gone with it:
+  `Intermission.buildMacro` (and its record fields `macroPrimary` / `macroFallback`
+  / `macroTargetToken` / `pingToken`), the *MACRO / FALLBACK* block of the panel,
+  the `/gr inter macro` command, the `macroTargetToken` SavedVariables key and the
+  tests that covered them. The anti-forbidden-API guard now fails if `C_Ping`,
+  `SendMacroPing` or `PingSubjectType` appears **anywhere**, even inside a string.
+- The vestigial out-of-game messages: the main panel no longer shows
+  *"No GIDEON assignment"* / *"Ask GIDEON: !g roster assign"* — **that command
+  does not exist**. Replaced by a single discreet line,
+  `No out-of-game plan loaded (optional).`, and no in-game text ever points to a
+  chat command again.
+- The verbose panel lines (role order, "PING POLICY", "STATE THAT JOINS YOU",
+  caveats, long paragraphs). The technical justification stays in `docs/`, not on
+  a panel read during the darkening.
+
+### Added
+- **Native ping keybinds instead of a macro.** The panel says WHICH ping to use
+  (`PING: Warning`) and, when the player bound one, **which key to press**
+  (`PING: Warning - press Q`). The key is read with `GetBindingKey`, **under
+  `pcall`, in the rendering layer only**; `Core/` receives it as an injected
+  resolver and never calls the API. If no candidate binding responds, the panel
+  shows **no key at all** and asks for a keybind in *Options > Keybindings* —
+  never a shortcut that does not exist. The candidates live in
+  `Intermission.PING_BINDINGS` and are still to be confirmed in game.
+- **Bilingual ping labels**: the label displayed follows the client's language —
+  EN `Warning` / `On My Way` / `Assist`, FR **`Avertissement` / `En route` /
+  `Aide`** (measured in game by the raid lead, 2026-09-22, Options > Raccourcis) —
+  while the canonical identifier used by the configuration, the tests and the
+  binding candidates never changes.
+- **`REDO` button** on the intermission panel: a wrong click is corrected in one
+  click, as many times as needed, and it returns to the three composition
+  choices cleanly (`Intermission.clearDeclaration`, idempotent).
+- **Placement mode** (before the pull): `/gr` → *PLACE INTERMISSION PANEL* (or
+  `/gr inter place`) shows the intermission frame where the player wants it, lets
+  them prepare their ping keybind, and **OK** validates, saves the position in the
+  SavedVariables and closes the panel.
+- **The whole evening flow, automatic where it can be**: `ENCOUNTER_START` is the
+  starting gun of the **pre-computed schedule** (its arguments are never read),
+  the panel **opens by itself** `leadSeconds` (2 s) before each intermission
+  (≈46.3 s, then 148.9 / 251.5 / 353.2 s), **closes by itself** at the end of the
+  intermission and **reopens** at the next one. New pure machine
+  (`Intermission.newRun` / `advanceRun` / `runOpenAt` / `runRemaining` /
+  `runFinished` / `resetRun`) with an injected time step; `PENDING` phase while the
+  panel waits for the intermission.
+- `/gr inter ping`: which ping, which key, and the binding names tried.
+- `/gr inter place` (alias `/gr inter setup`) for the placement mode.
+- The **one action line** per state, selected by the policy (`state.actionPing.*`
+  / `state.actionNoPing.*` in both languages), so the essential fits on screen.
+
+### Changed
+- The intermission panel now shows **the essential only**: the state in very large
+  type, `ROLE: ANCHOR|MIDDLE|CHASER`, a colored **`PING: YES/NO`** banner and
+  **ONE** action line (`1V3R` = "STAY WHERE YOU ARE - ping yourself (Warning) and
+  jump on the spot", `2V2R` = "DO NOT PING - go to the middle / under the boss",
+  `3V1R` = "DO NOT PING - run to a ping (a 1V3R)"), plus `REDO`. Maximum three
+  short lines, checked by the tests.
+- `Config.DEFAULTS` is now a **function** returning a fresh table (no shared
+  table between two characters or two `/reload`), and
+  `Config.resolveIntermission` clamps the new `leadSeconds` and the
+  `scheduleSeconds` list (sorted, positive, 12 entries max).
+- The ping policy (`anchors` by default, `color`, `none`) is **kept and still
+  decides who must ping**, but is no longer displayed permanently: it stays
+  available on demand (`/gr ping`, `/gr inter status`).
+- The measured **per-player ping limit** is now documented as a fact: **3 pings
+  in a row, then about 5 s of wait, then 3 again** (measured in game by the raid
+  lead, 2026-09-22). With the `anchors` policy each concerned player sends exactly
+  **one** ping per intermission, so the raid stays far from the limit — the design
+  argument that validates the anchor-only choice.
+- `docs/INTERMISSION-COACH.md`, `docs/TESTPLAN.md`, `docs/CONVENTIONS.md` (§10) and
+  `README.md` rewritten around the new flow, the native keybinds and the honest
+  "to be confirmed in game" list.
+- Offline test suite: **162 tests** (80 in `intermission_spec.lua`, 24 in
+  `load_spec.lua`, 21 in `locale_spec.lua`, 20 in `pingpolicy_spec.lua`, 11 in
+  `pairing_spec.lua`, 6 in `guard_spec.lua`), zero luacheck warning.
+
 ## [0.4.0] - 2026-09-22
 
 ### Added

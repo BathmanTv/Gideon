@@ -5,9 +5,11 @@
   Constraints verified on that page:
     - the client loads Bindings.xml AUTOMATICALLY: the file must NOT be listed
       in GideonRaid.toc ;
-    - the body of a <Binding> is Lua executed INSECURELY: it therefore cannot
-      call a #protected function (C_Ping.SendMacroPing is #protected), and here
-      it is only used to open the intermission panel ;
+    - the body of a <Binding> is Lua executed INSECURELY: here it is only used
+      to open the intermission panel. It cannot ping (measured in game: the ping
+      API is restricted to Blizzard's own UI) and does not try to: the player
+      pings with the NATIVE ping keybind (Options > Keybindings > ping system),
+      and the addon only READS that key to display it ;
     - `header` resolves the global BINDING_HEADER_GIDEONRAID and the displayed
       label comes from BINDING_NAME_GIDEONRAID_INTERMISSION (defined in
       GideonRaid.lua) ;

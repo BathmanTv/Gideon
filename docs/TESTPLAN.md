@@ -26,8 +26,8 @@ API. It is therefore runnable by `lua5.1` and by `busted`, installed on the VPS
 and on the GitHub runner.
 
 **File**: `tests/spec/pairing_spec.lua` (11 tests; the repository total is
-**111 tests**, spread over `intermission_spec.lua` (60), `load_spec.lua` (16),
-`locale_spec.lua` (20) and `guard_spec.lua` (4)).
+**162 tests**, spread over `intermission_spec.lua` (80), `load_spec.lua` (24),
+`locale_spec.lua` (21), `pingpolicy_spec.lua` (20) and `guard_spec.lua` (6)).
 
 **How to run**:
 
@@ -94,33 +94,38 @@ intermission state machine, pre-pull view, configuration bounds) is tested
 **outside the client**, because in game there is nothing to observe: the addon
 reads no combat API.
 
-**File**: `tests/spec/intermission_spec.lua` (65 tests) +
-`tests/spec/pingpolicy_spec.lua` (19 tests, ping roles and policies).
+**File**: `tests/spec/intermission_spec.lua` (78 tests) +
+`tests/spec/pingpolicy_spec.lua` (20 tests, ping roles and policies).
 
 **What is verified:**
 
 | Family | Cases |
 |---|---|
-| Color states | the three states `1V3R` / `2V2R` / `3V1R` (label, green AND red counts, possible numbers, role, ping, complement, instruction), "2" alone unambiguous, "1"/"3" ambiguous, deterministic order, non-mutable copy, **the French variant served explicitly when the active language is `fr`** |
+| Color states | the three states `1V3R` / `2V2R` / `3V1R` (label, green AND red counts, possible numbers, role, ping, complement, **the ONE action line**), "2" alone unambiguous, "1"/"3" ambiguous, deterministic order, non-mutable copy, **the French variant served explicitly when the active language is `fr`** |
 | Normalization | `3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`, `vvrr`, `3 verts`, `1 vert 3 rouges`, dominant color alone ("vert", "majorité verte"), "2" accepted, **"1"/"3" alone refused with an "ambiguous" message**, empty/unknown/unusable input refused |
 | Collisions | `3V1R+1V3R` OK both ways, `2V2R+2V2R` OK, `3V1R+2V2R` = 5 green = dead, `1V3R+1V3R` and `3V1R+3V1R` refused, comparison on an ambiguous number refused |
-| Ping roles | `1V3R` = ANCHOR (pings, "STAY WHERE YOU ARE… DO NOT MOVE", can be pinged by another player), `2V2R` = MID (`MIDDLE`, "another 2V2R"), `3V1R` = CHASER ("run to it, any 1V3R works"), role independent of the number and of the policy |
-| Ping policies | `anchors` (default): **only `1V3R` pings**; `color`: the three states ping with their own color (red/Warning, blue/OnMyWay, green/Assist); `none`: nobody pings; unknown value → `anchors`; the "PING: YES/NO" line, the policy line and the role order follow the policy in EN and FR |
-| Macro | `C_Ping.SendMacroPing` call per state (dominant color), target token, `/ping` variant, "to be confirmed" note, **absence of forbidden event text**, no macro on an ambiguous number, **macro generated ONLY for a state allowed to ping** |
-| Timeline | default values (3 s), prepared values, bounds (1–10 s, 3–120 s), `duration > visibility` |
-| State machine | `IDLE → VISIBLE (3 s) → DARK → DONE`, countdown 3/2/1/0, declaration during VISIBLE and DARK, refusal before start, on an ambiguous number and after the end, `reset`, negative/non-numeric `dt` ignored, determinism (same inputs ⇒ same report) |
-| Pre-pull view | partner, role (composition), position, **ping role / role order / macro deduced from the prepared composition and the policy**, meeting `2V2R+2V2R` OK / `3V1R+2V2R` DEAD / `1V3R+3V1R` OK / **unverifiable when the role stays ambiguous**, pairs sorted by name and insensitive to input order, plan absent, malformed plan, player absent, invalid assignment |
-| Configuration | fresh defaults (no alias between accounts), scale and duration bounds, inconsistent types ignored, `pingMode` default `anchors` and any unknown value falling back to `anchors` |
-| Command `/gr ping` | `ping` prints the policy and its meaning, `ping color|none` persists it and changes the panel (macro shown/hidden), unknown value refused **without writing anything**, value reloaded after a `/reload` simulation |
+| Ping roles | `1V3R` = ANCHOR (pings, "STAY WHERE YOU ARE… jump on the spot", can be pinged by another player), `2V2R` = MIDDLE ("go to the middle / under the boss"), `3V1R` = CHASER ("run to a ping (a 1V3R)"), role independent of the number and of the policy |
+| Ping policies | `anchors` (default): **only `1V3R` pings**; `color`: the three states ping with their own color (red/Warning, blue/OnMyWay, green/Assist); `none`: nobody pings; unknown value → `anchors`; the "PING: YES/NO" line and the wording of the action line follow the policy in EN and FR |
+| **Ping keybind (no macro)** | candidate binding names per state (`PING_WARNING` / `PING_ONMYWAY` / `PING_HELP` / the `BINDING_` variants), **no candidate borrows another ping's key** (`PING_ATTACK` absent), `pingHint` with a key (`PING: Warning - press Q`), **without a key** and with an empty/absurd key (`set a keybind in Options > Keybindings`), refusal for a state that must not ping and on an ambiguous number, **injected resolver** (Core/ never reads the key), resolver raising / returning a non-string, and `buildMacro` == nil (**the macro generation has disappeared**) |
+| **Ping labels (bilingual)** | `pingLabel` serving the client's own label in the active language — EN `Warning` / `On My Way` / `Assist`, **FR `Avertissement` / `En route` / `Aide`** (measured in game by the raid lead, 2026-09-22) — the **canonical identifier never changes**, an unknown/empty identifier returns a clean string (never `nil`), and the `color` policy line names the pings in the player's language only |
+| Timeline | default values, **prepared values (46.3 / 148.9 / 251.5 / 353.2 s)**, bounds (visibility 1–10 s, duration > visibility, lead 0–10 s), `duration > visibility` |
+| **Schedule (pre-computed)** | the raid lead's four values, normalization of a persisted schedule (sorted, positive only, 12 entries max), opening time `intermission − lead`, **nothing opens before the hour**, **one opening per intermission**, **no skip even with a huge `dt`**, reset, determinism |
+| State machine | `IDLE → PENDING (lead) → VISIBLE (3 s) → DARK → DONE`, countdown 3/2/1/0, declaration during PENDING/VISIBLE/DARK, refusal before start, on an ambiguous number and after the end, **REDO (`clearDeclaration`) usable several times and idempotent**, `reset`, negative/non-numeric `dt` ignored, determinism |
+| Pre-pull view | partner, role (composition), position, **ping to use deduced from the prepared composition and the policy**, meeting `2V2R+2V2R` OK / `3V1R+2V2R` DEAD / `1V3R+3V1R` OK / **unverifiable when the role stays ambiguous**, pairs sorted by name and insensitive to input order, plan absent, malformed plan, player absent, invalid assignment |
+| **Minimal panel content** | state, role line, `PING: YES/NO` banner (ping color), **one** action line, **at most three short lines**, and the **absence** of the old verbose lines (ROLE ORDER / PING POLICY / STATE THAT JOINS YOU / caveats) |
+| **Placement view** | headline, drag instructions, ping keybind reminder, lead reminder, plan or "no plan" line |
+| Configuration | fresh defaults (no alias between accounts), scale/visibility/duration/**lead** bounds, inconsistent types ignored, `pingMode` default `anchors` and any unknown value falling back to `anchors`, **no `macroTargetToken` any more** |
+| Command `/gr ping` | `ping` prints the policy and its meaning, `ping color|none` persists it and changes the panel (the action line and the ping to use), unknown value refused **without writing anything**, value reloaded after a `/reload` simulation |
 
 **Out-of-game preview** (verifiable by hand, without a client — the developer CLI
 keeps printing French):
 
 ```
-$ lua5.1 tools/intermission_cli.lua all            # les 3 états + macros
+$ lua5.1 tools/intermission_cli.lua all            # les 3 états + ligne d'action
 $ lua5.1 tools/intermission_cli.lua roles          # les 3 états × les 3 politiques
+$ lua5.1 tools/intermission_cli.lua run            # rejeu du planning pré-calculé
 $ lua5.1 tools/intermission_cli.lua 1              # -> REFUS : numéro ambigu
-$ lua5.1 tools/intermission_cli.lua 3V1R color     # un état sous une politique explicite
+$ lua5.1 tools/intermission_cli.lua 3V1R color Q   # politique explicite + touche simulée
 $ lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R # -> 3V1R+2V2R : MORT (5 verts = 5g)
 $ lua5.1 tools/intermission_cli.lua plan Velna none
 ```
@@ -133,7 +138,7 @@ $ lua5.1 tools/intermission_cli.lua plan Velna none
 language, that French is served automatically on a frFR client, and that no
 string can ever raise.
 
-**File**: `tests/spec/locale_spec.lua` (20 tests), in three blocks:
+**File**: `tests/spec/locale_spec.lua` (21 tests), in three blocks:
 
 1. `Locale.resolve` (pure): default English, `auto`/`nil` following the client
    (`frFR` → French, `enUS`/`deDE` → English), an explicit preference beating the
@@ -183,15 +188,27 @@ What is verified:
    position, `2V2R+2V2R` meeting) in the panel;
 6. the slash handler (`/gr show`, `/gr status`, `/gr plan`, `/gr inter status`,
    unknown command) answers without raising;
-7. `ENCOUNTER_START` (with its instance arguments) opens the intermission panel
-   without any argument being read;
-8. the three buttons carry the visible composition (number as a hint) and a click
-   on a button displays the full instruction and the ping macro;
-9. the ticker switches the display to "room darkened" 3 s after the start
-   (35 ticks of 0.1 s);
-10. `ENCOUNTER_END` closes the panel;
-11. disabling (`/gr inter off`) is honoured;
-12. the panel displays no dynamic value (no combat API call).
+7. `ENCOUNTER_START` (with its instance arguments) **arms the schedule without
+   opening the panel**, and no argument is ever read;
+8. the panel **opens by itself** before the first intermission (444 ticks of
+   0.1 s ⇒ 44.3 s), shows the 3 s countdown, then "room darkened", then
+   **closes by itself** at the end of the intermission;
+9. the three buttons carry the visible composition (number as a hint) and a click
+   displays the state, the role, `PING: YES/NO` and **one** action line;
+10. **REDO** brings the three choices back and can be used several times, in a row
+    and after a new click;
+11. the **ping key** is displayed when the player bound one (`PING: Warning -
+    press Q`), and the "set a keybind" line otherwise, **including when
+    `GetBindingKey` raises**;
+12. the panel **reopens** at the next intermission of the schedule;
+13. `ENCOUNTER_END` closes the panel, disarms the schedule and no opening happens
+    afterwards;
+14. the **placement mode** (button of the main panel or `/gr inter place`) shows
+    the panel, saves the position on **OK** and closes; **Close** cancels;
+15. the main panel shows the discreet "no out-of-game plan" line and **never** a
+    non-existent command;
+16. disabling (`/gr inter off`) is honoured, placement included;
+17. the panel displays no dynamic value (no combat API call).
 
 **`.toc` verification** (`tools/check_toc.py`, in CI):
 
@@ -295,23 +312,36 @@ middle of the 12.x transition.
 
 ### 3.5 In-game protocol — Intermission Coach (to be done before the first pull)
 
+**Reference facts (established in game before this protocol):** the native ping
+keybinds DO exist, separately, under « Ping / Attaque / Avertissement / En route /
+Aide » (+ « Activer le ciblage de ping ») — measured in game by the raid lead,
+2026-09-22 — and an addon ping or a ping macro is **refused** by the client
+("this action can only be used by the Blizzard UI"). The per-player ping limit is
+**3 pings in a row, then about 5 s of wait, then 3 again** (same measurement).
+
 | # | Action | Expected |
 |---|---|---|
-| 1 | `/gr` out of instance | "Your partner: …" + list of pairs (`assignment` block prepared by GIDEON) |
+| 1 | `/gr` out of instance | "Your partner: …" + list of pairs (`assignment` block prepared by GIDEON); with no plan: `No out-of-game plan loaded (optional).` and **no** mention of a Discord command |
 | 2 | `/gr plan` | the detailed plan in the chat (role, position, meeting) |
 | 3 | `bindings`: Options > Keybindings > GideonRaid, assign a key | the binding shows up; the key opens/closes the panel |
-| 4 | Enter *Entombed Sentinels*, pull the boss | the panel opens on its own on `ENCOUNTER_START` (points 1 and 2: **to be confirmed**) |
+| 3b | **Before the pull**: `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`) | the intermission panel appears, can be **dragged** where the player wants it; the body recalls the ping keybind and the lead; **OK** validates, saves the position and closes the panel. Re-doable, and usable several times |
+| 3c | Bind each ping: Options > Keybindings > **ping system** (or Raccourcis) | one key per ping exists (Avertissement / En route / Aide) — **already measured**; `/gr inter ping` then shows `PING: Avertissement - press <key>` if the binding command name matches a candidate (TBD item 1 of `docs/INTERMISSION-COACH.md` §9) |
+| 4 | Enter *Entombed Sentinels*, pull the boss | `ENCOUNTER_START` **arms the schedule** (the panel does **not** open at the pull) and the chat confirms the number of planned intermissions and the 2 s lead. Its arguments are never read |
+| 4b | Wait for the first intermission | **1–2 s before** it, the panel opens **by itself** with "GET READY: 2 s" then the 3 s countdown — the timing (≈46.3 s, then 148.9 / 251.5 / 353.2 s) is TBD item 3 of §9 |
 | 5 | During the 3 s of visibility | the reminder displays "LOOK AT THE ORB COLOR ABOVE THE HEADS: 3" then 2, 1 (French on a frFR client) |
-| 6 | Count your orbs, click `1` / `2` / `3` composition button | the instruction appears: **ROLE** (ANCHOR / MIDDLE / CHASER), role order, state to join, **"PING: YES/NO"** and — only if the role must ping — the ping macro |
-| 7 | Paste the macro into a game macro (60 s before the pull) | the ping goes out with the right color — **syntax to be confirmed, this is item 1 of the list in `docs/INTERMISSION-COACH.md` §9** |
+| 6 | Count your orbs, click `1` / `2` / `3` composition button | the panel shows **the essential only**: the state in very large type, **ROLE** (ANCHOR / MIDDLE / CHASER), **"PING: YES/NO"** (colored) and **ONE** action line — no role order, no policy line, no caveat, no paragraph |
+| 7 | Press the **native ping key** of the instructed ping (once) | the ping goes out; **never ask for a burst** (3 pings in a row max per player) and **never** a macro: the addon does not ping |
+| 7b | Click a wrong composition, then **REDO**, then the right one (twice) | the three buttons come back, the panel returns to the choice state, the correction is unlimited and never leaves a stale state |
 | 8 | Check after 3 s | "ROOM DARKENED": the panel stays readable, no dynamic text |
-| 9 | End of combat | `ENCOUNTER_END` closes the panel |
-| 10 | `/console scriptErrors 1` over 10 min of raid | **no** Lua error (typically `attempt to compare a secret value` = blocking regression) |
-| 11 | `/gr lang` on a frFR client and on an enUS client | detected language correct, text in the right language; TBD item 3 of `docs/INTERMISSION-COACH.md` §9 |
-| 12 | `/gr ping` then `/gr ping anchors|color|none`, then re-open the intermission panel | the header banner switches between **PING: YES** and **PING: NO**, the role order follows the policy, and the macro area disappears for a role that must not ping — **to be confirmed in game** |
-| 13 | Ping yourself repeatedly with the macro (default guild macro, then a spam of 4–5 pings in a row) | **exact limit of pings per player**, what the client does beyond it (silent refusal, error, no effect) — **to be confirmed in game**, the assumption is a burst of about 3 pings |
-| 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — **to be confirmed in game** |
-| 15 | Count the pings in the raid with the `anchors` policy (expected ~8) versus `color` (expected ~20) | the `anchors` policy is readable in practice: at most one ping per anchor, 4 per side — **to be confirmed in game** |
+| 8b | End of the intermission | the panel **closes by itself** (`durationSeconds`, 20 s by default), even with no click |
+| 8c | Next intermission | the panel **reopens by itself**, choice state reset — same cycle as §4b/6/7b/8b |
+| 9 | End of combat | `ENCOUNTER_END` closes the panel and disarms the schedule: no further opening |
+| 10 | `/console scriptErrors 1` over 10 min of raid | **no** Lua error (typically `attempt to compare a secret value` = blocking regression), and **no** "action usable only by the Blizzard UI" error (that one means a forbidden ping call came back) |
+| 11 | `/gr lang` on a frFR client and on an enUS client | detected language correct, text in the right language, and the **ping label follows it** (`PING : Avertissement` in French); TBD item 6 of `docs/INTERMISSION-COACH.md` §9 |
+| 12 | `/gr ping` then `/gr ping anchors|color|none`, then re-open the intermission panel | the header banner switches between **PING: YES** and **PING: NO** and the action line follows the policy (never a contradictory order for the same role) — the policy itself stays **out** of the panel |
+| 13 | Send a burst of pings yourself (3 in a row, then a 4th) | **CONFIRMED MEASUREMENT, 2026-09-22**: 3 in a row are accepted, then the client waits about 5 s before accepting 3 again. No longer to be confirmed — it is the reference for the ping budget (§2.1 of `docs/INTERMISSION-COACH.md`) |
+| 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — **the only part still to be confirmed in game** |
+| 15 | Count the pings in the raid with the `anchors` policy (expected ~8) versus `color` (expected ~20) | the `anchors` policy keeps the channel readable: at most one ping per anchor, 4 per side, **one ping per player per intermission** — far from the 3-per-5-s client limit |
 
 ### 3.6 Recommended test environment
 
@@ -382,7 +412,7 @@ format changes.
 
 | # | Action | Expected |
 |---|---|---|
-| 1 | Discord command `!g roster assign` on the real roster | GIDEON answers with the list of pairs |
+| 1 | The GIDEON side publishes the assignment (the exact Discord command belongs to the bot repository, **not** to this addon: no in-game message points to a command any more) | GIDEON answers with the list of pairs |
 | 2 | Check `WTF/.../SavedVariables/GideonRaid.lua` on the test VPS | `pairs` identical to the Discord answer, `schema = 1` |
 | 3 | `/reload` in game | panel identical to the Discord answer |
 | 4 | Stop GIDEON, `/reload` | the addon still works (data already cached) |
@@ -402,15 +432,19 @@ covered in steps 1 and 2.
 |---|---|---|
 | Wrong pairing | 1 | 11 tests, 20-player data set |
 | Non-deterministic result | 1 | "insensitive to input order" test |
-| Orb convention / wrong collisions | 1b | 65 tests (states 3V1R/2V2R/1V3R, `3V1R+1V3R` and `2V2R+2V2R` safe, `3V1R+2V2R` = 5 green, ambiguous number refused) |
-| Wrong language served (English/French) | 1c | 20 tests (`resolve`, `t`/`format` fallbacks, `GetLocale` stubbed `frFR`/`enUS`/`deDE`, `/gr lang`, missing key) |
+| Orb convention / wrong collisions | 1b | 80 tests (states 3V1R/2V2R/1V3R, `3V1R+1V3R` and `2V2R+2V2R` safe, `3V1R+2V2R` = 5 green, ambiguous number refused) |
+| Wrong language served (English/French) | 1c | 21 tests (`resolve`, `t`/`format` fallbacks, `GetLocale` stubbed `frFR`/`enUS`/`deDE`, `/gr lang`, missing key) |
 | Hard-coded in-game string | 1c + 2 | all displayed text comes from `Core/Locale.lua`; the guard scans the loaded files |
 | Countdown / switch to the darkened room wrong | 1b + 2 | deterministic state machine + tested ticker |
-| Ping macro unusable or badly targeted | 1b + 3 | generated text + protocol §3.5 point 7 ("to be confirmed in game") |
-| Wrong ping role (a duty deduced from the ambiguous number) | 1b | 19 tests (`pingpolicy_spec.lua`): role carried by the state, never by the number |
-| **Ping flood** (~20 pings, unreadable channel, client ping limit) | 1b + 3 | `anchors` policy: only the anchors ping, macro generated only for them; protocol §3.5 points 13 and 15 ("to be confirmed in game": exact limit, burst, raid frame display) |
+| ~~Ping macro unusable~~ (macro route dead: the client refuses it) | 1b + 3 | the macro generation has been **removed**; `guard_spec.lua` fails if `C_Ping` / `SendMacroPing` / `buildMacro` comes back; the addon only displays which ping and which key |
+| Ping keybind not found (wrong candidate name) | 1b + 3 | the panel shows **no key** and asks for a keybind in Options > Keybindings; `/gr inter ping` prints the candidates tried (TBD item 1 of §9) |
+| Wrong ping role (a duty deduced from the ambiguous number) | 1b | 20 tests (`pingpolicy_spec.lua`): role carried by the state, never by the number |
+| **Ping flood** (~20 pings, unreadable channel, client ping limit) | 1b + 3 | `anchors` policy: only the anchors ping, **one ping per player per intermission** vs a measured client limit of **3 per 5 s** (3 in a row + ~5 s wait, measured in game 2026-09-22): the budget is never the failure mode. Protocol §3.5 point 15 |
 | Unknown ping policy silently accepted | 1b + 2 | pure resolver (unknown → `anchors`), `/gr ping` refuses an unknown value and writes nothing |
-| Declaring one thing and displaying another | 1b + 2 | instruction coming from the same table as the macro |
+| Declaring one thing and displaying another | 1b + 2 | instruction and ping decision coming from the same record (`CONVENTION` + `pingsInMode`) |
+| Panel unreadable during the darkening (too much text) | 1b + 2 | **max 3 short lines** + the state in very large type, tested (`intermission_spec.lua`); banned lines (ROLE ORDER / PING POLICY / caveats) checked by the tests |
+| Player stuck on a wrong click | 1b + 2 | **REDO** button (`clearDeclaration`), unlimited and idempotent, tested in `intermission_spec.lua` and `load_spec.lua` |
+| Panel does not open (or opens too late) at the intermission | 1b + 2 | schedule machine tested out of game (opening at `intermission − lead`, no skip even with a huge `dt`) + protocol §3.5 points 4b/8c |
 | File forgotten in the `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
 | Lua 5.1 syntax error | 2 | `make syntax` |
 | Crash at login / wrong event | 2 | `load_spec.lua` |

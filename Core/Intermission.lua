@@ -22,11 +22,19 @@
       - about 3 s after the start, the room goes dark: each player then sees only
         THEIR own orbs (their number alone is not enough).
 
-    REJECTION OF THE OLD MODEL: the code used to bind "1" to "1 green + 3 red"
-    and "3" to "3 green + 1 red", with a position and a ping deduced from the
-    number. That is WRONG: 1 and 3 are ambiguous about the colors, only 2 is
-    not. A declaration reduced to "1" or "3" is therefore REFUSED with a message
-    asking for the dominant color (never guessed).
+    THE PING IS PLACED BY THE PLAYER, WITH THE NATIVE BLIZZARD PING KEYBINDS.
+    Since Dragonflight 10.1.7 the player can bind a key to each ping type
+    (Options > Keybindings > ping system) and ping without opening the ping
+    wheel. Measured in game by the raid lead: an addon CANNOT ping at all - not
+    from a macro, not from a binding - the ping API is restricted to Blizzard's
+    own UI ("forbidden action"). The addon therefore:
+      - DISPLAYS which ping to use ("PING: Warning");
+      - DISPLAYS which key to press, when the player has bound one (the key is
+        read by the rendering layer, UI/Intermission.lua, and INJECTED here:
+        Core/ never calls an API);
+      - and NEVER pings, never prepares a macro, never mentions one.
+    A single keybind per player is enough: a warning ping marks the ANCHOR, the
+    chasers run to it.
 
     API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
     Constrained source: "Combat API functions may now return secret values ...
@@ -35,18 +43,13 @@
     => this module NEVER compares a unit value. Everything it handles comes from
        the player (click) or from a file prepared out of game (SavedVariables).
 
-    API ref 12.1.0: https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing
-    Constrained source: "#protected - This can only be called from secure code."
-    => the addon can NOT send a ping itself: it generates the TEXT of a macro
-       that the player pastes and triggers (a macro is secure code).
-
     NO GetTime, NO math.random, NO non-deterministic order: time is injected
-    into tick(state, dt) by the wiring layer.
+    into tick(state, dt) / advanceRun(run, dt) by the wiring layer.
 
     ROLES AND PING POLICY (raid-lead decision, replace "one role per number"):
     a state does not carry a NUMBER-based duty but a ROLE:
-      1V3R = ANCHOR : does not move, places a ping on itself (macro) or is
-                      pinged by another player, and DOES NOT MOVE;
+      1V3R = ANCHOR : does not move, pings itself with its own key (or is pinged
+                      by another player), and DOES NOT MOVE;
       3V1R = CHASER : does NOT ping, spots a ping and runs to it (any 1V3R
                       anchor works);
       2V2R = MIDDLE : does NOT ping, goes to the middle / under the boss and
@@ -55,14 +58,13 @@
     ping per anchor, 4 per side), which keeps the ping channel readable (the
     client also rate-limits pings per player).
     The policy is CONFIGURABLE (Core/Config.lua -> pingMode, /gr ping):
-      "anchors" (default) : only the ANCHOR states ping (the macro is generated
-                            for them only);
-      "color"             : raidstrats variant - every state pings with its own
-                            color (1V3R red/Warning, 2V2R blue/OnMyWay,
-                            3V1R green/Assist);
+      "anchors" (default) : only the ANCHOR states ping;
+      "color"             : raidstrats variant - every state pings its own ping
+                            (1V3R Warning, 2V2R OnMyWay, 3V1R Assist);
       "none"              : nobody pings, the raid plays on positions only.
     Everything below is PURE: no API, injected mode, no clock.
 ----------------------------------------------------------------------------]]
+--
 local _, ns = ...
 
 --- Core/Locale.lua is loaded BEFORE this file by the .toc: the language layer is
@@ -70,7 +72,7 @@ local _, ns = ...
 local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Intermission.lua")
 
 --- Core/Config.lua is loaded BEFORE this file by the .toc: it owns the canonical
---- list of ping policies and their pure resolver (unknown value -> "anchors").
+--- list of ping policies, the default schedule and their pure resolvers.
 local Config = assert(ns.Config, "Core/Config.lua must be loaded before Core/Intermission.lua")
 
 ---@class Intermission
@@ -87,8 +89,17 @@ Intermission.VISIBILITY_SECONDS = 3
 --- Default intermission duration when the prepared timeline does not provide one.
 Intermission.DEFAULT_DURATION_SECONDS = 20
 
---- Default target token of the ping macro (ping yourself).
-Intermission.DEFAULT_TARGET_TOKEN = "player"
+--- How long the panel is shown BEFORE the intermission starts (lead time). The
+--- player reads the three choices and gets ready; the intermission clock itself
+--- only starts at the intermission.
+Intermission.LEAD_SECONDS = Config.DEFAULT_LEAD_SECONDS
+
+--- Pre-computed schedule of the intermissions, in seconds since the pull
+--- (ENCOUNTER_START). Same table as Config: it cannot drift.
+Intermission.SCHEDULE_SECONDS = Config.DEFAULT_SCHEDULE_SECONDS
+
+--- Pure normalization of a persisted schedule (sorted, positive, bounded).
+Intermission.validateSchedule = Config.resolveSchedule
 
 --- Three canonical STATES, DETERMINISTIC display order (increasing green,
 --- never pairs()): 1V3R, 2V2R, 3V1R.
@@ -118,17 +129,99 @@ local ROLE_BY_STATE = { ["1V3R"] = "ANCHOR", ["2V2R"] = "MID", ["3V1R"] = "CHASE
 Intermission.ROLE_BY_STATE = ROLE_BY_STATE
 
 --- Intermission phases.
+---   IDLE    : not started (the panel shows the pre-pull / placement content);
+---   PENDING : the panel is open BEFORE the intermission (lead time countdown);
+---   VISIBLE : the intermission is running and the other players are visible;
+---   DARK    : the room is darkened (only your own orbs);
+---   DONE    : intermission over -> the wiring CLOSES the panel.
 Intermission.PHASE = {
     IDLE = "IDLE",
+    PENDING = "PENDING",
     VISIBLE = "VISIBLE",
     DARK = "DARK",
     DONE = "DONE",
 }
 
 local PHASE_IDLE = Intermission.PHASE.IDLE
+local PHASE_PENDING = Intermission.PHASE.PENDING
 local PHASE_VISIBLE = Intermission.PHASE.VISIBLE
 local PHASE_DARK = Intermission.PHASE.DARK
 local PHASE_DONE = Intermission.PHASE.DONE
+
+--[[ Blizzard native ping keybinds, PER STATE (Options > Keybindings > ping
+     system). MEASURED IN GAME by the raid lead (2026-09-22) on a FRENCH client:
+     the native ping keybinds DO exist, separately, under the labels « Ping »,
+     « Attaque », « Avertissement » (= Warning), « En route » (= On My Way),
+     « Aide » (= Assist/Help), plus « Activer le ciblage de ping » (ping
+     targeting). So the player binds ONE key per ping and the addon only READS
+     it (rendering layer) to tell the player which key to press.
+
+     The COMMAND NAME of each binding (what GetBindingKey expects) was NOT
+     displayed by the client and is still NOT confirmed: each state therefore
+     carries a list of CANDIDATES, tried in order by the rendering layer (the
+     comparison happens on a Binding string, never on a combat value). The first
+     candidate that returns a key wins; if none does, the panel shows no key at
+     all and says "set a keybind in Options > Keybindings" (never a wrong
+     shortcut).
+
+     The candidates stay semantically pure: a state never borrows the key of
+     ANOTHER ping (PING_ATTACK, for the « Attaque » ping, is deliberately absent
+     — displaying the Attack key for a Warning instruction would be a lie).
+
+     TO BE CONFIRMED IN GAME (docs/TESTPLAN.md section 3.5): dump the binding
+     list of a real client and replace these candidates by the real names.
+]]
+Intermission.PING_BINDINGS = {
+    ["1V3R"] = { "PING_WARNING", "PINGTYPE_WARNING", "PINGSUBJECTTYPE_WARNING", "BINDING_PING_WARNING" },
+    ["2V2R"] = { "PING_ONMYWAY", "PING_ON_MY_WAY", "PINGTYPE_ONMYWAY", "BINDING_PING_ONMYWAY" },
+    ["3V1R"] = { "PING_ASSIST", "PING_HELP", "PINGTYPE_ASSIST", "BINDING_PING_ASSIST" },
+}
+
+--- Pure helper: the DISPLAYED label of a ping, in the active language.
+--- The canonical identifier ("Warning", "OnMyWay", "Assist") never changes; only
+--- the label the player reads is translated, because the client shows its own
+--- label ("Avertissement" / "En route" / "Aide" on a FRENCH client — measured in
+--- game by the raid lead, 2026-09-22). A missing locale key falls back to the
+--- canonical identifier, never to a broken string.
+--- @param ping string|nil canonical identifier
+--- @return string label
+function Intermission.pingLabel(ping)
+    if type(ping) ~= "string" or ping == "" then
+        return ""
+    end
+    local key = "ping.name." .. ping
+    local label = Locale.t(key)
+    if label == key then
+        return ping
+    end
+    return label
+end
+
+--- Pure helper: the binding candidates of the ping to use, for one state key.
+--- @param key string "1V3R" | "2V2R" | "3V1R"
+--- @return table|nil ordered candidate names
+function Intermission.bindNames(key)
+    local list = Intermission.PING_BINDINGS[key]
+    if type(list) ~= "table" then
+        return nil
+    end
+    local out = {}
+    for index = 1, #list do
+        out[index] = list[index]
+    end
+    return out
+end
+
+--[[ PING BUDGET. The client's per-player ping limit was MEASURED IN GAME by the
+     raid lead (2026-09-22): 3 pings in a row, then about 5 seconds of wait, then
+     3 again. Consequence for the design: the addon must NEVER ask a player to
+     ping several times in a burst (the client would swallow everything past the
+     third). With the default `anchors` policy each concerned player sends exactly
+     ONE ping per intermission, so the raid stays very far from the limit - which
+     is what validates that choice. Any future instruction of the form "ping,
+     then ping again" has to be refused. Full detail: docs/INTERMISSION-COACH.md
+     section 2.1 and docs/TESTPLAN.md section 3.5.
+]]
 
 --[[ The THREE color states (no API read in game).
 
@@ -139,11 +232,9 @@ local PHASE_DONE = Intermission.PHASE.DONE
                       the survival rule (sum 4 green + 4 red = survival)
      numbers        : number(s) that can be displayed above the head
      numberAmbiguous: true when the number does NOT reveal the color
-     dominant       : dominant color (the one used for the ping)
+     dominant       : dominant color (the one that decides the ping)
      position       : position code; positionLabel: displayed text
-     ping           : Enum.PingSubjectType value (API source 12.1.0)
-     pingToken      : token usable in a /ping macro (to be confirmed)
-     pingColor / pingColorHex : ping color, VERIFIED on the wiki gallery
+     ping           : ping to use, VERIFIED on the wiki gallery
                       https://warcraft.wiki.gg/wiki/Ping_System :
                       Warning = red, OnMyWay = blue, Assist = green.
                       raidstrats guide convention, BY DOMINANT COLOR:
@@ -152,36 +243,36 @@ local PHASE_DONE = Intermission.PHASE.DONE
      role           : PING ROLE carried by the state (ANCHOR / MID / CHASER).
                       It comes from the ORB COMPOSITION, never from the number.
      roleName       : locale key of the displayed role label ("ANCHOR", "ANCRE")
-     orderPing      : locale key of the operational order when the role PINGS
-     orderNoPing    : locale key of the operational order when it does NOT ping
-                      (roleOrder = the variant selected by the ping policy: the
-                      same role never receives a contradictory order)
-     pingYes/pingNo : locale key of the "PING: YES/NO" detail line
-     action         : operational instruction (what the player DOES)
-     find           : which state can join it + the sum computation
+     actionPing     : the ONE action line when the role must ping (%s = ping)
+     actionNoPing   : the ONE action line when it must not ping
+                      (the ping decision comes from the role + the policy, so
+                      the same role never receives a contradictory order)
      complement     : the state that MUST join it (4 green + 4 red)
-     numberRule     : guild convention recalled for this number
      buttonLabel    : declaration button label (composition, number as a hint).
                       Computed HERE: the UI layer computes nothing.
 
      POSITIONS: the positional lines of the guide CONTRADICT each other (they
      give both "1 green 3 red -> left" and "3 red 1 green -> right"). Our
      convention is therefore EXPLICIT and CONFIGURABLE here: by default the
-     FIXED point is the RED-majority state (1V3R, RED ping) and the RUNNER is
-     the GREEN-majority state (3V1R, GREEN ping), the 2V2R going to the middle.
-     It is the only convention consistent with "the color decides".
+     FIXED point is the RED-majority state (1V3R, red Warning ping) and the
+     RUNNER is the GREEN-majority state (3V1R, green Assist ping), the 2V2R
+     going to the middle. It is the only convention consistent with "the color
+     decides".
 
      ROLES (raid-lead decision, replaces "one duty per number"): the ANCHOR is
-     the 1V3R state (holds its position, pings itself or is pinged by somebody
-     else), the CHASER is the 3V1R state (runs to a ping, any anchor works) and
-     the MIDDLE is the 2V2R state (goes to the middle and pairs with a 2V2R).
-     Which of them actually PINGS depends on the ping policy (see below), never
-     on the number displayed above the head.
+     the 1V3R state (holds its position, pings itself with its own key or is
+     pinged by somebody else), the CHASER is the 3V1R state (runs to a ping, any
+     anchor works) and the MIDDLE is the 2V2R state (goes to the middle and
+     pairs with a 2V2R). Which of them actually pings depends on the ping policy.
+
+     DISPLAY: ONLY the essential is displayed (the panel is read in combat):
+     state, role, PING: YES/NO and ONE action line. The long explanations live
+     in docs/INTERMISSION-COACH.md, never on screen.
 ]]
 --- The record fields that are DISPLAYED hold a LOCALE KEY, never a literal:
 --- copyRecord() resolves them through Locale.t, so /gr lang applies immediately,
 --- without a reload. Structural fields (key, greens, reds, numbers, position,
---- ping, pingToken, complement) are language-independent and stay literal.
+--- ping, complement) are language-independent and stay literal.
 local CONVENTION = {
     ["1V3R"] = {
         key = "1V3R",
@@ -196,19 +287,13 @@ local CONVENTION = {
         position = "HOLD",
         positionLabel = "state.positionLabel.1V3R",
         ping = "Warning",
-        pingToken = "Warning",
         pingColor = "state.pingColor.1V3R",
         pingColorHex = "|cffff4040",
         role = "ANCHOR",
         roleName = "state.roleName.1V3R",
-        orderPing = "state.order.ping.1V3R",
-        orderNoPing = "state.order.noPing.1V3R",
-        pingYes = "state.ping.yes.1V3R",
-        pingNo = "state.ping.no.1V3R",
-        action = "state.action.1V3R",
-        find = "state.find.1V3R",
+        actionPing = "state.actionPing.1V3R",
+        actionNoPing = "state.actionNoPing.1V3R",
         complement = "3V1R",
-        numberRule = "state.numberRule.1V3R",
         buttonLabel = "state.buttonLabel.1V3R",
     },
     ["2V2R"] = {
@@ -224,19 +309,13 @@ local CONVENTION = {
         position = "MIDDLE",
         positionLabel = "state.positionLabel.2V2R",
         ping = "OnMyWay",
-        pingToken = "OnMyWay",
         pingColor = "state.pingColor.2V2R",
         pingColorHex = "|cff40a0ff",
         role = "MID",
         roleName = "state.roleName.2V2R",
-        orderPing = "state.order.ping.2V2R",
-        orderNoPing = "state.order.noPing.2V2R",
-        pingYes = "state.ping.yes.2V2R",
-        pingNo = "state.ping.no.2V2R",
-        action = "state.action.2V2R",
-        find = "state.find.2V2R",
+        actionPing = "state.actionPing.2V2R",
+        actionNoPing = "state.actionNoPing.2V2R",
         complement = "2V2R",
-        numberRule = "state.numberRule.2V2R",
         buttonLabel = "state.buttonLabel.2V2R",
     },
     ["3V1R"] = {
@@ -252,19 +331,13 @@ local CONVENTION = {
         position = "PURSUE",
         positionLabel = "state.positionLabel.3V1R",
         ping = "Assist",
-        pingToken = "Assist",
         pingColor = "state.pingColor.3V1R",
         pingColorHex = "|cff40ff40",
         role = "CHASER",
         roleName = "state.roleName.3V1R",
-        orderPing = "state.order.ping.3V1R",
-        orderNoPing = "state.order.noPing.3V1R",
-        pingYes = "state.ping.yes.3V1R",
-        pingNo = "state.ping.no.3V1R",
-        action = "state.action.3V1R",
-        find = "state.find.3V1R",
+        actionPing = "state.actionPing.3V1R",
+        actionNoPing = "state.actionNoPing.3V1R",
         complement = "1V3R",
-        numberRule = "state.numberRule.3V1R",
         buttonLabel = "state.buttonLabel.3V1R",
     },
 }
@@ -279,7 +352,7 @@ local GREENS_TO_STATE = { [1] = "1V3R", [2] = "2V2R", [3] = "3V1R" }
 --- Does the ROLE of `rec` have to ping under `mode`?
 --- PURE and DETERMINISTIC (no clock, no API, no random):
 ---   "none"    -> never (nobody pings, positions only);
----   "color"   -> always (raidstrats variant: every state pings its own color);
+---   "color"   -> always (raidstrats variant: every state pings its own ping);
 ---   "anchors" -> only the ANCHOR (1V3R): one ping per anchor, ~8 per raid.
 --- The mode is normalized first, so an unknown mode behaves like "anchors".
 local function pingsInMode(rec, mode)
@@ -377,18 +450,12 @@ local function copyRecord(rec, mode)
     for index = 1, #rec.numbers do
         numbers[#numbers + 1] = rec.numbers[index]
     end
+    local bindNames = Intermission.bindNames(rec.key)
     -- The ping decision depends ONLY on the role and the configured policy; the
-    -- operational order and the "PING: YES/NO" line follow it, so a role never
+    -- ONE action line and the "PING: YES/NO" banner follow it, so a role never
     -- receives a contradictory order.
     local shouldPing = pingsInMode(rec, resolvedMode)
     local roleName = Locale.t(rec.roleName)
-    local pingColor = Locale.t(rec.pingColor)
-    local pingLine
-    if shouldPing then
-        pingLine = Locale.format(rec.pingYes, pingColor, rec.ping)
-    else
-        pingLine = Locale.format(rec.pingNo, roleName)
-    end
     return {
         key = rec.key,
         display = Locale.t(rec.display),
@@ -401,24 +468,33 @@ local function copyRecord(rec, mode)
         dominant = Locale.t(rec.dominant),
         position = rec.position,
         positionLabel = Locale.t(rec.positionLabel),
+        -- The ping to use (the player triggers it with their own keybind).
         ping = rec.ping,
-        pingToken = rec.pingToken,
-        pingColor = pingColor,
+        pingColor = Locale.t(rec.pingColor),
         pingColorHex = rec.pingColorHex,
-        -- PING ROLE (never deduced from the number) + its operational order.
+        bindName = bindNames ~= nil and bindNames[1] or nil,
+        bindNames = bindNames,
+        -- PING ROLE (never deduced from the number) + its action line.
         role = rec.role,
         roleName = roleName,
-        roleOrder = Locale.t(shouldPing and rec.orderPing or rec.orderNoPing),
+        roleLine = Locale.format("ui.roleLine", roleName),
+        action = Locale.t(shouldPing and rec.actionPing or rec.actionNoPing),
+        actionLine = Locale.format(shouldPing and rec.actionPing or rec.actionNoPing, Intermission.pingLabel(rec.ping)),
         -- Ping policy applied to this state.
         shouldPing = shouldPing,
         pingDecision = Locale.t(shouldPing and "state.ping.yes" or "state.ping.no"),
-        pingLine = pingLine,
+        -- Ping line: only for a role that has to ping (the key itself is read by
+        -- the rendering layer and formatted in pingHint); nil otherwise, so a
+        -- role that must not ping never carries a ping instruction.
+        pingLine = shouldPing and Locale.format("ping.noKey", Intermission.pingLabel(rec.ping)) or nil,
         pingPolicy = resolvedMode,
-        policyLine = Locale.t("pingMode." .. resolvedMode),
-        action = Locale.t(rec.action),
-        find = Locale.t(rec.find),
+        policyLine = Locale.format(
+            "pingMode." .. resolvedMode,
+            Intermission.pingLabel("Warning"),
+            Intermission.pingLabel("OnMyWay"),
+            Intermission.pingLabel("Assist")
+        ),
         complement = rec.complement,
-        numberRule = Locale.t(rec.numberRule),
         buttonLabel = Locale.t(rec.buttonLabel),
     }
 end
@@ -542,8 +618,8 @@ end
 --- The info carries { ambiguous = true } when the input did NOT reveal the
 --- color: the caller must then ASK for the dominant color.
 --- `pingMode` is the configured ping policy ("anchors" by default): it decides
---- `shouldPing`, `roleOrder` and the ping lines. An unknown value falls back to
---- "anchors" (never an error).
+--- `shouldPing` and the action line. An unknown value falls back to "anchors"
+--- (never an error).
 function Intermission.getDeclaration(raw, pingMode)
     local key, err, info = Intermission.normalizeDeclaration(raw)
     if key == nil then
@@ -563,7 +639,7 @@ function Intermission.shouldPing(raw, pingMode)
 end
 
 --- Localized explanation of a ping policy (pure, never raises): used by the UI
---- and by /gr ping so the player always sees WHY a role does or does not ping.
+--- and by /gr ping. The policy is NOT displayed on the combat panel any more.
 --- @param pingMode string|nil raw policy
 --- @return string line, string resolvedMode
 function Intermission.pingPolicyLine(pingMode)
@@ -612,13 +688,16 @@ function Intermission.checkMeeting(rawA, rawB)
     return { ok = ok, label = label, greens = greens, reds = reds, reason = reason, required = a.complement }
 end
 
---- Generates the macro text to paste (the player triggers it: a macro is secure
---- code, the only way to call the #protected API).
---- The macro is PROPOSED ONLY to a state whose role must ping under the
---- configured policy: under "anchors" only the 1V3R anchors get one, under
---- "color" all three states, under "none" nobody (nil + explanation).
---- @return table|nil { primary, fallback, ping, target, note }, string|nil error
-function Intermission.buildMacro(raw, targetToken, pingMode)
+--- The ping instruction of a state: WHICH ping to use and, when the rendering
+--- layer managed to read the player's keybind, WHICH key to press.
+--- PURE: the key is INJECTED (the binding lookup happens in UI/, never here).
+--- An empty or non-string key is treated as "no keybind": the line then asks for
+--- a keybind instead of showing a shortcut that does not exist.
+--- @param raw string|nil composition
+--- @param pingMode string|nil configured ping policy
+--- @param key string|nil key bound by the player, read by the wiring layer
+--- @return table|nil { ping, key, bindName, bindNames, line }, string|nil error
+function Intermission.pingHint(raw, pingMode, key)
     local rec, err = Intermission.getDeclaration(raw, pingMode)
     if rec == nil then
         return nil, err
@@ -626,32 +705,45 @@ function Intermission.buildMacro(raw, targetToken, pingMode)
     if not rec.shouldPing then
         return nil, Locale.format("err.pingNotAllowed", rec.roleName, rec.pingPolicy)
     end
-    local target = targetToken
-    if type(target) ~= "string" or target == "" then
-        target = Intermission.DEFAULT_TARGET_TOKEN
+    local pressed = nil
+    if type(key) == "string" and key ~= "" then
+        pressed = key
+    end
+    local label = Intermission.pingLabel(rec.ping)
+    local line
+    if pressed ~= nil then
+        line = Locale.format("ping.press", label, pressed)
+    else
+        line = Locale.format("ping.noKey", label)
     end
     return {
-        primary = "/run C_Ping.SendMacroPing({type = Enum.PingSubjectType." .. rec.ping .. ', targetToken = "' .. target .. '"})',
-        fallback = "/ping " .. rec.pingToken,
         ping = rec.ping,
-        role = rec.role,
-        target = target,
-        note = Locale.t("macro.note"),
+        label = label,
+        key = pressed,
+        bindName = rec.bindName,
+        bindNames = rec.bindNames,
+        line = line,
     }
 end
 
---- Validates a timeline prepared out of game (SavedVariables).
---- @return table|nil { name, visibilitySeconds, durationSeconds }, string|nil error
+--- Validates a timeline prepared out of game (SavedVariables) or built by the
+--- wiring from the configuration.
+--- @return table|nil { name, leadSeconds, visibilitySeconds, durationSeconds }, string|nil error
 function Intermission.validateTimeline(entry)
     if entry == nil then
         return {
             name = "Intermission",
+            leadSeconds = Intermission.LEAD_SECONDS,
             visibilitySeconds = Intermission.VISIBILITY_SECONDS,
             durationSeconds = Intermission.DEFAULT_DURATION_SECONDS,
         }
     end
     if type(entry) ~= "table" then
         return nil, Locale.t("err.invalidTimeline")
+    end
+    local lead = Intermission.LEAD_SECONDS
+    if type(entry.leadSeconds) == "number" then
+        lead = clampInt(entry.leadSeconds, 0, 10)
     end
     local visibility = Intermission.VISIBILITY_SECONDS
     if type(entry.visibilitySeconds) == "number" then
@@ -668,7 +760,7 @@ function Intermission.validateTimeline(entry)
     if type(entry.name) == "string" and entry.name ~= "" then
         name = entry.name
     end
-    return { name = name, visibilitySeconds = visibility, durationSeconds = duration }
+    return { name = name, leadSeconds = lead, visibilitySeconds = visibility, durationSeconds = duration }
 end
 
 --- Creates a fresh state (IDLE).
@@ -682,7 +774,10 @@ function Intermission.newState(timeline)
     }
 end
 
---- Starts the intermission (trigger: ENCOUNTER_START or a player action).
+--- Starts the intermission (trigger: the pre-computed schedule, a key/button).
+--- A positive lead time opens the panel in the PENDING phase: the intermission
+--- clock itself (visibility window, then darkened room) only starts when the
+--- lead time has elapsed, i.e. at the intermission.
 --- @return table|nil state, string|nil error
 function Intermission.start(state, timeline)
     if type(state) ~= "table" then
@@ -695,9 +790,13 @@ function Intermission.start(state, timeline)
         end
         state.timeline = resolved
     end
-    state.phase = PHASE_VISIBLE
     state.elapsed = 0
     state.declaration = nil
+    if state.timeline.leadSeconds > 0 then
+        state.phase = PHASE_PENDING
+    else
+        state.phase = PHASE_VISIBLE
+    end
     return state
 end
 
@@ -707,15 +806,24 @@ function Intermission.tick(state, dt)
     if type(state) ~= "table" then
         return state
     end
-    if state.phase ~= PHASE_VISIBLE and state.phase ~= PHASE_DARK then
+    if state.phase ~= PHASE_PENDING and state.phase ~= PHASE_VISIBLE and state.phase ~= PHASE_DARK then
         return state
     end
     local step = tonumber(dt)
     if step == nil or step < 0 then
         return state
     end
-    state.elapsed = state.elapsed + step
     local timeline = state.timeline
+    state.elapsed = state.elapsed + step
+    if state.phase == PHASE_PENDING then
+        -- The lead time only decides WHEN the intermission starts; the
+        -- intermission clock starts from zero at that exact moment.
+        if state.elapsed >= timeline.leadSeconds then
+            state.phase = PHASE_VISIBLE
+            state.elapsed = 0
+        end
+        return state
+    end
     if state.elapsed >= timeline.durationSeconds then
         state.phase = PHASE_DONE
     elseif state.elapsed >= timeline.visibilitySeconds then
@@ -729,6 +837,7 @@ end
 --- Records the player's declaration: the ORB COMPOSITION they see ("3V1R",
 --- "2V2R", "1V3R", or a tolerated form such as "3 verts"). A bare number "1" or
 --- "3" is REFUSED (ambiguous): see normalizeDeclaration.
+--- Allowed in PENDING (the panel opens before the intermission), VISIBLE and DARK.
 --- @return table|nil state, string|nil error
 function Intermission.declare(state, raw)
     if type(state) ~= "table" then
@@ -745,6 +854,24 @@ function Intermission.declare(state, raw)
         return nil, err
     end
     state.declaration = n
+    return state
+end
+
+--- The REDO / CORRECT button: forgets the declaration and brings the panel back
+--- to the three composition choices. Usable as many times as needed, in every
+--- phase except IDLE.
+--- @return table|nil state, string|nil error
+function Intermission.clearDeclaration(state)
+    if type(state) ~= "table" then
+        return nil, Locale.t("err.invalidState")
+    end
+    if state.phase == PHASE_IDLE then
+        return nil, Locale.t("err.notStarted")
+    end
+    if state.declaration == nil then
+        return nil, Locale.t("err.nothingToRedo")
+    end
+    state.declaration = nil
     return state
 end
 
@@ -771,10 +898,27 @@ function Intermission.remainingVisibility(state)
     return round(left)
 end
 
+--- Remaining seconds before the intermission starts (0 outside PENDING).
+function Intermission.remainingLead(state)
+    if type(state) ~= "table" or type(state.timeline) ~= "table" then
+        return 0
+    end
+    local left = state.timeline.leadSeconds - state.elapsed
+    if left < 0 then
+        left = 0
+    end
+    return round(left)
+end
+
 --- Displayable state, fully computed here: the UI layer only renders.
---- `pingMode` is the configured ping policy (injected: Core never reads the
---- SavedVariables). An unknown value behaves like "anchors".
-function Intermission.snapshot(state, pingMode)
+--- The panel shows the ESSENTIAL only (state, role, PING: YES/NO, ONE action
+--- line) because it is read during combat.
+--- @param state table|nil intermission state
+--- @param pingMode string|nil configured ping policy
+--- @param bindingResolver function|nil injected by the wiring layer:
+---        function(bindNames) -> key|nil. Core/ NEVER calls an API: it only calls
+---        this injected resolver under pcall (an absent resolver = no key known).
+function Intermission.snapshot(state, pingMode, bindingResolver)
     local mode = Config.resolvePingMode(pingMode)
     local phase = PHASE_IDLE
     local declaration, elapsed, timeline = nil, 0, Intermission.validateTimeline(nil)
@@ -785,59 +929,46 @@ function Intermission.snapshot(state, pingMode)
         timeline = state.timeline or timeline
     end
 
-    local policyLine = Locale.t("pingMode." .. mode)
     local snap = {
         phase = phase,
         visible = phase ~= PHASE_IDLE,
-        showButtons = phase == PHASE_VISIBLE or phase == PHASE_DARK,
+        -- The wiring closes the panel by itself when the intermission is over.
+        autoClose = phase == PHASE_DONE,
+        showButtons = phase == PHASE_PENDING or phase == PHASE_VISIBLE or phase == PHASE_DARK,
+        showRedo = false,
         declaration = declaration,
-        countdownText = "0",
+        stateText = declaration or "",
+        stateLong = nil,
         headline = "",
+        countdownText = "0",
         lines = {},
-        macroPrimary = nil,
-        macroFallback = nil,
-        macroNote = nil,
-        -- Ping role / policy: filled once the player has declared.
+        prompt = nil,
         role = nil,
         roleName = nil,
+        roleLine = nil,
         shouldPing = false,
-        macroAllowed = false,
-        pingText = nil,
+        pingDecision = nil,
+        pingBanner = nil,
         pingColorHex = nil,
+        pingHint = nil,
+        actionLine = nil,
         pingPolicy = mode,
-        policyLine = policyLine,
-        caveat = Locale.t("inter.caveat"),
-        prompt = Locale.t("inter.prompt"),
-        ambiguity = Locale.t("inter.ambiguity"),
+        policyLine = Locale.t("pingMode." .. mode),
     }
 
-    local lines = snap.lines
     if phase == PHASE_IDLE then
         snap.headline = Locale.t("inter.headline.idle")
-        lines[#lines + 1] = Locale.format("inter.line.idleTimeline", timeline.visibilitySeconds)
-        lines[#lines + 1] = Locale.t("inter.line.idleTrigger")
-        lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
-        lines[#lines + 1] = Locale.t("inter.prompt")
-        lines[#lines + 1] = Locale.t("inter.ambiguity")
-        return snap
-    end
-
-    if phase == PHASE_VISIBLE then
+        snap.lines[1] = Locale.t("inter.line.idle")
+    elseif phase == PHASE_PENDING then
+        local left = Intermission.remainingLead({ timeline = timeline, elapsed = elapsed })
+        snap.countdownText = tostring(left)
+        snap.headline = Locale.format("inter.headline.getReady", left)
+    elseif phase == PHASE_VISIBLE then
         local left = Intermission.remainingVisibility({ timeline = timeline, elapsed = elapsed })
         snap.countdownText = tostring(left)
         snap.headline = Locale.format("inter.headline.visible", left)
-        if declaration == nil then
-            lines[#lines + 1] = Locale.t("inter.line.visibleIndicators")
-            lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
-            lines[#lines + 1] = Locale.t("inter.prompt")
-        end
     elseif phase == PHASE_DARK then
         snap.headline = Locale.t("inter.headline.dark")
-        if declaration == nil then
-            lines[#lines + 1] = Locale.t("inter.line.darkIndicators")
-            lines[#lines + 1] = Locale.format("inter.line.pingPolicy", policyLine)
-            lines[#lines + 1] = Locale.t("inter.prompt")
-        end
     else
         snap.headline = Locale.t("inter.headline.done")
     end
@@ -847,40 +978,168 @@ function Intermission.snapshot(state, pingMode)
         -- copyRecord resolves the locale keys: only the copy is displayed.
         local shown = copyRecord(rec, mode)
         snap.instruction = shown
+        snap.stateLong = shown.display
         snap.role = shown.role
         snap.roleName = shown.roleName
+        snap.roleLine = shown.roleLine
         snap.shouldPing = shown.shouldPing
-        snap.macroAllowed = shown.shouldPing
-        snap.pingText = Locale.format("ui.pingBanner", shown.pingDecision)
+        snap.pingDecision = shown.pingDecision
+        snap.pingBanner = Locale.format("ui.pingBanner", shown.pingDecision)
         snap.pingColorHex = shown.shouldPing and shown.pingColorHex or nil
-        lines[#lines + 1] = Locale.format("inter.line.youSee", shown.display, shown.key)
-        local numberSuffix = shown.numberAmbiguous and Locale.t("inter.suffix.ambiguous") or Locale.t("inter.suffix.unambiguous")
-        lines[#lines + 1] = Locale.format("inter.line.number", shown.numberText, numberSuffix)
-        lines[#lines + 1] = Locale.format("inter.line.role", shown.roleName, shown.key)
-        lines[#lines + 1] = Locale.format("inter.line.roleOrder", shown.roleOrder)
-        lines[#lines + 1] = Locale.format("inter.line.action", shown.action)
-        lines[#lines + 1] = Locale.format("inter.line.position", shown.positionLabel)
-        -- The ANCHOR waits: the other state is the one that joins it.
-        local joinKey = (shown.role == Intermission.ROLES.ANCHOR) and "inter.line.joinedBy" or "inter.line.join"
-        lines[#lines + 1] = Locale.format(joinKey, shown.complement, shown.find)
-        lines[#lines + 1] = Locale.format("inter.line.ping", shown.pingDecision, shown.pingLine)
-        lines[#lines + 1] = Locale.format("inter.line.pingPolicy", shown.policyLine)
-        lines[#lines + 1] = Locale.format("inter.line.guildRule", shown.numberRule)
-        -- The macro is generated ONLY for a role that must ping: it is never
-        -- proposed to a CHASER or to a MIDDLE under the "anchors" policy.
+        snap.actionLine = shown.actionLine
+        snap.showRedo = snap.showButtons
         if shown.shouldPing then
-            local macro = Intermission.buildMacro(shown.key, nil, mode)
-            if macro ~= nil then
-                snap.macroPrimary = macro.primary
-                snap.macroFallback = macro.fallback
-                snap.macroNote = macro.note
+            -- The key is read by the RENDERING layer (injected resolver) and
+            -- formatted HERE: an unknown key simply yields the "set a keybind"
+            -- line, never a wrong shortcut.
+            local pressed = nil
+            if type(bindingResolver) == "function" then
+                local ok, resolved = pcall(bindingResolver, shown.bindNames)
+                if ok and type(resolved) == "string" and resolved ~= "" then
+                    pressed = resolved
+                end
             end
+            snap.pingHint = Intermission.pingHint(shown.key, mode, pressed)
         end
+        snap.lines[#snap.lines + 1] = shown.roleLine
+        if snap.pingHint ~= nil then
+            snap.lines[#snap.lines + 1] = snap.pingHint.line
+        end
+        snap.lines[#snap.lines + 1] = shown.actionLine
+    elseif snap.showButtons then
+        snap.prompt = Locale.t("inter.prompt")
+        snap.lines[#snap.lines + 1] = snap.prompt
     end
-    lines[#lines + 1] = Locale.t("inter.ambiguity")
-    lines[#lines + 1] = Locale.t("inter.caveat")
-    lines[#lines + 1] = Locale.t("inter.channel")
     return snap
+end
+
+--[[ Pre-pull / placement content (NOT the combat panel).
+
+     Flow requested by the raid lead:
+       a. before the pull, /gr opens the main panel and the player PLACES the
+          intermission panel (drag) -> position saved in the SavedVariables;
+       b. the player prepares their ping keybind and confirms with OK -> the
+          panel closes;
+       c. the boss is pulled, and the panel opens by itself shortly before each
+          intermission (pre-computed schedule, 1-2 s of lead time);
+       d. the player clicks their composition (REDO corrects a mistake);
+       e. the panel closes by itself at the end of the intermission.
+]]
+--- @param options table|nil { leadSeconds = number|nil, pairs = number|nil }
+--- @return table { headline, lines, okLabel, closeLabel }
+function Intermission.setupView(options)
+    local opts = type(options) == "table" and options or {}
+    local lead = clampInt(opts.leadSeconds or Intermission.LEAD_SECONDS, 0, 10)
+    local lines = {
+        Locale.t("ui.setup.drag"),
+        Locale.t("ui.setup.keys"),
+        Locale.format("ui.setup.ready", lead),
+    }
+    local pairsCount = tonumber(opts.pairs)
+    if pairsCount ~= nil and pairsCount > 0 then
+        lines[#lines + 1] = Locale.format("ui.setup.plan", pairsCount)
+    else
+        lines[#lines + 1] = Locale.t("ui.setup.noPlan")
+    end
+    return {
+        headline = Locale.t("ui.setup.headline"),
+        lines = lines,
+        okLabel = Locale.t("ui.ok"),
+        closeLabel = Locale.t("ui.close"),
+    }
+end
+
+--[[ Pre-computed intermission RUN: everything is timed from ENCOUNTER_START.
+
+     The pull is the time origin (the wiring calls newRun() on ENCOUNTER_START and
+     feeds advanceRun(run, dt) with a constant step). The panel must open
+     `lead` seconds BEFORE each intermission of the schedule, close at the end of
+     the intermission, and open again at the next one.
+
+     Timer values measured by the raid lead: 46.3 s for the first intermission,
+     then 148.9 / 251.5 / 353.2 s. They are PERSISTED (Config) and can be
+     replaced out of game.
+]]
+
+--- @param schedule table|nil persisted schedule (seconds since the pull)
+--- @param leadSeconds number|nil seconds of lead before each intermission
+--- @return table run { schedule, lead, index, elapsed }
+function Intermission.newRun(schedule, leadSeconds)
+    return {
+        schedule = Config.resolveSchedule(schedule),
+        lead = clampInt(leadSeconds or Intermission.LEAD_SECONDS, 0, 10),
+        index = 1,
+        elapsed = 0,
+    }
+end
+
+--- Absolute time (seconds since the pull) of the NEXT intermission, nil once the
+--- schedule is exhausted.
+function Intermission.runNextAt(run)
+    if type(run) ~= "table" or type(run.schedule) ~= "table" then
+        return nil
+    end
+    return run.schedule[run.index or 1]
+end
+
+--- Absolute time at which the PANEL must open for the next intermission.
+function Intermission.runOpenAt(run)
+    local at = Intermission.runNextAt(run)
+    if at == nil then
+        return nil
+    end
+    return at - (run.lead or Intermission.LEAD_SECONDS)
+end
+
+--- How many intermissions are still to come (0 once the schedule is exhausted).
+function Intermission.runRemaining(run)
+    if type(run) ~= "table" or type(run.schedule) ~= "table" then
+        return 0
+    end
+    local left = #run.schedule - ((run.index or 1) - 1)
+    if left < 0 then
+        left = 0
+    end
+    return left
+end
+
+function Intermission.runFinished(run)
+    return Intermission.runNextAt(run) == nil
+end
+
+--- Advances the encounter clock by dt and reports whether a new intermission had
+--- to be opened. INVARIANT: at most ONE opening per call (a huge dt never skips
+--- an intermission: the next call reports it).
+--- @return table run, number|nil openedIndex (1-based index in the schedule)
+function Intermission.advanceRun(run, dt)
+    if type(run) ~= "table" then
+        return run, nil
+    end
+    local step = tonumber(dt)
+    if step == nil or step < 0 then
+        return run, nil
+    end
+    run.elapsed = (run.elapsed or 0) + step
+    local openAt = Intermission.runOpenAt(run)
+    if openAt ~= nil and run.elapsed >= openAt then
+        local opened = run.index or 1
+        run.index = opened + 1
+        return run, opened
+    end
+    return run, nil
+end
+
+--- Restarts the encounter clock (new pull). Keeps the previous schedule/lead.
+--- @return table|nil run
+function Intermission.resetRun(run, schedule, leadSeconds)
+    if type(run) ~= "table" then
+        return nil
+    end
+    run.schedule = Config.resolveSchedule(schedule or run.schedule)
+    run.lead = clampInt(leadSeconds or run.lead or Intermission.LEAD_SECONDS, 0, 10)
+    run.index = 1
+    run.elapsed = 0
+    return run
 end
 
 --[[ Plan prepared out of game.
@@ -975,12 +1234,13 @@ end
 --- Builds the pre-pull view: partner, prepared role/position, sorted pairs.
 --- No API read: everything comes from the already validated GIDEON block.
 --- `pingMode` is the configured ping policy: it decides the ping role deduced
---- from the prepared composition, and whether a ping macro is shown at all.
+--- from the prepared composition, and which ping/key it has to use.
 --- @param assignment table block validated by Pairing.validateAssignment
 --- @param playerName string name of the current player (string provided by the wiring)
 --- @param pingMode string|nil configured ping policy ("anchors" by default)
+--- @param bindingResolver function|nil injected by the wiring layer
 --- @return table|nil plan, string|nil error
-function Intermission.buildPlan(assignment, playerName, pingMode)
+function Intermission.buildPlan(assignment, playerName, pingMode, bindingResolver)
     if type(assignment) ~= "table" or type(assignment.pairs) ~= "table" then
         return nil, Locale.t("err.invalidAssignment")
     end
@@ -1009,8 +1269,7 @@ function Intermission.buildPlan(assignment, playerName, pingMode)
         pingRole = nil,
         shouldPing = nil,
         pingPolicy = mode,
-        macroPrimary = nil,
-        macroFallback = nil,
+        pingHint = nil,
         lines = {},
     }
 
@@ -1049,21 +1308,26 @@ function Intermission.buildPlan(assignment, playerName, pingMode)
 
     -- PING ROLE deduced from the PREPARED composition, under the configured
     -- policy: displayed only when GIDEON prepared an ORB COMPOSITION (a free
-    -- raid role such as "Tank" deduces nothing), and the macro only when that
-    -- role must ping.
+    -- raid role such as "Tank" deduces nothing). The ping to use (and, when the
+    -- player bound one, the key to press) is named: there is NO macro any more.
     if out.me ~= nil and out.me.role ~= nil then
         local shown = Intermission.getDeclaration(out.me.role, mode)
         if shown ~= nil then
             out.pingRole = shown.role
             out.shouldPing = shown.shouldPing
             lines[#lines + 1] = Locale.format("plan.yourPingRole", shown.roleName, shown.key, shown.pingDecision)
-            lines[#lines + 1] = Locale.format("plan.roleOrder", shown.roleOrder)
             if shown.shouldPing then
-                local macro = Intermission.buildMacro(shown.key, nil, mode)
-                if macro ~= nil then
-                    out.macroPrimary = macro.primary
-                    out.macroFallback = macro.fallback
-                    lines[#lines + 1] = Locale.format("plan.pingMacro", macro.primary)
+                local pressed = nil
+                if type(bindingResolver) == "function" then
+                    local ok, resolved = pcall(bindingResolver, shown.bindNames)
+                    if ok and type(resolved) == "string" and resolved ~= "" then
+                        pressed = resolved
+                    end
+                end
+                local hint = Intermission.pingHint(shown.key, mode, pressed)
+                out.pingHint = hint
+                if hint ~= nil then
+                    lines[#lines + 1] = hint.line
                 end
             end
         end

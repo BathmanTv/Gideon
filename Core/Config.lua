@@ -33,6 +33,20 @@ Config.PING_MODES = { "anchors", "color", "none" }
 --- Default ping policy: the raid lead's decision ("anchors").
 Config.DEFAULT_PING_MODE = "anchors"
 
+--- Pre-computed intermission timeline, in SECONDS SINCE ENCOUNTER_START (the pull
+--- is the time origin). Values measured on the real encounter by the raid lead:
+--- the first intermission lands ~46 s after the pull, then every ~102.6 s.
+--- Prepared by hand and persisted: GIDEON can overwrite it out of game.
+--- https://warcraft.wiki.gg/wiki/ENCOUNTER_START (arguments never read).
+Config.DEFAULT_SCHEDULE_SECONDS = { 46.3, 148.9, 251.5, 353.2 }
+
+--- How many seconds BEFORE each intermission the panel opens by itself.
+Config.DEFAULT_LEAD_SECONDS = 2
+
+--- Maximum number of intermissions kept from a persisted schedule (a hand-edited
+--- SavedVariables must never produce an unbounded loop).
+Config.MAX_SCHEDULE_ENTRIES = 12
+
 Config.DEFAULTS = {
     enabled = true,
     autoShow = true,
@@ -56,14 +70,54 @@ function Config.defaultIntermission()
         startOnEncounterStart = true,
         autoShowPanel = true,
         scale = 1.0,
+        -- The panel opens `leadSeconds` BEFORE the intermission so the player
+        -- reads the three choices before the orbs appear.
+        leadSeconds = Config.DEFAULT_LEAD_SECONDS,
         visibilitySeconds = 3,
         durationSeconds = 20,
-        macroTargetToken = "player",
+        -- Pre-computed intermission schedule, in seconds since ENCOUNTER_START.
+        scheduleSeconds = Config.defaultScheduleSeconds(),
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
         -- and changeable in game with /gr ping anchors|color|none.
         pingMode = Config.DEFAULT_PING_MODE,
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 },
     }
+end
+
+--- Fresh copy of the default schedule (never a shared table: a caller mutating
+--- the returned list must not corrupt the defaults of the next character).
+function Config.defaultScheduleSeconds()
+    local out = {}
+    for index = 1, #Config.DEFAULT_SCHEDULE_SECONDS do
+        out[index] = Config.DEFAULT_SCHEDULE_SECONDS[index]
+    end
+    return out
+end
+
+--- PURE normalization of a prepared schedule: keeps positive numbers only,
+--- sorts them ASCENDING (deterministic, no pairs()) and caps the number of
+--- entries. A missing/absurd value never raises and never yields an empty list
+--- (fallback: the default schedule).
+--- @param raw table|nil persisted schedule (seconds since ENCOUNTER_START)
+--- @return table sorted copy of numbers
+function Config.resolveSchedule(raw)
+    local out = {}
+    if type(raw) == "table" then
+        for index = 1, #raw do
+            local value = tonumber(raw[index])
+            if value ~= nil and value > 0 then
+                out[#out + 1] = value
+            end
+        end
+    end
+    if #out == 0 then
+        return Config.defaultScheduleSeconds()
+    end
+    table.sort(out)
+    while #out > Config.MAX_SCHEDULE_ENTRIES do
+        table.remove(out)
+    end
+    return out
 end
 
 local function clampNumber(value, min, max)
@@ -195,9 +249,12 @@ function Config.resolveIntermission(raw)
     if type(raw.durationSeconds) == "number" then
         out.durationSeconds = math.floor(clampNumber(raw.durationSeconds, out.visibilitySeconds + 1, 120) + 0.5)
     end
-    if type(raw.macroTargetToken) == "string" and raw.macroTargetToken ~= "" then
-        out.macroTargetToken = raw.macroTargetToken
+    -- Lead time (the panel opens BEFORE the intermission): bounded, an absurd
+    -- value falls back to the default instead of showing the panel way too early.
+    if type(raw.leadSeconds) == "number" then
+        out.leadSeconds = math.floor(clampNumber(raw.leadSeconds, 0, 10) + 0.5)
     end
+    out.scheduleSeconds = Config.resolveSchedule(raw.scheduleSeconds)
     -- Ping policy: pure and bounded resolution, an unknown value falls back to
     -- "anchors" (never an error, never nil).
     out.pingMode = Config.resolvePingMode(raw.pingMode)

@@ -245,23 +245,49 @@ A task is finished if, **and only if**:
    player click or from a block prepared out of game. Forbidden to write in the
    UI, in the docs or in a commit message that an action is "automatic" when it
    depends on a player declaration.
-2. **No ping sent by the addon.** `C_Ping.SendMacroPing` is `#protected` —
-   <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing>: the addon
-   **generates the text of a macro**, the player triggers it. The body of a
-   `Bindings.xml` is executed *insecurely*
-   (<https://warcraft.wiki.gg/wiki/Creating_key_bindings>): it cannot call that
-   function either.
+2. **No ping sent by the addon, no macro preparing one.**
+   `C_Ping.SendMacroPing` is `#protected` and the client **refuses the call even
+   from a macro or a binding** — measured in game on a live raid: *"this action
+   can only be used by the Blizzard UI"*. The module therefore **generates no
+   macro any more** and only tells the player **which ping to use**; the player
+   triggers it with the **native** ping keybind
+   (Options > Keybindings > ping system, since 10.1.7). Forbidden to write, in the
+   UI, in the docs or in a commit message, that the addon pings or prepares a
+   ping. The anti-forbidden-API guard (`tests/spec/guard_spec.lua`) fails if
+   `C_Ping`, `SendMacroPing` or `PingSubjectType` appears anywhere in a file
+   listed in the `.toc`, **comments excluded** — and `buildMacro` must not come
+   back.
+2bis. **The ping keybind is READ, never bound.** The only allowed call is
+   `GetBindingKey(<candidate>)`
+   (<https://warcraft.wiki.gg/wiki/API_GetBindingKey>), **in `UI/` only**, **under
+   `pcall`**, for display. `Core/` never calls it: the rendering layer injects a
+   `resolveBinding(refName)` function, and `Core/Intermission.pingHint` only
+   formats what it receives. If the lookup returns nothing (no key bound, unknown
+   binding name), the panel must show **no key at all** and point to
+   *Options > Keybindings* — never invent a shortcut. The candidate names are
+   data (`PING_BINDINGS` in `Core/Intermission.lua`) and stay **to be confirmed in
+   game**.
 3. **`Bindings.xml` is NEVER listed in the `.toc`**: the client loads it
    automatically. `tools/check_toc.py` keeps checking only the `.lua` files
    listed in the `.toc`.
 4. **No combat API value in the module**: no aura, no health, no resource, no
    target. Only the name of our own unit (`UnitName("player")`) and the strings
-   from `GideonRaidDB` enter it.
-5. **Time is injected.** `Core/Intermission.tick(state, dt)` receives a constant
-   time step provided by the wiring: no `GetTime()` in `Core/`.
+   from `GideonRaidDB` enter it. The **arguments of `ENCOUNTER_START` are never
+   read** (they are secret values): the event is only the starting gun of the
+   pre-computed schedule.
+5. **Time is injected.** `Core/Intermission.tick(state, dt)` and
+   `Core/Intermission.advanceRun(run, dt)` receive a constant time step provided
+   by the wiring: no `GetTime()` in `Core/`.
 6. **The UI says what is impossible.** The panel explicitly states that "who
    declared what" is unknown and that the ping is the only signal visible to the
    other players.
+7. **The panel shows the ESSENTIAL only** (raid-lead decision after the first real
+   in-game test): the state, the role, `PING: YES/NO` and **one** action line.
+   Forbidden on screen: role orders, ping policies, caveats, long paragraphs —
+   the justification belongs to `docs/`, not to a panel read during the
+   darkening. Same rule for the vestigial messages: **never** point the player to
+   a command that does not exist (the absent out-of-game plan is reported by a
+   single discreet line, or not at all).
 
 ---
 
