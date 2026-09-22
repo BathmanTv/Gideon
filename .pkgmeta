@@ -39,4 +39,8 @@ enable-toc-creation: no
 required-dependencies: []
 optional-dependencies: []
 
+# Use OUR curated English changelog instead of dumping raw commit messages
+# (older commits were written in French and leaked into the release notes).
+manual-changelog: CHANGELOG.md
+
 tools-used: []
