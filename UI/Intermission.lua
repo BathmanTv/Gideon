@@ -1,32 +1,36 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / UI / Intermission.lua
 
-    COUCHE RENDU UNIQUEMENT (« Intermission Coach »). Ce fichier peut appeler
-    l'API WoW (frames, fonts, C_Timer). Il ne contient AUCUN calcul metier :
-    tout vient de ns.Intermission.snapshot() / ns.Intermission.buildPlan().
+    RENDERING LAYER ONLY ("Intermission Coach"). This file may call the WoW API
+    (frames, fonts, C_Timer). It contains NO business computation: everything
+    comes from ns.Intermission.snapshot() / ns.Intermission.buildPlan().
 
-    Interdictions 12.x (voir docs/CONVENTIONS.md) :
-      - aucune lecture d'aura / sante / ressource (valeur SECRETE possible) ;
-      - aucun evenement de journal de combat ;
-      - aucun message addon -> addon en instance ;
-      - aucun ping envoye par l'addon : C_Ping.SendMacroPing est #protected
-        (https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing). L'addon se
-        contente d'AFFICHER le texte d'une macro que le joueur declenche.
+    12.x prohibitions (see docs/CONVENTIONS.md):
+      - no read of aura / health / resource (possible SECRET value);
+      - no combat log event;
+      - no addon -> addon message in an instance;
+      - no ping sent by the addon: C_Ping.SendMacroPing is #protected
+        (https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing). The addon only
+        DISPLAYS the text of a macro that the player triggers.
 
-    Ce que le joueur voit ici est LOCAL a son client : l'addon ne peut pas
-    savoir ce que les autres joueurs voient ni ce qu'ils declarent.
+    What the player sees here is LOCAL to their client: the addon cannot know
+    what other players see or what they declare.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
+
+--- Core/Locale.lua is loaded BEFORE this file by the .toc (every string
+--- displayed in game goes through it: English by default, French on frFR).
+local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before UI/Intermission.lua")
 
 local UI = ns.UI or {}
 ns.UI = UI
 
 local TICK_SECONDS = 0.1
 
---- Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
---- Contrainte : ce panneau n'affiche QUE des chaines ecrites par le joueur
---- (clic 1/2/3) ou preparees hors jeu (SavedVariables GIDEON). Aucune valeur
---- d'unite n'est lue, donc aucune comparaison sur une valeur secrete.
+--- API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
+--- Constraint: this panel only displays strings written by the player
+--- (1/2/3 click) or prepared out of game (GIDEON SavedVariables). No unit value
+--- is read, hence no comparison on a secret value.
 local function config()
     local db = _G.GideonRaidDB
     return ns.Config.resolveIntermission(db and db.intermission)
@@ -45,8 +49,8 @@ local function ensureTicker()
     if ticker then
         return ticker
     end
-    -- Le pas de temps est une CONSTANTE LOCALE : aucune valeur lue sur le client,
-    --- donc le module Core reste pur et deterministe (testable avec dt injecte).
+    -- The time step is a LOCAL CONSTANT: no value read from the client, so the
+    --- Core module stays pure and deterministic (testable with an injected dt).
     ticker = C_Timer.NewTicker(TICK_SECONDS, function()
         UI.IntermissionTick(TICK_SECONDS)
     end)
@@ -82,9 +86,9 @@ local function ensurePanel()
 
     p.title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     p.title:SetPoint("TOP", 0, -14)
-    p.title:SetText("GideonRaid - Intermission Coach")
+    p.title:SetText(Locale.t("ui.panelTitle"))
 
-    -- Le rappel de la convention, en tres gros (exigence du module).
+    -- The convention reminder, in very large type (module requirement).
     p.headline = p:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
     p.headline:SetPoint("TOP", 0, -40)
     p.headline:SetText("")
@@ -97,11 +101,11 @@ local function ensurePanel()
     p.body:SetText("")
 
     p.buttons = {}
-    -- Trois boutons : le joueur clique la COMPOSITION d'orbes qu'il voit au-dessus
-    -- de sa tete. Le libelle vient de Core (« 3 verts + 1 rouge / 3V1R /
-    -- numero : 1 ou 3 ») : la couche UI ne calcule rien.
-    -- Le numero n'est qu'un INDICE : 1 et 3 sont AMBIGUS sur la couleur, seul 2
-    -- est non ambigu (2 verts + 2 rouges).
+    -- Three buttons: the player clicks the ORB COMPOSITION seen above their
+    -- head. The label comes from Core ("3 verts + 1 rouge / 3V1R /
+    -- numero : 1 ou 3"): the UI layer computes nothing.
+    -- The number is only a HINT: 1 and 3 are AMBIGUOUS about the color, only 2
+    -- is unambiguous (2 verts + 2 rouges).
     for index = 1, #ns.Intermission.STATES do
         local key = ns.Intermission.STATES[index]
         local rec = ns.Intermission.getDeclaration(key)
@@ -117,7 +121,7 @@ local function ensurePanel()
 
     p.macroLabel = p:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     p.macroLabel:SetPoint("TOPLEFT", 24, -284)
-    p.macroLabel:SetText("Macro de ping (clic = tout selectionner, puis Ctrl+C) :")
+    p.macroLabel:SetText(Locale.t("ui.macroLabel"))
 
     p.macroBox = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
     p.macroBox:SetSize(492, 24)
@@ -141,7 +145,7 @@ local function ensurePanel()
     p.close = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
     p.close:SetSize(90, 22)
     p.close:SetPoint("BOTTOMRIGHT", -16, 14)
-    p.close:SetText("Fermer")
+    p.close:SetText(Locale.t("ui.close"))
     p.close:SetScript("OnClick", function()
         UI.IntermissionHide()
     end)
@@ -151,7 +155,7 @@ local function ensurePanel()
     return panel
 end
 
---- Applique echelle + position configurees (aucun calcul metier).
+--- Applies the configured scale + position (no business computation).
 function UI.IntermissionApplyConfig()
     local p = ensurePanel()
     local c = config()
@@ -161,7 +165,7 @@ function UI.IntermissionApplyConfig()
     p:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
 end
 
---- Sauvegarde la position courante du panneau dans les SavedVariables.
+--- Saves the current panel position into the SavedVariables.
 function UI.IntermissionSavePosition()
     local p = ensurePanel()
     local db = _G.GideonRaidDB
@@ -177,22 +181,22 @@ function UI.IntermissionSavePosition()
     }
 end
 
---- Reconstruit l'affichage a partir de l'etat calcule par Core/.
+--- Rebuilds the display from the state computed by Core/.
 function UI.IntermissionRefresh()
     local p = ensurePanel()
     local snap = ns.Intermission.snapshot(state)
     p.headline:SetText(snap.headline)
     p.body:SetText(table.concat(snap.lines, "\n"))
     for _, button in ipairs(p.buttons) do
-        -- Libelle deja pose a la creation (il vient de Core et ne change pas) :
-        -- ici on ne fait que montrer/masquer.
+        -- Label already set at creation (it comes from Core and never changes):
+        -- here we only show/hide.
         button:SetShown(snap.showButtons)
     end
     p.macroBox:SetText(snap.macroPrimary or "")
     if snap.macroPrimary then
-        p.note:SetText("Secours : " .. tostring(snap.macroFallback) .. " - " .. tostring(snap.macroNote))
+        p.note:SetText(Locale.format("ui.macroFallback", tostring(snap.macroFallback), tostring(snap.macroNote)))
     else
-        p.note:SetText("Clique la COMPOSITION que tu vois (3 verts + 1 rouge, 2-2, 1 vert + 3 rouges) : la macro apparait ici.")
+        p.note:SetText(Locale.t("ui.macroPrompt"))
     end
     return snap
 end
@@ -209,7 +213,7 @@ function UI.IntermissionHide()
     p:Hide()
 end
 
---- Touche/bouton manuel : affiche (ou masque) le panneau de l'intermission.
+--- Manual key/button: shows (or hides) the intermission panel.
 function UI.IntermissionToggle()
     local p = ensurePanel()
     if p:IsShown() then
@@ -218,7 +222,7 @@ function UI.IntermissionToggle()
     end
     local c = config()
     if not c.enabled then
-        UI.Print("Intermission Coach desactive (/gr inter on pour l'activer).")
+        UI.Print(Locale.t("ui.disabled"))
         return
     end
     if state == nil or state.phase == ns.Intermission.PHASE.IDLE then
@@ -228,11 +232,11 @@ function UI.IntermissionToggle()
     UI.IntermissionShow()
 end
 
---- Demarre l'intermission (declencheur : touche, bouton, ou ENCOUNTER_START).
+--- Starts the intermission (trigger: key, button, or ENCOUNTER_START).
 function UI.IntermissionStart()
     local c = config()
     if not c.enabled then
-        UI.Print("Intermission Coach desactive (/gr inter on pour l'activer).")
+        UI.Print(Locale.t("ui.disabled"))
         return
     end
     if state == nil then
@@ -243,11 +247,11 @@ function UI.IntermissionStart()
         durationSeconds = c.durationSeconds,
     })
     if not started then
-        UI.Print("Intermission : " .. tostring(err))
+        UI.Print(Locale.format("ui.intermissionError", tostring(err)))
         return
     end
     ensureTicker()
-    UI.Print("Intermission lancee : " .. c.visibilitySeconds .. " s de visibilite, puis salle obscurcie.")
+    UI.Print(Locale.format("ui.started", c.visibilitySeconds))
     if c.autoShowPanel then
         UI.IntermissionShow()
     end
@@ -270,8 +274,8 @@ function UI.IntermissionReset()
     UI.IntermissionRefresh()
 end
 
---- Avance d'un tick. dt est injecte par le ticker (constante locale) : Core ne
---- lit jamais l'heure du client.
+--- Advances by one tick. dt is injected by the ticker (local constant): Core
+--- never reads the client clock.
 function UI.IntermissionTick(dt)
     if state == nil then
         return
@@ -283,13 +287,13 @@ function UI.IntermissionTick(dt)
     end
 end
 
---- Declaration du joueur : clic sur un bouton de COMPOSITION (3V1R / 2V2R /
---- 1V3R). Un numero ambigu (« 1 » ou « 3 » seul) est refuse par Core avec un
---- message demandant la couleur dominante.
+--- Player declaration: click on a COMPOSITION button (3V1R / 2V2R / 1V3R).
+--- A bare ambiguous number ("1" or "3" alone) is refused by Core with a message
+--- asking for the dominant color.
 function UI.IntermissionDeclare(declaration)
     local c = config()
     if not c.enabled then
-        UI.Print("Intermission Coach desactive (/gr inter on pour l'activer).")
+        UI.Print(Locale.t("ui.disabled"))
         return
     end
     if state == nil or state.phase == ns.Intermission.PHASE.IDLE then
@@ -297,12 +301,12 @@ function UI.IntermissionDeclare(declaration)
     end
     local _, err = ns.Intermission.declare(state, declaration)
     if err ~= nil then
-        UI.Print("Declaration refusee : " .. tostring(err))
+        UI.Print(Locale.format("ui.declarationRefused", tostring(err)))
         return
     end
-    -- On PUBLIE la decision horodatee dans les SavedVariables : le kit de
-    -- diagnostic (GideonDiagAddon) la lit ensuite, sans aucune saisie de chat
-    -- pendant le combat et sans communication inter-addons.
+    -- We PUBLISH the timestamped decision into the SavedVariables: the
+    -- diagnostic kit (GideonDiagAddon) reads it afterwards, with no chat input
+    -- during combat and no inter-addon communication.
     local db = _G.GideonRaidDB
     if type(db) == "table" then
         local clock
@@ -319,8 +323,8 @@ function UI.IntermissionDeclare(declaration)
     UI.IntermissionRefresh()
 end
 
---- ENCOUNTER_START est un evenement d'instance, pas de combat log. Ses arguments
---- ne sont PAS lus (aucun risque de valeur secrete) : seul le declencheur sert.
+--- ENCOUNTER_START is an instance event, not a combat log one. Its arguments
+--- are NOT read (no secret value risk): only the trigger is used.
 function UI.IntermissionOnEncounterStart()
     local c = config()
     if not c.enabled or not c.startOnEncounterStart then
@@ -336,48 +340,48 @@ end
 function UI.IntermissionSetEnabled(enabled)
     local db = _G.GideonRaidDB
     if type(db) ~= "table" or type(db.intermission) ~= "table" then
-        UI.Print("SavedVariables non initialisees.")
+        UI.Print(Locale.t("ui.noSavedVariables"))
         return
     end
     db.intermission.enabled = enabled and true or false
-    UI.Print("Intermission Coach " .. (enabled and "active" or "desactive") .. ".")
+    UI.Print(Locale.t(enabled and "ui.enabled" or "ui.disabledState"))
 end
 
 function UI.IntermissionStatus()
     local c = config()
     local snap = ns.Intermission.snapshot(state)
     UI.Print(
-        string.format(
-            "intermission : %s, phase %s, declaration %s",
-            c.enabled and "active" or "desactive",
+        Locale.format(
+            "ui.statusLine",
+            Locale.t(c.enabled and "ui.wordEnabled" or "ui.wordDisabled"),
             snap.phase,
             tostring(snap.declaration)
         )
     )
-    UI.Print(string.format("timeline : %d s visibles, %d s au total, echelle %.2f", c.visibilitySeconds, c.durationSeconds, c.scale))
+    UI.Print(Locale.format("ui.timelineLine", c.visibilitySeconds, c.durationSeconds, c.scale))
 end
 
 function UI.IntermissionPrintMacro()
     local snap = ns.Intermission.snapshot(state)
     if not snap.macroPrimary then
-        UI.Print("Aucune macro : declare d'abord ta composition (/gr inter 3V1R).")
+        UI.Print(Locale.t("ui.noMacro"))
         return
     end
-    UI.Print("macro a coller : " .. snap.macroPrimary)
-    UI.Print("secours : " .. tostring(snap.macroFallback) .. " (" .. tostring(snap.macroNote) .. ")")
+    UI.Print(Locale.format("ui.macroToPaste", snap.macroPrimary))
+    UI.Print(Locale.format("ui.macroFallbackLine", tostring(snap.macroFallback), tostring(snap.macroNote)))
 end
 
---- Affiche le plan prepare hors jeu dans le chat (meme source que le panneau).
+--- Prints the plan prepared out of game into the chat (same source as the panel).
 function UI.PrintPlan()
     local me = UnitName("player")
     local assignment, err = ns.Config.getAssignment()
     if not assignment then
-        UI.Print("pas d'assignation (" .. tostring(err) .. ")")
+        UI.Print(Locale.format("status.noAssignment", tostring(err)))
         return
     end
     local plan, planErr = ns.Intermission.buildPlan(assignment, me)
     if not plan then
-        UI.Print("plan illisible (" .. tostring(planErr) .. ")")
+        UI.Print(Locale.format("ui.unreadablePlan", tostring(planErr)))
         return
     end
     for _, line in ipairs(plan.lines) do
@@ -385,7 +389,27 @@ function UI.PrintPlan()
     end
 end
 
+--- Re-applies every LANGUAGE-DEPENDENT label (panel chrome + composition
+--- buttons). Called at initialization and after a language change (/gr lang):
+--- the strings come from Core, so the UI only copies them.
+function UI.IntermissionApplyStaticText()
+    local p = ensurePanel()
+    p.title:SetText(Locale.t("ui.panelTitle"))
+    p.macroLabel:SetText(Locale.t("ui.macroLabel"))
+    p.close:SetText(Locale.t("ui.close"))
+    for index = 1, #ns.Intermission.STATES do
+        local key = ns.Intermission.STATES[index]
+        local rec = ns.Intermission.getDeclaration(key)
+        local button = p.buttons[index]
+        if button ~= nil then
+            button:SetText(rec ~= nil and rec.buttonLabel or key)
+        end
+    end
+    UI.IntermissionRefresh()
+end
+
 function UI.IntermissionInitialize()
     ensurePanel()
     UI.IntermissionApplyConfig()
+    UI.IntermissionApplyStaticText()
 end

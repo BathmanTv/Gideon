@@ -60,7 +60,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(6, #files)
+        assert.are.equal(7, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -88,7 +88,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         -- Config.lua est l'ACCESSOR des SavedVariables (son job) : les controles
         -- ci-dessous portent sur l'horloge, le hasard et l'API WoW, pas sur la
         -- lecture de GideonRaidDB, verifiee separement pour les modules de CALCUL.
-        for _, file in ipairs({ "Core/Config.lua", "Core/Pairing.lua", "Core/Intermission.lua" }) do
+        for _, file in ipairs({ "Core/Locale.lua", "Core/Config.lua", "Core/Pairing.lua", "Core/Intermission.lua" }) do
             local code = stripComments(readFile(file))
             assert.is_nil(code:find("GetTime", 1, true), file .. " lit l'heure du client (interdit dans Core/)")
             assert.is_nil(code:find("math.random", 1, true), file .. " utilise math.random (non deterministe)")

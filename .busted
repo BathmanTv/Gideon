@@ -1,5 +1,5 @@
--- Configuration busted : permet de lancer simplement `busted` depuis la racine.
--- ROOT = dossier des specs ; lpath = permet require("tests.support.wowenv").
+-- busted configuration: lets you simply run `busted` from the repository root.
+-- ROOT = specs directory; lpath = allows require("tests.support.wowenv").
 return {
     default = {
         ROOT = { "tests/spec" },

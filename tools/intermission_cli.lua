@@ -1,19 +1,19 @@
 --[[--------------------------------------------------------------------------
     tools/intermission_cli.lua
 
-    Interface CLI hors jeu du module « Intermission Coach ». Elle sert a :
-      - relire les TROIS etats de couleur (3V1R / 2V2R / 1V3R) sans le client ;
-      - generer la macro de ping a coller dans le jeu (le texte exact) ;
-      - verifier une rencontre (« 3V1R rencontre 2V2R » -> 5 verts -> mort) ;
-      - afficher la vue pre-pull a partir d'un bloc d'assignation prepare.
+    Out-of-game CLI front end of the "Intermission Coach" module. It is used to:
+      - review the THREE color states (3V1R / 2V2R / 1V3R) without the client;
+      - generate the ping macro to paste in game (the exact text);
+      - check a meeting ("3V1R meets 2V2R" -> 5 green -> dead);
+      - display the pre-pull view from a prepared assignment block.
 
-    Usage (depuis la racine du depot) :
+    Usage (from the repository root):
       lua5.1 tools/intermission_cli.lua all
       lua5.1 tools/intermission_cli.lua 3V1R
       lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R
-      lua5.1 tools/intermission_cli.lua plan [Nom] [chemin/du/fixture.lua]
+      lua5.1 tools/intermission_cli.lua plan [Name] [path/to/fixture.lua]
 
-    Aucune dependance externe : uniquement le lua5.1 du VPS.
+    No external dependency: only the lua5.1 of the VPS.
 ----------------------------------------------------------------------------]]
 package.path = "./?.lua;./?/init.lua;" .. package.path
 

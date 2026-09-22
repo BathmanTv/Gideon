@@ -1,22 +1,22 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / Core / Pairing.lua
 
-    LOGIQUE PURE. Interdit dans ce fichier :
-      - tout appel a l'API WoW (CreateFrame, UnitAura, C_*, ...)
-      - toute lecture d'une valeur secrete (issecretvalue / canaccessvalue)
-      - toute dependance a l'etat global du client
+    PURE LOGIC. Forbidden in this file:
+      - any call to the WoW API (CreateFrame, UnitAura, C_*, ...)
+      - any read of a secret value (issecretvalue / canaccessvalue)
+      - any dependency on the global client state
 
-    Ce fichier est charge de deux facons :
-      1. par le client WoW, via le .toc  -> (addonName, ns)
-      2. par busted / le CLI hors jeu    -> tests/support/wowenv.lua
-    Il ne doit donc JAMAIS toucher a _G directement.
+    This file is loaded in two ways:
+      1. by the WoW client, via the .toc  -> (addonName, ns)
+      2. by busted / the out-of-game CLI  -> tests/support/wowenv.lua
+    It must therefore NEVER touch _G directly.
 
-    Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
-    Source contrainte : "Combat API functions may now return secret values ...
+    API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
+    Constrained source: "Combat API functions may now return secret values ...
     Tainted code is not allowed to perform arithmetic on secret values /
     is not allowed to compare or perform boolean tests on secret values."
-    => Ce module ne traite QUE des donnees fournies par le joueur ou par GIDEON
-       (chaines de texte non secretes), jamais des valeurs d'unite.
+    => this module only handles data provided by the player or by GIDEON
+       (non-secret text strings), never unit values.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
 
@@ -27,8 +27,8 @@ ns.Pairing = Pairing
 Pairing.SCHEMA_VERSION = 1
 
 local DEFAULT_RULES = {
-    -- Un joueur "ember" doit etre apparie a un joueur "frost" et reciproquement.
-    -- Table symetrique : compatible[d] = d'
+    -- An "ember" player must be paired with a "frost" player and vice versa.
+    -- Symmetric table: compatible[d] = d'
     compatible = {
         ember = "frost",
         frost = "ember",
@@ -37,8 +37,8 @@ local DEFAULT_RULES = {
 
 Pairing.DEFAULT_RULES = DEFAULT_RULES
 
--- Normalise un identifiant de debuff saisi par un joueur ("  Frost " -> "frost").
--- Retourne nil si la valeur n'est pas une chaine exploitable.
+-- Normalizes a debuff identifier typed by a player ("  Frost " -> "frost").
+-- Returns nil if the value is not a usable string.
 function Pairing.normalizeDebuff(raw)
     if type(raw) ~= "string" then
         return nil
@@ -50,8 +50,8 @@ function Pairing.normalizeDebuff(raw)
     return s
 end
 
--- Copie triee par NOM (jamais par position d'entree) : le resultat ne depend
--- donc pas de l'ordre du roster envoye par GIDEON -> reproductible et testable.
+-- Copy sorted by NAME (never by input position): the result therefore does not
+-- depend on the roster order sent by GIDEON -> reproducible and testable.
 local function sortedCopy(list)
     local out = {}
     for i = 1, #list do
@@ -66,11 +66,11 @@ local function sortedCopy(list)
     return out
 end
 
---- Construit les paires a partir d'une liste de joueurs.
---- @param players table  liste { { name = "Tank1", debuff = "ember" }, ... }
+--- Builds the pairs from a list of players.
+--- @param players table  list { { name = "Tank1", debuff = "ember" }, ... }
 --- @param rules   table|nil  { compatible = { ember = "frost", ... } }
 --- @return table|nil result { pairs = { {a=,b=,debuffA=,debuffB=}, ... }, unpaired = { {name=,reason=}, ... }, schema = 1 }
---- @return string|nil erreur
+--- @return string|nil error
 function Pairing.buildPairs(players, rules)
     if type(players) ~= "table" then
         return nil, "players doit etre une table"
@@ -79,7 +79,7 @@ function Pairing.buildPairs(players, rules)
     rules = rules or DEFAULT_RULES
     local compatible = rules.compatible or DEFAULT_RULES.compatible
 
-    -- 1. Indexation : un bucket par debuff normalise.
+    -- 1. Indexing: one bucket per normalized debuff.
     local buckets, unpaired, seenNames = {}, {}, {}
     for index = 1, #players do
         local p = players[index]
@@ -103,15 +103,15 @@ function Pairing.buildPairs(players, rules)
         end
     end
 
-    -- 2. Parcours deterministe des buckets (ordre alphabetique des debuffs).
+    -- 2. Deterministic walk of the buckets (alphabetical order of the debuffs).
     local debuffNames = {}
     for d in pairs(buckets) do
         debuffNames[#debuffNames + 1] = d
     end
     table.sort(debuffNames)
 
-    -- 3. Appariement. On ne traite chaque paire de debuffs qu'une seule fois
-    --    (d < compatible[d]) pour ne pas apparier deux fois.
+    -- 3. Pairing. Each pair of debuffs is processed only once
+    --    (d < compatible[d]) so that nothing is paired twice.
     local pairsOut, consumed = {}, {}
     for _, d in ipairs(debuffNames) do
         local other = compatible[d]
@@ -143,7 +143,7 @@ function Pairing.buildPairs(players, rules)
     return { pairs = pairsOut, unpaired = unpaired, schema = Pairing.SCHEMA_VERSION }
 end
 
---- Retourne le partenaire d'un joueur, ou nil.
+--- Returns a player's partner, or nil.
 function Pairing.findPartner(result, playerName)
     if type(result) ~= "table" or type(result.pairs) ~= "table" then
         return nil
@@ -159,8 +159,8 @@ function Pairing.findPartner(result, playerName)
     return nil
 end
 
---- Validateur du bloc recu de GIDEON (SavedVariables ecrites hors jeu).
---- Aucune API WoW : on ne lit que des chaines et des nombres.
+--- Validator for the block received from GIDEON (SavedVariables written out of game).
+--- No WoW API: only strings and numbers are read.
 function Pairing.validateAssignment(block)
     if type(block) ~= "table" then
         return nil, "assignment absent"
@@ -176,9 +176,9 @@ function Pairing.validateAssignment(block)
         clean[#clean + 1] = { a = pair.a, b = pair.b }
     end
     local out = { pairs = clean, schema = tonumber(block.schema) or 1 }
-    -- Champ OPTIONNEL `plan` (role / position par joueur) : il est repris tel quel
-    -- et valide par Intermission.validatePlan / buildPlan (voir la doc du module).
-    -- On ne le filtre pas ici pour ne pas dupliquer le contrat a deux endroits.
+    -- OPTIONAL field `plan` (role / position per player): it is taken as-is and
+    -- validated by Intermission.validatePlan / buildPlan (see the module docs).
+    -- It is not filtered here so the contract is not duplicated in two places.
     if type(block.plan) == "table" then
         out.plan = block.plan
     end

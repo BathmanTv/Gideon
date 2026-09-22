@@ -1,90 +1,100 @@
-# Instructions pour les agents de code (Claude Code / Codex / OpenCode)
+# Instructions for code agents (Claude Code / Codex / OpenCode)
 
-> **À lire avant toute modification du dépôt.** Ce document est normatif.
-> La version longue est dans [`CONVENTIONS.md`](CONVENTIONS.md).
+> **Read this before any change to the repository.** This document is normative.
+> The long version is in [`CONVENTIONS.md`](CONVENTIONS.md).
 >
-> *Note : ce fichier s'appelle `AGENT-RULES.md` parce que l'environnement
-> bloque la création d'un fichier nommé `AGENTS.md` (fichier d'instructions
-> d'agent protégé). Pour que les CLI d'agents le chargent automatiquement,
-> créer une fois, à la main, un `AGENTS.md` à la racine contenant la ligne
-> `Voir docs/AGENT-RULES.md`.*
+> *Note: this file is called `AGENT-RULES.md` because the environment blocks the
+> creation of a file named `AGENTS.md` (protected agent instruction file). So
+> that the agent CLIs load it automatically, create a root `AGENTS.md` once, by
+> hand, containing the line `See docs/AGENT-RULES.md`.*
 
-## Le projet en une phrase
+## The project in one sentence
 
-Addon WoW Midnight 12.1.0 (`## Interface: 120100`) : il **affiche** les paires de
-joueurs aux debuffs complémentaires calculées **hors jeu par le bot Discord
-GIDEON**, jamais calculées dans le client.
+WoW Midnight 12.1.0 addon (`## Interface: 120100`): it **displays** the pairs of
+players with complementary debuffs computed **out of game by the GIDEON Discord
+bot**, never computed inside the client.
 
-## Les 7 règles qui font échouer une PR
+## The 8 rules that make a PR fail
 
-1. **Aucune API de combat dans `Core/`.** `Core/` doit être du Lua 5.1 pur,
-   exécutable par `lua5.1` sans le client. Un symbole WoW dans `Core/` = refus.
-2. **Aucune logique dépendant d'une valeur secrète.** En 12.x, comparer ou
-   faire de l'arithmétique sur un `UnitAura`/`UnitHealth`/`UnitPower` peut lever
-   une erreur Lua immédiate.
+1. **No combat API in `Core/`.** `Core/` must be pure Lua 5.1, runnable by
+   `lua5.1` without the client. One WoW symbol in `Core/` = rejected.
+2. **No logic depending on a secret value.** In 12.x, comparing or doing
+   arithmetic on a `UnitAura`/`UnitHealth`/`UnitPower` can raise an immediate Lua
+   error.
    → <https://warcraft.wiki.gg/wiki/Secret_Values>
-3. **Jamais `COMBAT_LOG_EVENT`** (ni `_UNFILTERED`) : l'enregistrer lève une
-   erreur. → <https://warcraft.wiki.gg/wiki/Patch_12.0.0/API_changes>
-4. **Toute API restreinte est commentée avec son URL de source.** Pas d'URL
-   inventée ; si elle n'est pas vérifiée, écrire `-- A VERIFIER:` et ne pas
-   coder l'appel.
-5. **Aucun calcul dans `UI/`.** Le rendu reçoit des valeurs déjà calculées.
-6. **`make check` doit sortir en 0.** stylua + luacheck (0 warning) + check_toc
-   + busted (tous verts).
-7. **Rien n'est déclaré « automatique » s'il dépend du joueur.** Le module
-   *Intermission Coach* n'affiche que ce que le joueur déclare (clic) ou ce qui a
-   été préparé hors jeu ; `Bindings.xml` n'est **jamais** listé dans le `.toc`
-   (le client le charge seul). Voir `docs/CONVENTIONS.md` §10.
+3. **Never `COMBAT_LOG_EVENT`** (nor `_UNFILTERED`): registering it raises an
+   error. → <https://warcraft.wiki.gg/wiki/Patch_12.0.0/API_changes>
+4. **Every restricted API is commented with its source URL.** No invented URL;
+   if it has not been verified, write `-- TO BE VERIFIED:` and do not code the
+   call.
+5. **No computation in `UI/`.** Rendering receives already computed values.
+6. **No in-game literal in the code.** Every displayed string lives in
+   `Core/Locale.lua` (`Locale.STRINGS[key] = { en = ..., fr = ... }`), with
+   **English as the official/default language** and French served automatically
+   on a frFR client. Use `ns.Locale.t(...)` / `ns.Locale.format(...)`; add new
+   strings in both languages. `Core/` never calls `GetLocale()` — that call
+   belongs to `GideonRaid.lua`, under `pcall`. See `docs/CONVENTIONS.md` §11.
+7. **`make check` must exit with 0.** stylua + luacheck (0 warning) + check_toc
+   + busted (all green).
+8. **Nothing is declared "automatic" if it depends on the player.** The
+   *Intermission Coach* module only displays what the player declares (click) or
+   what was prepared out of game; `Bindings.xml` is **never** listed in the
+   `.toc` (the client loads it on its own). See `docs/CONVENTIONS.md` §10.
 
-## Boucle de travail imposée
+## Enforced work loop
 
 ```bash
-make check          # AVANT de commiter, et il doit être vert
+make check          # BEFORE committing, and it must be green
 ```
 
-Ordre de travail pour une nouvelle fonctionnalité :
+Work order for a new feature:
 
-1. écrire le test dans `tests/spec/` **d'abord**, le lancer, **vérifier qu'il
-   échoue** (rouge) ;
-2. implémenter dans `Core/` (logique), puis `UI/` (rendu), puis `GideonRaid.lua`
-   (câblage) ;
-3. `make check` → vert ;
-4. si un fichier doit être chargé, l'ajouter à `GideonRaid.toc` **avec `\`** ;
-5. si `.toc` ou `.pkgmeta` a changé : `bash release.sh -t .` et vérifier que le
-   zip se construit.
+1. write the test in `tests/spec/` **first**, run it, **check that it fails**
+   (red);
+2. implement in `Core/` (logic), then `UI/` (rendering), then `GideonRaid.lua`
+   (wiring);
+3. `make check` → green;
+4. if a file must be loaded, add it to `GideonRaid.toc` **with `\`** (dependency
+   order: `Core/Locale.lua` first among the `Core/` modules);
+5. if `.toc` or `.pkgmeta` changed: `bash release.sh -t .` and check that the
+   zip builds.
 
-## Structure à respecter à la lettre
+## Structure to respect to the letter
 
-- **La racine du dépôt EST la racine de l'addon** (`GideonRaid.toc` à la racine).
-  Ne jamais créer de sous-dossier contenant le `.toc` : le BigWigs packager
-  cherche `*.toc` dans `$topdir` (vérifié, `release.sh` ligne 1389).
-- `tests/`, `tools/`, `docs/` sont exclus du zip via `ignore:` dans `.pkgmeta`.
-  Tout nouveau dossier non-addon doit y être ajouté, sinon il pollue le paquet.
-- Une nouvelle lib externe **doit** être déclarée dans `.pkgmeta` (`externals`),
-  jamais copiée à la main dans `libs/`.
+- **The repository root IS the addon root** (`GideonRaid.toc` at the root).
+  Never create a sub-folder containing the `.toc`: the BigWigs packager looks
+  for `*.toc` in `$topdir` (verified, `release.sh` line 1389).
+- `tests/`, `tools/`, `docs/` are excluded from the zip through `ignore:` in
+  `.pkgmeta`. Any new non-addon folder must be added there, otherwise it pollutes
+  the package.
+- A new external library **must** be declared in `.pkgmeta` (`externals`), never
+  copied by hand into `libs/`.
 
-## Interdits explicites
+## Explicit prohibitions
 
-- Pousser un tag `v*` (déclenche la release).
-- Éditer `.release/`.
-- Ajouter une dépendance ou un workflow nécessitant un secret non configuré.
-- « Normaliser » un identifiant mal formé (`## Interface:`, ID CurseForge, nom
-  d'addon) : s'arrêter et signaler.
-- Utiliser `pairs()` dans un chemin qui influence un résultat calculé
-  (non déterministe) : trier explicitement.
+- Pushing a `v*` tag (it triggers the release).
+- Editing `.release/`.
+- Adding a dependency or a workflow requiring an unconfigured secret.
+- "Normalizing" a malformed identifier (`## Interface:`, CurseForge ID, addon
+  name): stop and report.
+- Using `pairs()` in a path that influences a computed result
+  (non-deterministic): sort explicitly.
+- Hard-coding an in-game string instead of going through `Core/Locale.lua`
+  (English official, French on frFR).
 
-## Où regarder quoi
+## Where to look at what
 
-| Besoin | Fichier |
+| Need | File |
 |---|---|
-| Règles de code complètes | `docs/CONVENTIONS.md` |
-| Plan de test, jeux de données, résultats attendus | `docs/TESTPLAN.md` |
-| Module Entombed Sentinels (convention, macro, « à confirmer en jeu ») | `docs/INTERMISSION-COACH.md` |
-| Contexte 12.x et distribution | `README.md` |
-| Chargeur hors jeu (tests) | `tests/support/wowenv.lua` |
-| Stub API minimal | `tests/support/wowapi_stub.lua` |
-| Moteur d'appariement | `Core/Pairing.lua` |
-| Intermission Coach (logique pure) | `Core/Intermission.lua` |
-| Panneau d'intermission (rendu) | `UI/Intermission.lua` |
-| Bloc d'assignation de référence (contrat) | `tests/fixtures/assignment_sample.lua` |
-| Validateur de `.toc` | `tools/check_toc.py` |
+| Full code rules | `docs/CONVENTIONS.md` |
+| Language layer (bilingual, English default) | `Core/Locale.lua`, `docs/CONVENTIONS.md` §11 |
+| Test plan, data sets, expected results | `docs/TESTPLAN.md` |
+| Entombed Sentinels module (convention, macro, "to be confirmed in game") | `docs/INTERMISSION-COACH.md` |
+| 12.x context and distribution | `README.md` |
+| Out-of-game loader (tests) | `tests/support/wowenv.lua` |
+| Minimal API stub | `tests/support/wowapi_stub.lua` |
+| Pairing engine | `Core/Pairing.lua` |
+| Intermission Coach (pure logic) | `Core/Intermission.lua` |
+| Intermission panel (rendering) | `UI/Intermission.lua` |
+| Reference assignment block (contract) | `tests/fixtures/assignment_sample.lua` |
+| `.toc` validator | `tools/check_toc.py` |

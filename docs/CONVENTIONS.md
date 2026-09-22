@@ -1,263 +1,290 @@
-# GideonRaid — conventions de code (OBLIGATOIRES pour tout agent de code)
+# GideonRaid — code conventions (MANDATORY for every code agent)
 
-Ce fichier est normatif. Claude Code / Codex / OpenCode doivent le respecter
-sans exception. Toute PR qui l'enfreint est refusée par `make check`.
+This file is normative. Claude Code / Codex / OpenCode must follow it without
+exception. Any PR that breaks it is rejected by `make check`.
 
 ---
 
-## 1. Contexte technique à ne jamais perdre de vue (patch 12.1.0, live)
+## 1. Technical context never to lose sight of (patch 12.1.0, live)
 
-Sources vérifiées :
+Verified sources:
 
-- `## Interface: 120100` — patch 12.1.0 « Curse of Ula'tek », sorti le 11/08/2026,
-  Interface `.toc` = `120100` → <https://warcraft.wiki.gg/wiki/Patch_12.1.0>
-- `## Interface: 120007` pour 12.0.7 — <https://warcraft.wiki.gg/wiki/Patch_12.0.7>
+- `## Interface: 120100` — patch 12.1.0 "Curse of Ula'tek", released on
+  11/08/2026, `.toc` Interface = `120100` → <https://warcraft.wiki.gg/wiki/Patch_12.1.0>
+- `## Interface: 120007` for 12.0.7 — <https://warcraft.wiki.gg/wiki/Patch_12.0.7>
 - Secret Values — <https://warcraft.wiki.gg/wiki/Secret_Values>
 - API changes 12.0.0 — <https://warcraft.wiki.gg/wiki/Patch_12.0.0/API_changes>
 
-### 1.1 Les valeurs secrètes (Secret Values)
+### 1.1 Secret Values
 
-> « Combat API functions may now return secret values when called […] Tainted
+> "Combat API functions may now return secret values when called […] Tainted
 > code is not allowed to perform arithmetic on secret values. Tainted code is
-> not allowed to compare or perform boolean tests on secret values. »
+> not allowed to compare or perform boolean tests on secret values."
 
-Conséquences opérationnelles, à appliquer mécaniquement :
+Operational consequences, to be applied mechanically:
 
-1. **INTERDIT** : lire une valeur d'unité et la tester/compter/calculer.
-   `UnitHealth`, `UnitPower`, `UnitAura`, `UnitCastingInfo`, `GetTime` de combat,
-   les `auraInstanceID`, l'état des cooldowns… peuvent renvoyer un secret.
-   Un `if secretValue > 0 then` est une **erreur Lua immédiate**.
-2. **AUTORISÉ** : stocker un secret dans une variable ou un champ de table, le
-   passer à une fonction Lua, le concaténer dans une chaîne, le passer à un
-   widget marqué comme acceptant les secrets (ex. `StatusBar:SetValue`).
-3. Si le code doit savoir *si* une valeur est secrète, il utilise
-   `issecretvalue(v)` / `canaccessvalue(v)` — il ne fait jamais semblant que
-   non.
+1. **FORBIDDEN**: reading a unit value and testing / counting / computing on it.
+   `UnitHealth`, `UnitPower`, `UnitAura`, `UnitCastingInfo`, combat `GetTime`,
+   `auraInstanceID`s, cooldown states… can return a secret. An
+   `if secretValue > 0 then` is an **immediate Lua error**.
+2. **ALLOWED**: storing a secret in a variable or a table field, passing it to a
+   Lua function, concatenating it into a string, passing it to a widget flagged
+   as accepting secrets (e.g. `StatusBar:SetValue`).
+3. If the code must know *whether* a value is secret, it uses
+   `issecretvalue(v)` / `canaccessvalue(v)` — it never pretends otherwise.
 
-### 1.2 Interdictions supplémentaires
+### 1.2 Further prohibitions
 
-- **`COMBAT_LOG_EVENT` et `COMBAT_LOG_EVENT_UNFILTERED` sont interdits à
-  l'enregistrement** : `frame:RegisterEvent("COMBAT_LOG_EVENT")` lève une
-  erreur immédiate en 12.x. Aucun fichier de ce dépôt ne doit contenir ces
-  chaînes.
-- **Aucune communication addon → addon en instance** (messages vers un autre
-  addon). Le canal d'échange avec GIDEON est hors instance / hors combat.
-- **Aucun contournement** (« workaround » pour dé-secréter une valeur) : c'est
-  interdit par Blizzard et c'est la cause n°1 de casse d'addon en 12.x.
+- **`COMBAT_LOG_EVENT` and `COMBAT_LOG_EVENT_UNFILTERED` may not be
+  registered**: `frame:RegisterEvent("COMBAT_LOG_EVENT")` raises an immediate
+  error in 12.x. No file of this repository may contain those strings.
+- **No addon → addon communication in an instance** (messages to another addon).
+  The exchange channel with GIDEON is out of instance / out of combat.
+- **No workaround** ("un-secreting" a value): it is forbidden by Blizzard and it
+  is the number one cause of addon breakage in 12.x.
 
-### 1.3 Le canal officiel avec GIDEON
+### 1.3 The official channel with GIDEON
 
-Le bot GIDEON n'est pas dans le client. Le seul canal fiable est :
+The GIDEON bot is not inside the client. The only reliable channel is:
 
 ```
-GIDEON (hors jeu)  --écrit-->  WTF/Account/<COMPTE>/SavedVariables/GideonRaid.lua
+GIDEON (out of game)  --writes-->  WTF/Account/<ACCOUNT>/SavedVariables/GideonRaid.lua
                                     |
-                              joueur /reload ou relance le client
+                              player /reload or client restart
                                     |
-                              l'addon LIT GideonRaidDB.assignment
+                              the addon READS GideonRaidDB.assignment
 ```
 
-Ces données sont **des chaînes de caractères écrites hors jeu : jamais des
-valeurs secrètes.** C'est ce qui rend tout le projet faisable.
+That data is **text strings written out of game: never secret values.** That is
+what makes the whole project feasible.
 
 ---
 
-## 2. Architecture : deux couches, une frontière infranchissable
+## 2. Architecture: two layers, one uncrossable border
 
 ```
-Core/      LOGIQUE PURE. Zéro API WoW. 100 % testable avec busted, hors jeu.
-UI/        RENDU. Peut appeler l'API WoW. Zéro calcul métier.
-GideonRaid.lua  Câblage : événements, slash commands. Dépend des deux.
+Core/      PURE LOGIC. Zero WoW API. 100% testable with busted, out of game.
+UI/        RENDERING. May call the WoW API. Zero business computation.
+GideonRaid.lua  Wiring: events, slash commands. Depends on both.
 ```
 
-### Règles
+### Rules
 
-1. Un fichier de `Core/` **ne doit jamais** référencer un symbole de l'API WoW
-   (`CreateFrame`, `UnitName`, `C_*`, `_G.GideonRaidDB`, `DEFAULT_CHAT_FRAME`…).
-   Corollaire direct : il n'y a rien à mocker pour le tester.
-2. Un fichier de `UI/` **ne contient aucun calcul**. Il reçoit des valeurs déjà
-   calculées par `ns.Pairing` / `ns.Config` et les affiche.
-3. Toute donnée qui vient du client (nom de joueur, roster) entre dans `Core/`
-   **déjà convertie en chaîne ou en nombre** par le câblage.
-4. Si un besoin semble obliger `Core/` à appeler l'API : le besoin est mal
-   découpé. Extraire le calcul et passer le résultat en paramètre.
+1. A file in `Core/` **must never** reference a WoW API symbol (`CreateFrame`,
+   `UnitName`, `C_*`, `_G.GideonRaidDB`, `DEFAULT_CHAT_FRAME`…). Direct
+   corollary: there is nothing to mock in order to test it.
+2. A file in `UI/` **contains no computation**. It receives values already
+   computed by `ns.Pairing` / `ns.Config` / `ns.Intermission` and displays them.
+3. Any data coming from the client (player name, roster, locale) enters `Core/`
+   **already converted into a string or a number** by the wiring.
+4. If a need seems to force `Core/` to call the API: the need is badly split.
+   Extract the computation and pass the result as a parameter.
 
 ---
 
-## 3. Structure du dépôt (imposée)
+## 3. Repository structure (enforced)
 
 ```
-GideonRaid/                      <- RACINE DU DEPOT = RACINE DE L'ADDON
-├── GideonRaid.toc               <- nom du fichier == dossier d'install == package-as
-├── GideonRaid.lua               <- point d'entrée (événements, slash)
-├── Bindings.xml                 <- binding(s) du panneau d'intermission. Chargé
-│                                   AUTOMATIQUEMENT par le client : JAMAIS listé
-│                                   dans le .toc (voir §10)
+GideonRaid/                      <- REPOSITORY ROOT = ADDON ROOT
+├── GideonRaid.toc               <- file name == install folder == package-as
+├── GideonRaid.lua               <- entry point (events, slash, language wiring)
+├── Bindings.xml                 <- intermission panel binding(s). Loaded
+│                                   AUTOMATICALLY by the client: NEVER listed
+│                                   in the .toc (see §10)
 ├── Core/
+│   ├── Locale.lua               <- in-game strings (en/fr) + language resolution
 │   ├── Config.lua               <- defaults + SavedVariables
-│   ├── Pairing.lua              <- moteur d'appariement (PUR)
-│   └── Intermission.lua         <- Intermission Coach (PUR)
+│   ├── Pairing.lua              <- pairing engine (PURE)
+│   └── Intermission.lua         <- Intermission Coach (PURE)
 ├── UI/
-│   ├── Panel.lua                <- rendu
-│   └── Intermission.lua         <- rendu du panneau d'intermission
-├── libs/                        <- libs embarquées (externals), jamais éditées
+│   ├── Panel.lua                <- rendering
+│   └── Intermission.lua         <- intermission panel rendering
+├── libs/                        <- embedded libraries (externals), never edited
 ├── tests/
 │   ├── spec/*_spec.lua          <- busted
-│   ├── fixtures/                <- blocs SavedVariables de référence (contrat)
-│   └── support/                 <- harnais (wowenv, stub API)
-├── tools/                       <- scripts hors addon (exclus du zip)
+│   ├── fixtures/                <- reference SavedVariables blocks (contract)
+│   └── support/                 <- harness (wowenv, API stub)
+├── tools/                       <- out-of-addon scripts (excluded from the zip)
 ├── docs/
 ├── .pkgmeta  .luacheckrc  .busted  stylua.toml  Makefile
 └── .github/workflows/{ci,release}.yml
 ```
 
-**Le client WoW exige que la racine du dépôt soit la racine de l'addon** : c'est
-aussi ce qu'exige le BigWigs packager (`release.sh` cherche `*.toc` dans
-`$topdir`, ligne 1389 de release.sh). Ne jamais réintroduire un sous-dossier
-contenant le `.toc`.
+**The WoW client requires the repository root to be the addon root**: that is
+also what the BigWigs packager requires (`release.sh` looks for `*.toc` in
+`$topdir`, line 1389 of release.sh). Never reintroduce a sub-folder containing
+the `.toc`.
 
-Chaque fichier `.lua` doit être listé dans le `.toc`, dans l'ordre de
-dépendance. Le séparateur est `\` (backslash), **jamais** `/`.
+Every `.lua` file must be listed in the `.toc`, in dependency order —
+`Core/Locale.lua` **first** among the `Core/` modules, since Config,
+Intermission, Panel and UI depend on it. The separator is `\` (backslash),
+**never** `/`.
 
 ---
 
-## 4. Conventions de nommage
+## 4. Naming conventions
 
-| Élément | Convention | Exemple |
+| Element | Convention | Example |
 |---|---|---|
-| Dossier / TOC / package | PascalCase, identique partout | `GideonRaid` |
-| Fichier Lua | PascalCase pour les modules | `Core/Pairing.lua` |
+| Folder / TOC / package | PascalCase, identical everywhere | `GideonRaid` |
+| Lua file | PascalCase for modules | `Core/Pairing.lua` |
 | Specs | `snake_case` + `_spec.lua` | `pairing_spec.lua` |
-| Table de module | Même nom que le fichier | `local Pairing = {}` |
-| Exposée dans le namespace | `ns.Pairing` | `ns.UI.Refresh()` |
-| Fonction publique | `camelCase` | `Pairing.buildPairs` |
-| Fonction locale | `camelCase` en `local function` | `local function sortedCopy` |
-| Constante | `UPPER_SNAKE` | `Pairing.SCHEMA_VERSION` |
-| Variables `Sav..` | `<Addon>DB`, `<Addon>CharDB` | `GideonRaidDB` |
-| Fichier global créé | préfixé | `GideonRaidPanel` |
+| Module table | Same name as the file | `local Pairing = {}` |
+| Exposed in the namespace | `ns.Pairing` | `ns.UI.Refresh()` |
+| Public function | `camelCase` | `Pairing.buildPairs` |
+| Local function | `camelCase` in `local function` | `local function sortedCopy` |
+| Constant | `UPPER_SNAKE` | `Pairing.SCHEMA_VERSION` |
+| `Sav..` variables | `<Addon>DB`, `<Addon>CharDB` | `GideonRaidDB` |
+| Created global | prefixed | `GideonRaidPanel` |
 
-En-tête de fichier **obligatoire** (voir les modèles existants) :
+**Mandatory** file header (see the existing templates):
 
 ```lua
 local _, ns = ...
 ```
 
-- `local _, ns = ...` quand le nom de l'addon n'est pas utilisé (`_` n'est pas
-  signalé par luacheck ; `local addonName, ns = ...` l'est → warning 212).
-- **Jamais** de variable globale implicite. Toute globale doit être déclarée
-  dans `.luacheckrc` *et* justifiée en commentaire.
+- `local _, ns = ...` when the addon name is not used (`_` is not reported by
+  luacheck; `local addonName, ns = ...` is → warning 212).
+- **Never** an implicit global. Every global must be declared in `.luacheckrc`
+  *and* justified in a comment.
 
 ---
 
-## 5. Commentaires obligatoires quand une API est restreinte
+## 5. Mandatory comments when an API is restricted
 
-Dès qu'une ligne touche une API contrainte en 12.x, elle est précédée d'un
-commentaire citant **la source**, au format :
+As soon as a line touches an API restricted in 12.x, it is preceded by a comment
+citing **the source**, in this format:
 
 ```lua
--- Ref API 12.1.0 : <https://warcraft.wiki.gg/wiki/...>
--- Contrainte : <ce qui est interdit et pourquoi>
--- <la ligne de code>
+-- API ref 12.1.0: <https://warcraft.wiki.gg/wiki/...>
+-- Constraint: <what is forbidden and why>
+-- <the line of code>
 ```
 
-Exemple réel (dans `Core/Pairing.lua`) :
+Real example (in `Core/Pairing.lua`):
 
 ```lua
--- Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
--- Source contrainte : "Tainted code is not allowed to compare or perform
+-- API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
+-- Constrained source: "Tainted code is not allowed to compare or perform
 -- boolean tests on secret values."
--- => on ne traite QUE des chaînes fournies par le joueur ou par GIDEON.
+-- => only strings provided by the player or by GIDEON are handled.
 ```
 
-Règles associées :
+Related rules:
 
-- Un commentaire qui cite une API **doit** contenir l'URL de la page wiki
-  correspondante. Pas d'URL inventée : si elle n'a pas été vérifiée, écrire
-  `-- A VERIFIER:` et ne pas coder l'appel.
-- **Jamais de logique métier dépendante d'une valeur secrète.** Si un
-  comportement de l'addon change selon une valeur potentiellement secrète, il
-  est refusé en review. La donnée doit venir de `GideonRaidDB` ou d'une saisie
-  du joueur.
-- Au moindre doute : `-- SECRET?` en tête de fonction, et la fonction est
-  interdite d'accès depuis `UI/Refresh`.
-
----
-
-## 6. Style : automatisé, pas négociable
-
-- `stylua.toml` : 4 espaces, 140 colonnes, guillemets doubles.
-  **`stylua --check .` doit passer.** Ne jamais formatter à la main.
-- `luacheck .` doit afficher `0 warnings / 0 errors`.
-- `std = "lua51"` : le client WoW tourne sur **PUC-Rio Lua 5.1**. Donc :
-  - pas de `goto`, pas d'opérateur `//`, pas d'entiers natifs, pas de `\u{}` ;
-  - `table.unpack` n'existe pas → `unpack` ;
-  - `#` sur une table à trous est interdit (`#` n'est défini que pour les
-    séquences sans trou).
-- Commentaires et identifiants en **ASCII** pour le code Lua (les fichiers
-  `.md` peuvent être accentués).
+- A comment citing an API **must** contain the URL of the matching wiki page. No
+  invented URL: if it has not been verified, write `-- TO BE VERIFIED:` and do
+  not code the call.
+- **Never any business logic depending on a secret value.** If an addon
+  behaviour changes according to a potentially secret value, it is rejected in
+  review. The data must come from `GideonRaidDB` or from player input.
+- At the slightest doubt: `-- SECRET?` at the top of the function, and the
+  function may not be called from `UI/Refresh`.
 
 ---
 
-## 7. Déterminisme (règle de test, pas de style)
+## 6. Style: automated, non-negotiable
 
-- Aucun tri par ordre d'entrée : toujours trier **par nom** ou par clé
-  explicite. Le même roster doit produire le même résultat quel que soit
-  l'ordre reçu de GIDEON. (Voir le test « est insensible a l'ordre d'entree ».)
-- Aucun `pairs()` dans un chemin qui influence le résultat : `pairs()` n'a pas
-  d'ordre garanti. Utiliser une liste triée.
-- Aucun `math.random`, aucune dépendance à l'heure, aucun `GetTime()` dans
-  `Core/`.
-
----
-
-## 8. Définition de « terminé » pour une tâche
-
-Une tâche n'est terminée que si, **et seulement si** :
-
-1. `make check` sort en code 0 (stylua + luacheck + toc + busted) ;
-2. un test de `tests/spec/` couvre le nouveau comportement (et échoue avant le
-   correctif — vérifier réellement le rouge puis le vert) ;
-3. le nouveau fichier est listé dans `GideonRaid.toc` s'il doit être chargé ;
-4. aucune chaîne `COMBAT_LOG_EVENT`, aucun appel à une API de combat sans
-   commentaire de source, aucune logique sur une valeur secrète ;
-5. `bash release.sh -t .` produit un zip sans erreur (à lancer si `.pkgmeta`
-   ou le `.toc` a changé).
+- `stylua.toml`: 4 spaces, 140 columns, double quotes.
+  **`stylua --check .` must pass.** Never format by hand.
+- `luacheck .` must print `0 warnings / 0 errors`.
+- `std = "lua51"`: the WoW client runs on **PUC-Rio Lua 5.1**. Therefore:
+  - no `goto`, no `//` operator, no native integers, no `\u{}`;
+  - `table.unpack` does not exist → `unpack`;
+  - `#` on a table with holes is forbidden (`#` is only defined for hole-free
+    sequences).
+- Comments and identifiers in **ASCII** for Lua code (`.md` files may use
+  accents).
+- **No in-game literal in the code**: every displayed string goes through
+  `ns.Locale` (§11).
 
 ---
 
-## 9. Ce qu'un agent ne doit JAMAIS faire
+## 7. Determinism (a testing rule, not a style rule)
 
-- Ajouter une dépendance externe (lib, package Lua) sans le déclarer dans
-  `.pkgmeta` (`externals`) — sinon le zip packagé est cassé.
-- Modifier `libs/` à la main.
-- Pousser un tag `v*` : le tag déclenche la release (workflow `Release`).
-- Introduire un workflow qui a besoin d'un secret non configuré.
-- Éditer `.release/` (artefact, gitignoré).
-- « Réparer » un token malformé (nom d'addon, numéro d'Interface, ID de projet
-  CurseForge) : si une valeur ne respecte pas le format attendu, s'arrêter et
-  demander.
+- No sort by input order: always sort **by name** or by an explicit key. The
+  same roster must produce the same result whatever the order received from
+  GIDEON. (See the test "est insensible a l'ordre d'entree".)
+- No `pairs()` in a path that influences the result: `pairs()` has no guaranteed
+  order. Use a sorted list.
+- No `math.random`, no dependency on the clock, no `GetTime()` in `Core/`.
 
 ---
 
-## 10. Règles spécifiques au module « Intermission Coach »
+## 8. Definition of "done" for a task
 
-1. **Aucun automatisme revendiqué.** Tout ce que l'addon affiche vient soit d'un
-   clic du joueur, soit d'un bloc préparé hors jeu. Interdiction d'écrire dans
-   l'UI, la doc ou un message de commit qu'une action est « automatique »
-   lorsqu'elle dépend d'une déclaration du joueur.
-2. **Aucun ping envoyé par l'addon.** `C_Ping.SendMacroPing` est `#protected` —
-   <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing> : l'addon **génère le
-   texte d'une macro**, le joueur la déclenche. Le corps d'une `Bindings.xml` est
-   exécuté *insecurely* (<https://warcraft.wiki.gg/wiki/Creating_key_bindings>) :
-   il ne peut pas non plus appeler cette fonction.
-3. **`Bindings.xml` n'est JAMAIS listé dans le `.toc`** : le client le charge
-   automatiquement. `tools/check_toc.py` continue de ne vérifier que les `.lua`
-   du `.toc`.
-4. **Aucune valeur d'API de combat dans le module** : ni aura, ni santé, ni
-   ressource, ni cible. Seuls entrent le nom de sa propre unité
-   (`UnitName("player")`) et les chaînes de `GideonRaidDB`.
-5. **Le temps est injecté.** `Core/Intermission.tick(state, dt)` reçoit un pas de
-   temps constant fourni par le câblage : aucun `GetTime()` dans `Core/`.
-6. **L'UI dit ce qui est impossible.** Le panneau affiche explicitement que
-   « qui a déclaré quoi » est inconnu et que le ping est le seul signal visible
-   par les autres joueurs.
+A task is finished if, **and only if**:
+
+1. `make check` exits with code 0 (stylua + luacheck + toc + busted);
+2. a test in `tests/spec/` covers the new behaviour (and fails before the fix —
+   actually verify red then green);
+3. the new file is listed in `GideonRaid.toc` if it must be loaded;
+4. no `COMBAT_LOG_EVENT` string, no call to a combat API without a source
+   comment, no logic on a secret value;
+5. `bash release.sh -t .` produces a zip without error (to be run when
+   `.pkgmeta` or the `.toc` changed).
+
+---
+
+## 9. What an agent must NEVER do
+
+- Add an external dependency (library, Lua package) without declaring it in
+  `.pkgmeta` (`externals`) — otherwise the packaged zip is broken.
+- Edit `libs/` by hand.
+- Push a `v*` tag: the tag triggers the release (workflow `Release`).
+- Introduce a workflow that needs an unconfigured secret.
+- Edit `.release/` (artifact, gitignored).
+- "Repair" a malformed token (addon name, Interface number, CurseForge project
+  ID): if a value does not match the expected format, stop and ask.
+
+---
+
+## 10. Rules specific to the "Intermission Coach" module
+
+1. **No claimed automation.** Everything the addon displays comes either from a
+   player click or from a block prepared out of game. Forbidden to write in the
+   UI, in the docs or in a commit message that an action is "automatic" when it
+   depends on a player declaration.
+2. **No ping sent by the addon.** `C_Ping.SendMacroPing` is `#protected` —
+   <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing>: the addon
+   **generates the text of a macro**, the player triggers it. The body of a
+   `Bindings.xml` is executed *insecurely*
+   (<https://warcraft.wiki.gg/wiki/Creating_key_bindings>): it cannot call that
+   function either.
+3. **`Bindings.xml` is NEVER listed in the `.toc`**: the client loads it
+   automatically. `tools/check_toc.py` keeps checking only the `.lua` files
+   listed in the `.toc`.
+4. **No combat API value in the module**: no aura, no health, no resource, no
+   target. Only the name of our own unit (`UnitName("player")`) and the strings
+   from `GideonRaidDB` enter it.
+5. **Time is injected.** `Core/Intermission.tick(state, dt)` receives a constant
+   time step provided by the wiring: no `GetTime()` in `Core/`.
+6. **The UI says what is impossible.** The panel explicitly states that "who
+   declared what" is unknown and that the ping is the only signal visible to the
+   other players.
+
+---
+
+## 11. Language layer (bilingual, English by default)
+
+1. **English is the official language** of the addon; French is served
+   automatically on a frFR client. No in-game string may be written as a literal
+   in the modules: it lives in `Core/Locale.lua` as
+   `Locale.STRINGS[key] = { en = "...", fr = "..." }` and is served through
+   `ns.Locale.t(key)` / `ns.Locale.format(key, ...)`.
+2. `Core/Locale.lua` is **pure**: no `GetLocale()`, no API. Detection belongs to
+   the wiring layer, which calls `GetLocale()`
+   (<https://warcraft.wiki.gg/wiki/API:GetLocale>) under `pcall` and hands the
+   raw value to `Locale.resolve(preference, detected)`.
+3. `Locale.t` **never raises**: it serves the requested language, then the other
+   language, then the key itself. `Locale.format` uses `pcall(string.format)`.
+4. Keys are stable identifiers (`state.action.3V1R`, `ui.close`). Spell, orb and
+   color names (`3V1R`, `Warning`, `OnMyWay`, `Assist`) are identical in both
+   languages and are therefore never translated.
+5. The persisted preference is `GideonRaidDB.locale` (`"auto"` by default,
+   `"en"`, `"fr"`), normalized by `Config.resolveLocale`: any unexpected value
+   falls back to `"auto"`.
+6. Every new displayed string **must** be added in both languages, and covered
+   by `tests/spec/locale_spec.lua` (default = English, `"frFR"` = French,
+   explicit override wins, unknown value = English, missing key = the key).
+7. The `.toc` keeps `## Notes:` in English and `## Notes-frFR:` in French.

@@ -135,6 +135,12 @@ function stub.install()
     _G.UnitName = function()
         return "Testeur"
     end
+    -- Langue du client : le vrai client renvoie "enUS", "frFR", "deDE"... Le
+    -- stub repond enUS (anglais = langue officielle de l'addon) ; une spec peut
+    -- remplacer _G.GetLocale pour simuler un client frFR.
+    _G.GetLocale = function()
+        return "enUS"
+    end
     -- Horloge cliente : c'est CE couple (time, date) que la couche UI utilise
     -- pour publier la decision du joueur dans les SavedVariables (le kit de
     -- diagnostic la relit ensuite). Core/ n'y touche jamais.

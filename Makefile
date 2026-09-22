@@ -1,5 +1,5 @@
-# Makefile — commandes uniques que les agents de code DOIVENT utiliser.
-# `make check` est la porte de sortie : elle doit passer avant tout commit.
+# Makefile — single commands that code agents MUST use.
+# `make check` is the exit gate: it must pass before any commit.
 
 LUA ?= lua5.1
 BUSTED ?= busted
@@ -9,7 +9,7 @@ PYTHON ?= python3
 
 .PHONY: check lint fmt fmt-check test toc cli inter plan clean
 
-## Porte complete (CI locale). Aucune excuse pour commiter si ca echoue.
+## Full gate (local CI). No excuse for committing if it fails.
 check: fmt-check lint toc test
 
 fmt:
@@ -21,30 +21,30 @@ fmt-check:
 lint:
 	$(LUACHECK) .
 
-## Verification syntaxique Lua 5.1 == runtime du client WoW
+## Lua 5.1 syntax check == the WoW client runtime
 syntax:
 	@find . -name '*.lua' -not -path './libs/*' -not -path './.git/*' | while read -r f; do \
 		$(LUA) -e "local c,e=loadfile('$$f'); if not c then io.stderr:write(e..'\n'); os.exit(1) end" || exit 1; \
 		echo "OK $$f"; \
 	done
 
-## ETAPE 1 : tests unitaires hors jeu (logique d'appariement + intermission)
+## STEP 1: out-of-game unit tests (pairing logic + intermission)
 test:
 	$(BUSTED)
 
-## ETAPE 2 : coherence du .toc (directives + fichiers listes existent)
+## STEP 2: .toc consistency (directives + listed files exist)
 toc:
 	$(PYTHON) tools/check_toc.py GideonRaid.toc
 
-## ETAPE 4 : appariement d'un roster, executable par GIDEON
+## STEP 4: pairing of a roster, runnable by GIDEON
 cli:
 	$(LUA) tools/pairing_cli.lua < tools/sample_roster.csv
 
-## ETAPE 3 : apercu hors jeu de l'Intermission Coach (convention + macros)
+## STEP 3: out-of-game preview of the Intermission Coach (convention + macros)
 inter:
 	$(LUA) tools/intermission_cli.lua all
 
-## Vue pre-pull d'un joueur, a partir du bloc d'assignation de reference
+## Pre-pull view of a player, from the reference assignment block
 plan:
 	$(LUA) tools/intermission_cli.lua plan Velna
 

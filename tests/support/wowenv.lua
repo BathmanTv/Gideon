@@ -29,6 +29,7 @@ end
 --- Charge la chaine standard de l'addon (meme ordre que le .toc).
 function wowenv.loadCore()
     local ns = wowenv.newNamespace()
+    wowenv.load("Core/Locale.lua", ns)
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
     wowenv.load("Core/Intermission.lua", ns)

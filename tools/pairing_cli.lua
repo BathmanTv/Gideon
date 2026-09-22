@@ -1,13 +1,13 @@
 --[[--------------------------------------------------------------------------
     tools/pairing_cli.lua
-    Interface CLI du moteur d'appariement, utilisable par GIDEON (le bot appelle
-    `lua5.1 tools/pairing_cli.lua` avec le roster au format JSON-like ou CSV).
+    CLI front end of the pairing engine, usable by GIDEON (the bot calls
+    `lua5.1 tools/pairing_cli.lua` with the roster on stdin).
 
-    Entree  : stdin, une ligne par joueur -> "Nom,debuff"
-    Sortie  : stdout, une ligne par paire -> "NomA|NomB" ; non-apparies sur stderr
-    Exit    : 0 si au moins une paire, 1 sinon (GIDEON peut alerter).
+    Input  : stdin, one line per player -> "Name,debuff"
+    Output : stdout, one line per pair -> "NameA|NameB" ; unpaired players on stderr
+    Exit   : 0 if at least one pair, 1 otherwise (GIDEON can then alert).
 
-    Aucune dependance externe : fonctionne avec le lua5.1 du VPS.
+    No external dependency: runs with the lua5.1 of the VPS.
 ----------------------------------------------------------------------------]]
 package.path = "./?.lua;./?/init.lua;" .. package.path
 

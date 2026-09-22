@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Valide un fichier .toc d'addon WoW sans client WoW.
+"""Validates a WoW addon .toc file without a WoW client.
 
-Verifie :
-  1. le nom du fichier == nom du dossier parent (regle du client)
-  2. ## Interface: est present, numerique, et >= un minimum impose
-  3. chaque directive ## attendue est presente
-  4. chaque fichier reference existe sur le disque (avec backslash ou slash)
+Checks:
+  1. the file name == the parent directory name (client rule)
+  2. ## Interface: is present, numeric, and >= an enforced minimum
+  3. every expected ## directive is present
+  4. every referenced file exists on disk (backslash or slash)
 
-Usage: python3 tools/check_toc.py GideonRaid/GideonRaid.toc
-Sortie: exit 0 si OK, 1 sinon (utilisable en CI).
+Usage: python3 tools/check_toc.py GideonRaid.toc
+Output: exit 0 if OK, 1 otherwise (usable in CI).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import re
 import sys
 
 REQUIRED = ["Interface", "Title", "Notes", "Version"]
-MIN_INTERFACE = 120100  # live 12.1.0 "Curse of Ula'tek" (aout 2026)
+MIN_INTERFACE = 120100  # live 12.1.0 "Curse of Ula'tek" (August 2026)
 
 
 def fail(msg: str) -> None:
@@ -35,7 +35,7 @@ def main(path: str) -> int:
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
 
-    # 1. Nom du fichier == 'package-as' du .pkgmeta (ou nom du dossier parent)
+    # 1. File name == 'package-as' of .pkgmeta (or parent directory name)
     expected = None
     for candidate in (
         os.path.join(addon_dir, ".pkgmeta"),
@@ -82,19 +82,19 @@ def main(path: str) -> int:
             elif int(token) < MIN_INTERFACE:
                 errors.append(f"## Interface: {token} < {MIN_INTERFACE} (addon marque obsolete)")
 
-    # 3. Directives obligatoires
+    # 3. Required directives
     for key in REQUIRED:
         if key not in directives:
             errors.append(f"## {key}: manquant")
 
-    # 4. Fichiers references
+    # 4. Referenced files
     if not files:
         errors.append("aucun fichier liste dans le .toc")
     for entry in files:
         rel = entry.replace("\\", os.sep).replace("/", os.sep).strip()
-        if re.search(r"\s\[", rel):  # directives conditionnelles [AllowLoad...]
+        if re.search(r"\s\[", rel):  # conditional directives [AllowLoad...]
             rel = rel.split("[")[0].strip()
-        if "[" in rel:  # variables type [Family] : on ne peut pas resoudre hors client
+        if "[" in rel:  # [Family]-style variables: cannot be resolved without the client
             continue
         target = os.path.join(addon_dir, rel)
         if not os.path.isfile(target):

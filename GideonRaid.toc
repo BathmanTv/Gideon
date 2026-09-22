@@ -1,7 +1,7 @@
 ## Interface: 120100
 ## Title: GideonRaid
-## Notes: Aide a l'appariement des debuffs et a l'intermission des Entombed Sentinels. Integre au bot Discord GIDEON.
-## Notes-frFR: Aide a l'appariement et a l'intermission (Entombed Sentinels). Ne lit aucune API de combat.
+## Notes: Helps pairing players with complementary debuffs and running the Entombed Sentinels intermission. Integrated with the GIDEON Discord bot. Bilingual in game: English by default, French on a frFR client (/gr lang).
+## Notes-frFR: Aide a l'appariement et a l'intermission (Entombed Sentinels). Ne lit aucune API de combat. Bilingue en jeu : anglais par defaut, francais sur client frFR (/gr lang).
 ## Version: @project-version@
 ## Author: Guilde (via GIDEON)
 ## SavedVariables: GideonRaidDB
@@ -11,10 +11,13 @@
 ## X-Curse-Project-ID: 1707362
 ## X-Wago-ID: 0
 
-# Fichiers charges dans l'ordre. Separateur = backslash, jamais de slash.
-# Bindings.xml n'est PAS liste ici : le client le charge automatiquement
+# Files loaded in the order of the list. Separator = backslash, never a slash.
+# Core/Locale.lua is listed FIRST among the Core/ modules: the language layer is
+# a dependency of Config, Intermission, Panel and UI.
+# Bindings.xml is NOT listed here: the client loads it automatically
 # (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
+Core\Locale.lua
 Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua

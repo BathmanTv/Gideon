@@ -1,14 +1,18 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / Core / Config.lua
 
-    Valeurs par defaut + initialisation des SavedVariables + resolution de la
-    configuration du module « Intermission Coach ». Pas de logique metier.
+    Default values + SavedVariables initialization + resolution of the
+    "Intermission Coach" module configuration. No business logic.
 
-    Aucune API WoW ici : ce fichier ne lit que des tables et des nombres, et
-    `resolveIntermission` recoit la table brute en PARAMETRE (le cablage lui
-    passe GideonRaidDB.intermission).
+    No WoW API here: this file reads only tables and numbers, and
+    `resolveIntermission` receives the raw table as a PARAMETER (the wiring
+    passes it GideonRaidDB.intermission).
 ----------------------------------------------------------------------------]]
 local _, ns = ...
+
+--- Core/Locale.lua is loaded BEFORE this file by the .toc: the language layer is
+--- a hard dependency (the persisted preference is normalized against it).
+local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Config.lua")
 
 local Config = {}
 ns.Config = Config
@@ -21,16 +25,18 @@ Config.DEFAULTS = {
     autoShow = true,
     scale = 1.0,
     lockPanel = true,
-    -- Bloc publie par GIDEON hors jeu (voir docs/TESTPLAN.md, etape 4).
+    -- Language preference of the player: "auto" (follow the client), "en", "fr".
+    locale = Locale.AUTO,
+    -- Block published by GIDEON out of game (see docs/TESTPLAN.md, step 4).
     assignment = nil,
 }
 
---- Valeurs par defaut du module « Intermission Coach ».
---- C'est une FONCTION, pas une constante : renvoyer la meme table partagee entre
---- deux personnages (ou entre deux /reload) creerait un alias de SavedVariables,
---- donc un bug silencieux des qu'un joueur bouge le panneau.
---- Le module ns.Intermission (charge APRES ce fichier dans le .toc) documente la
---- meme duree : Core/Intermission.lua -> VISIBILITY_SECONDS = 3.
+--- Default values of the "Intermission Coach" module.
+--- This is a FUNCTION, not a constant: returning the same table shared between
+--- two characters (or between two /reload) would create a SavedVariables alias,
+--- hence a silent bug as soon as a player moves the panel.
+--- The ns.Intermission module (loaded AFTER this file in the .toc) documents the
+--- same duration: Core/Intermission.lua -> VISIBILITY_SECONDS = 3.
 function Config.defaultIntermission()
     return {
         enabled = true,
@@ -54,7 +60,7 @@ local function clampNumber(value, min, max)
     return value
 end
 
---- Cree la table SavedVariables avec les valeurs par defaut (appel non destructif).
+--- Creates the SavedVariables table with the default values (non-destructive call).
 function Config.ensureDB(db)
     db = db or {}
     for k, v in pairs(Config.DEFAULTS) do
@@ -68,7 +74,24 @@ function Config.ensureDB(db)
     return db
 end
 
---- Retourne (assignment, err). Valide le bloc avant usage.
+--- Resolves the persisted language preference (GideonRaidDB.locale).
+--- Accepted values: "auto" (default), "en", "fr". Anything else - absent,
+--- mistyped, hand-edited SavedVariables - falls back to "auto".
+--- Pure: no API, no clock.
+--- @param raw string|nil raw GideonRaidDB.locale value
+--- @return string "auto", "en" or "fr"
+function Config.resolveLocale(raw)
+    local wanted = (type(raw) == "string") and raw:lower() or ""
+    for index = 1, #Locale.PREFERENCES do
+        local candidate = Locale.PREFERENCES[index]
+        if wanted == candidate then
+            return candidate
+        end
+    end
+    return Locale.AUTO
+end
+
+--- Returns (assignment, err). Validates the block before use.
 function Config.getAssignment()
     local db = _G.GideonRaidDB
     if type(db) ~= "table" then
@@ -77,19 +100,18 @@ function Config.getAssignment()
     return ns.Pairing.validateAssignment(db.assignment)
 end
 
---- Publie la DERNIERE decision du joueur (clic sur un bouton de composition)
---- dans les SavedVariables. C'est CE CHAMP que le kit de diagnostic
---- (GideonDiagAddon) lit pour horodater le choix SANS aucune saisie de chat :
---- on publie une donnee, on n'envoie AUCUN message (aucune communication
---- inter-addons, interdite en instance).
+--- Publishes the player's LAST decision (click on a composition button) into the
+--- SavedVariables. This is THE FIELD the diagnostic kit (GideonDiagAddon) reads
+--- to timestamp the choice WITHOUT any chat input: we publish data, we send NO
+--- message (no inter-addon communication, which is forbidden in instances).
 ---
---- Forme publiee : db.intermission.lastDecision =
----   { composition = "3V1R", at = <epoch client>, clock = "YYYY-MM-DD HH:MM:SS",
+--- Published shape: db.intermission.lastDecision =
+---   { composition = "3V1R", at = <client epoch>, clock = "YYYY-MM-DD HH:MM:SS",
 ---     source = "coach-panel" }
---- L'horodatage vient de la couche UI (elle seule a le droit d'appeler time()).
+--- The timestamp comes from the UI layer (it alone may call time()).
 --- @param db table SavedVariables
 --- @param record table { composition, at, clock, source }
---- @return table|nil entree publiee (nil si la composition est refusee)
+--- @return table|nil published entry (nil if the composition is refused)
 function Config.recordDecision(db, record)
     if type(db) ~= "table" or type(record) ~= "table" then
         return nil
@@ -111,10 +133,10 @@ function Config.recordDecision(db, record)
     return entry
 end
 
---- Resolution PURE de la configuration du module : borne, filtre les types
---- incoherents, ne garde jamais une valeur impossible a rendre.
---- @param raw table|nil contenu brut de GideonRaidDB.intermission
---- @return table configuration exploitable
+--- PURE resolution of the module configuration: clamps, filters inconsistent
+--- types, never keeps a value that cannot be rendered.
+--- @param raw table|nil raw content of GideonRaidDB.intermission
+--- @return table usable configuration
 function Config.resolveIntermission(raw)
     local out = Config.defaultIntermission()
     if type(raw) ~= "table" then

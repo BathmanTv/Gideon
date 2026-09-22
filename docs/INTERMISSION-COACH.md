@@ -1,127 +1,136 @@
-# Intermission Coach — Entombed Sentinels (mythique)
+# Intermission Coach — Entombed Sentinels (mythic)
 
-Module « Intermission Coach » de GideonRaid : il rend la **coordination de
-l'intermission des Entombed Sentinels** (raid *The Venomous Abyss*, Midnight
-12.1.0) possible et rapide **avec une action minimale du joueur**, sans jamais
-lire une API de combat.
+"Intermission Coach" module of GideonRaid: it makes the **coordination of the
+Entombed Sentinels intermission** (raid *The Venomous Abyss*, Midnight 12.1.0)
+possible and fast **with minimal player action**, without ever reading a combat
+API.
 
-Guide de référence :
+Reference guide:
 <https://raidstrats.gg/guides/entombed-sentinels/mythic/phase/quick-overview>
 
 ---
 
-## 1. La mécanique, telle qu'elle est implémentée
+## 1. The mechanic, as implemented
 
-- Pendant l'intermission, **chaque joueur voit un NUMÉRO au-dessus de sa tête**,
-  mais **le numéro ne détermine PAS les couleurs** :
-  - « **2** » = **toujours 2 verts + 2 rouges** (`2V2R`) — le seul cas non ambigu ;
-  - « **1** » ou « **3** » = soit **3 verts + 1 rouge** (`3V1R`), soit **1 vert +
-    3 rouges** (`1V3R`) : c'est la **COULEUR des orbes** qui tranche, jamais le
-    numéro.
-  Il n'existe donc que **trois états réels** : `3V1R`, `2V2R`, `1V3R`.
-- **Règle de survie = addition de couleurs** : la somme des deux joueurs doit
-  faire **4 verts ET 4 rouges** (4V4R) :
-  - `3V1R + 1V3R` = 4V4R → **sûr** ;
-  - `2V2R + 2V2R` = 4V4R → **sûr** ;
-  - toute autre combinaison tue ; `3V1R + 2V2R` = **5 verts** = le « **5g** » du
-    guide ; `1V3R + 1V3R` = 2 verts + 6 rouges = mort aussi.
-- Environ **3 s** après le début, le boss obscurcit la salle : chaque joueur ne
-  voit plus que **ses propres orbes** (son numéro seul ne suffit pas).
+- During the intermission, **every player sees a NUMBER above their head**, but
+  **the number does NOT determine the colors**:
+  - "**2**" = **always 2 green + 2 red** (`2V2R`) — the only unambiguous case;
+  - "**1**" or "**3**" = either **3 green + 1 red** (`3V1R`), or **1 green +
+    3 red** (`1V3R`): it is the **COLOR of the orbs** that decides, never the
+    number.
+  There are therefore only **three real states**: `3V1R`, `2V2R`, `1V3R`.
+- **Survival rule = color addition**: the sum of the two players must make
+  **4 green AND 4 red** (4V4R):
+  - `3V1R + 1V3R` = 4V4R → **safe**;
+  - `2V2R + 2V2R` = 4V4R → **safe**;
+  - any other combination kills; `3V1R + 2V2R` = **5 green** = the guide's
+    "**5g**"; `1V3R + 1V3R` = 2 green + 6 red = dead as well.
+- About **3 s** after the start, the boss darkens the room: each player then
+  sees only **their own orbs** (their number alone is not enough).
 
-> **Correction assumée.** Le modèle précédent liait `1 ↔ 1 vert + 3 rouges` et
-> `3 ↔ 3 verts + 1 rouge`, avec une position et un ping déduits du numéro :
-> c'était **faux** (les numéros 1 et 3 sont ambigus). Le module demande
-> désormais **la composition réellement vue** ; une déclaration réduite à
-> « 1 » ou « 3 » est **refusée** avec un message demandant la couleur dominante —
-> le code ne devine jamais.
+> **Assumed correction.** The previous model bound `1 ↔ 1 green + 3 red` and
+> `3 ↔ 3 green + 1 red`, with a position and a ping deduced from the number:
+> that was **wrong** (numbers 1 and 3 are ambiguous). The module now asks for
+> **the composition actually seen**; a declaration reduced to "1" or "3" is
+> **refused** with a message asking for the dominant color — the code never
+> guesses.
 
-## 2. Les trois états (convention explicite et configurable)
+## 2. The three states (explicit and configurable convention)
 
-Table `CONVENTION` de `Core/Intermission.lua` (source unique de vérité) :
+`CONVENTION` table of `Core/Intermission.lua` (single source of truth):
 
-| État | Composition | Numéro(s) possible(s) | Position | Ping | Couleur | Doit être rejoint par |
+| State | Composition | Possible number(s) | Position | Ping | Color | Must be joined by |
 |---|---|---|---|---|---|---|
-| `1V3R` | 1 vert + 3 rouges | **1 ou 3** (ambigu) | **SUR PLACE**, là où tu es | `Enum.PingSubjectType.Warning` | **ROUGE** | `3V1R` |
-| `2V2R` | 2 verts + 2 rouges | **2** (non ambigu) | **MILIEU / sous le boss** | `Enum.PingSubjectType.OnMyWay` | **BLEU** | `2V2R` |
-| `3V1R` | 3 verts + 1 rouge | **1 ou 3** (ambigu) | **va te coller à un `1V3R`** | `Enum.PingSubjectType.Assist` | **VERT** | `1V3R` |
+| `1V3R` | 1 green + 3 red | **1 or 3** (ambiguous) | **HOLD**, where you are | `Enum.PingSubjectType.Warning` | **RED** | `3V1R` |
+| `2V2R` | 2 green + 2 red | **2** (unambiguous) | **MIDDLE / under the boss** | `Enum.PingSubjectType.OnMyWay` | **BLUE** | `2V2R` |
+| `3V1R` | 3 green + 1 red | **1 or 3** (ambiguous) | **go and stick to a `1V3R`** | `Enum.PingSubjectType.Assist` | **GREEN** | `1V3R` |
 
-Chaque état porte aussi : le libellé visuel (« 3 VERTS + 1 ROUGE »), le nombre de
-verts et de rouges (base du calcul de survie), la consigne opérationnelle, le
-texte du bouton (numéro en indice) et la règle de guilde rappelée pour ce numéro.
+Each state also carries: the visual label ("3 GREEN + 1 RED", "3 VERTS +
+1 ROUGE" in French), the number of green and red orbs (basis of the survival
+computation), the operational instruction, the button text (number as a hint)
+and the guild rule recalled for that number. **Every displayed field of a
+`CONVENTION` record is a locale key** (`state.action.3V1R`, …) resolved by
+`copyRecord` through `ns.Locale.t`, so `/gr lang` applies without a reload.
 
-**Ping** : convention du guide raidstrats, **par couleur dominante** — 3 verts →
-`Assist` (vert), 2-2 → `OnMyWay` (bleu), 3 rouges → `Warning` (rouge). Ces
-couleurs sont vérifiées sur la galerie du wiki
-(<https://warcraft.wiki.gg/wiki/Ping_System>) : `Warning` = panneau rouge,
-`OnMyWay` = flèche bleue, `Assist` = drapeau vert.
+**Ping**: raidstrats guide convention, **by dominant color** — 3 green →
+`Assist` (green), 2-2 → `OnMyWay` (blue), 3 red → `Warning` (red). Those colors
+are verified on the wiki gallery
+(<https://warcraft.wiki.gg/wiki/Ping_System>): `Warning` = red panel,
+`OnMyWay` = blue arrow, `Assist` = green flag.
 
-**Positions** : les lignes **positionnelles** du guide raidstrats se
-**contredisent** (elles donnent à la fois « 1 vert 3 rouges → gauche » et
-« 3 rouges 1 vert → droite »). Notre convention est donc **explicite et
-configurable**, et c'est la seule cohérente avec « la couleur tranche » : le
-point **fixe** est l'état à majorité **rouge** (`1V3R`, ping ROUGE), le
-**coureur** est l'état à majorité **verte** (`3V1R`, ping VERT), les `2V2R`
-vont au milieu. Convention de guilde par défaut, rappelée à l'écran pour chaque
-état : **« 2 » → milieu / sous le boss ; « 1 » → sur place + ping ; « 3 » →
-rejoint un « 1 » de couleur complémentaire**. Si la guilde change de convention,
-on modifie `CONVENTION` (et les tests) — jamais l'UI.
+**Positions**: the **positional** lines of the raidstrats guide **contradict each
+other** (they give both "1 green 3 red → left" and "3 red 1 green → right"). Our
+convention is therefore **explicit and configurable**, and it is the only one
+consistent with "the color decides": the **fixed** point is the **red**-majority
+state (`1V3R`, RED ping), the **runner** is the **green**-majority state
+(`3V1R`, GREEN ping), the `2V2R` go to the middle. Default guild convention,
+recalled on screen for every state: **"2" → middle / under the boss; "1" → hold +
+ping; "3" → joins a "1" with the complementary color**. If the guild changes the
+convention, change `CONVENTION` (and the tests) — never the UI.
 
-## 3. Ce que l'addon fait / ne peut PAS faire (à dire tel quel aux joueurs)
+## 3. What the addon does / can NOT do (to be told to the players as is)
 
-**Il peut :**
+**It can:**
 
-- afficher le plan préparé hors jeu (partenaire, rôle, position, paires) ;
-- afficher un rappel en très gros de la convention au déclenchement ;
-- afficher 3 boutons nommés par la **composition visible** — `1 vert + 3 rouges`,
-  `2 verts + 2 rouges`, `3 verts + 1 rouge` — avec le **numéro en indice**
-  (« 1 ou 3 », « 2 ») : le joueur clique la composition, et **la consigne
-  correspondante apparaît immédiatement** (ce que tu as, ce que tu dois faire,
-  quel état rejoindre, le ping, et le rappel que « 1 » ou « 3 » seul ne suffit
-  pas) ;
-- afficher un **compte à rebours de 3 s** (fenêtre de visibilité) puis signaler
-  la salle obscurcie ;
-- **générer la macro de ping** prête à coller, adaptée à la déclaration.
+- display the plan prepared out of game (partner, role, position, pairs);
+- display a very large reminder of the convention on trigger;
+- display 3 buttons named after the **visible composition** — `1 green + 3 red`,
+  `2 green + 2 red`, `3 green + 1 red` — with the **number as a hint** ("1 or 3",
+  "2"): the player clicks the composition, and **the matching instruction appears
+  immediately** (what you have, what you must do, which state to join, the ping,
+  and the reminder that "1" or "3" alone is not enough);
+- display a **3 s countdown** (visibility window) then report that the room went
+  dark;
+- **generate the ping macro** ready to paste, adapted to the declaration.
 
-**Il ne peut PAS (contraintes 12.x, à assumer) :**
+**It can NOT (12.x constraints, to be assumed):**
 
-- lire les auras / indicateurs d'un autre joueur (valeurs secrètes) —
-  <https://warcraft.wiki.gg/wiki/Secret_Values> ;
-- lire **les siens** de façon exploitable : c'est le joueur qui déclare ;
-- envoyer un ping lui-même : `C_Ping.SendMacroPing` est **#protected**
-  (« This can only be called from secure code ») —
-  <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing> ;
-- **savoir qui a déclaré quoi** : aucun canal addon→addon en instance, et l'UI
-  d'un addon est locale à son client. L'UI l'écrit noir sur blanc
-  (« INCONNU : personne ne peut lire ton numero ni te dire qui a declare quoi ») ;
-- afficher un texte visible par les autres joueurs : **le ping est le seul
-  signal** que les autres voient.
+- read another player's auras / indicators (secret values) —
+  <https://warcraft.wiki.gg/wiki/Secret_Values>;
+- read **its own** in a usable way: it is the player who declares;
+- send a ping itself: `C_Ping.SendMacroPing` is **#protected** ("This can only be
+  called from secure code") —
+  <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing>;
+- **know who declared what**: no addon→addon channel in an instance, and an
+  addon's UI is local to its client. The UI says it in so many words
+  (French: "INCONNU : personne ne peut lire ton numero ni te dire qui a declare
+  quoi" / English: "UNKNOWN: nobody can read your number or tell you who
+  declared what");
+- display a text visible to the other players: **the ping is the only signal**
+  the others see.
 
-Autrement dit : **rien n'est automatique dans cet addon**. Tout ce qui s'affiche
-vient d'un clic du joueur ou d'un fichier préparé hors jeu.
+In other words: **nothing is automatic in this addon**. Everything displayed
+comes from a player click or from a file prepared out of game.
 
-## 4. Macro de ping (statut : **à confirmer en jeu**)
+Everything above is displayed in the **effective language** (English by default,
+French on a frFR client — see `README.md` §4 and `docs/CONVENTIONS.md` §11). Only
+the **spell, orb and color names** are identical in both languages.
 
-L'addon génère et affiche le texte exact à coller dans une macro :
+## 4. Ping macro (status: **to be confirmed in game**)
+
+The addon generates and displays the exact text to paste into a macro:
 
 ```
 /run C_Ping.SendMacroPing({type = Enum.PingSubjectType.Warning, targetToken = "player"})
 ```
 
-- `C_Ping.SendMacroPing(macroInfo)` en 12.1.0 prend une **structure**
-  (`type`, `targetToken`, `spellID`, `itemID`) —
-  <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing> ; les valeurs de
-  `Enum.PingSubjectType` (0 Attack, 1 Warning, 2 Assist, 3 OnMyWay, …) sont
-  vérifiées sur <https://warcraft.wiki.gg/wiki/Enum.PingSubjectType>.
-- Variante de secours générée : `/ping Warning` (commande de macro existante,
-  vue en usage réel ; **le wiki n'a pas de page `MACRO ping`**, donc la casse et
-  le jeton exact sont à confirmer).
-- **À confirmer en jeu :** (1) l'appel depuis une macro est bien autorisé,
-  (2) `targetToken = "player"` produit bien un ping sur soi (icône au-dessus de
-  la tête / cadre de raid), (3) le jeton de la variante `/ping`.
+- `C_Ping.SendMacroPing(macroInfo)` in 12.1.0 takes a **structure** (`type`,
+  `targetToken`, `spellID`, `itemID`) —
+  <https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing>; the values of
+  `Enum.PingSubjectType` (0 Attack, 1 Warning, 2 Assist, 3 OnMyWay, …) are
+  verified on <https://warcraft.wiki.gg/wiki/Enum.PingSubjectType>.
+- Generated fallback variant: `/ping Warning` (existing macro command, seen in
+  real usage; **the wiki has no `MACRO ping` page**, so the exact case and token
+  are to be confirmed).
+- The macro text itself is language-independent: only the "to be confirmed" note
+  around it is translated.
+- **To be confirmed in game:** (1) the call from a macro is indeed allowed,
+  (2) `targetToken = "player"` indeed produces a ping on yourself (icon above the
+  head / raid frame), (3) the token of the `/ping` variant.
 
-## 5. Contrat de données (GIDEON → addon)
+## 5. Data contract (GIDEON → addon)
 
-`GideonRaidDB.assignment` (écrit hors jeu, lu par l'addon) :
+`GideonRaidDB.assignment` (written out of game, read by the addon):
 
 ```lua
 GideonRaidDB = {
@@ -132,9 +141,9 @@ GideonRaidDB = {
             { a = "Velna",  b = "Torgh" },
             { a = "Bathman", b = "Coren" },
         },
-        -- OPTIONNEL : plan préparé hors jeu (rôle / position par joueur).
-        -- `role` = COMPOSITION D'ORBES (« 3V1R », « 2V2R », « 1V3R », « 3 verts »),
-        -- jamais un numéro seul 1/3 (ambigu).
+        -- OPTIONAL: plan prepared out of game (role / position per player).
+        -- `role` = ORB COMPOSITION ("3V1R", "2V2R", "1V3R", "3 verts"),
+        -- never a bare number 1/3 (ambiguous).
         plan = {
             { name = "Velna",   role = "2V2R", position = "MIDDLE" },
             { name = "Torgh",   role = "2V2R", position = "MIDDLE" },
@@ -145,118 +154,144 @@ GideonRaidDB = {
 }
 ```
 
-- `plan` est **facultatif** : sans lui, l'addon affiche seulement le partenaire
-  et la liste des paires.
-- `role` accepte la **composition d'orbes** (`"1V3R"`, `"2V2R"`, `"3V1R"`, ou une
-  forme tolérée comme `"3 verts"`) **ou** un rôle de raid libre (`"Tank"`,
-  `"Heal"`) — dans ce dernier cas l'addon n'en déduit aucune rencontre. Un
-  numéro seul `"1"` ou `"3"` est **ambigu** : l'addon l'écrit
-  (`Rencontre non verifiable : numero 1 ambigu…`) au lieu de le deviner.
-- Si les deux rôles d'une paire sont des compositions, l'addon affiche
-  `Rencontre 2V2R+2V2R : OK (combinaison sure (4 verts + 4 rouges))` ou
-  `Rencontre 3V1R+2V2R : MORT (5 verts = 5g : MORT)` : c'est un **contrôle du
-  plan préparé**, pas une lecture en jeu.
-- Une entrée de `plan` malformée est ignorée et comptée (« Plan : 1 entrée
-  ignorée »), jamais un crash.
-- Fixture de contrat : `tests/fixtures/assignment_sample.lua`.
+- `plan` is **optional**: without it, the addon only displays the partner and the
+  list of pairs.
+- `role` accepts the **orb composition** (`"1V3R"`, `"2V2R"`, `"3V1R"`, or a
+  tolerated form such as `"3 verts"`) **or** a free raid role (`"Tank"`,
+  `"Heal"`) — in the latter case the addon deduces no meeting from it. A bare
+  number `"1"` or `"3"` is **ambiguous**: the addon writes it out (French:
+  `Rencontre non verifiable : numero 1 ambigu…` / English: `Meeting cannot be
+  verified: number 1 is ambiguous…`) instead of guessing.
+- If both roles of a pair are compositions, the addon displays
+  `Meeting 2V2R+2V2R: OK (safe combination (4 green + 4 red))` or
+  `Meeting 3V1R+2V2R: DEAD (5 green = 5g: DEAD)`: that is a **check of the
+  prepared plan**, not an in-game read.
+- A malformed `plan` entry is ignored and counted ("Plan: 1 ignored entry(ies)."),
+  never a crash.
+- Contract fixture: `tests/fixtures/assignment_sample.lua`.
 
 ## 6. Configuration
 
-Dans `GideonRaidDB.intermission` (valeurs résolues et bornées par
-`ns.Config.resolveIntermission`) :
+In `GideonRaidDB.intermission` (values resolved and clamped by
+`ns.Config.resolveIntermission`):
 
-| Clé | Défaut | Effet |
+| Key | Default | Effect |
 |---|---|---|
-| `enabled` | `true` | active/désactive tout le module (`/gr inter on|off`) |
-| `startOnEncounterStart` | `true` | lance la timeline sur `ENCOUNTER_START` |
-| `autoShowPanel` | `true` | ouvre le panneau au déclenchement |
-| `scale` | `1.0` | échelle du panneau (bornée 0.5 – 3.0) |
-| `visibilitySeconds` | `3` | fenêtre de visibilité (bornée 1 – 10) |
-| `durationSeconds` | `20` | durée totale de l'intermission (bornée, > visibilité) |
-| `macroTargetToken` | `"player"` | jeton de cible de la macro de ping |
-| `position` | `CENTER` | position du panneau, sauvegardée au glisser-déposer |
+| `enabled` | `true` | enables/disables the whole module (`/gr inter on|off`) |
+| `startOnEncounterStart` | `true` | starts the timeline on `ENCOUNTER_START` |
+| `autoShowPanel` | `true` | opens the panel on trigger |
+| `scale` | `1.0` | panel scale (clamped 0.5 – 3.0) |
+| `visibilitySeconds` | `3` | visibility window (clamped 1 – 10) |
+| `durationSeconds` | `20` | total intermission duration (clamped, > visibility) |
+| `macroTargetToken` | `"player"` | target token of the ping macro |
+| `position` | `CENTER` | panel position, saved on drag and drop |
 
-## 7. Commandes et touche
+Outside `intermission`, the top level of the SavedVariables holds the **language
+preference**:
+
+| Key | Default | Effect |
+|---|---|---|
+| `locale` | `"auto"` | in-game language: `"auto"` (follow the client), `"en"`, `"fr"` — see `/gr lang` |
+
+## 7. Commands and keybinding
 
 ```
-/gr                       panneau principal (plan préparé hors jeu)
-/gr plan                  plan détaillé dans le chat
-/gr inter                 affiche/masque le panneau d'intermission
-/gr inter start|stop      lance/arrête la timeline pré-calculée
-/gr inter 3V1R            déclare ta COMPOSITION (aussi : 2V2R, 1V3R, « 3 verts »)
-/gr inter 2               seul le « 2 » est accepté comme numéro (non ambigu)
-/gr inter macro           affiche la macro de ping correspondante
-/gr inter on | off        active/désactive le module
-/gr inter status          état du module + timeline
+/gr                       main panel (plan prepared out of game)
+/gr plan                  detailed plan in the chat
+/gr lang                  detected language, effective language, how to change
+/gr lang auto|en|fr       rules on the language and persists it in the SavedVariables
+/gr inter                 shows/hides the intermission panel
+/gr inter start|stop      starts/stops the pre-computed timeline
+/gr inter 3V1R            declares your COMPOSITION (also: 2V2R, 1V3R, "3 verts")
+/gr inter 2               only "2" is accepted as a number (unambiguous)
+/gr inter macro           displays the matching ping macro
+/gr inter on | off        enables/disables the module
+/gr inter status          module state + timeline
 ```
 
-`/gr inter 1` ou `/gr inter 3` sont **refusés** avec un message demandant la
-couleur dominante : le module ne devine jamais la composition à partir du numéro.
+`/gr inter 1` or `/gr inter 3` are **refused** with a message asking for the
+dominant color: the module never guesses the composition from the number.
 
-Une **binding** `GIDEONRAID_INTERMISSION` (sans touche par défaut) est déclarée
-dans `Bindings.xml` : à assigner dans *Options > Raccourcis > GideonRaid*.
-Le corps de la binding est du Lua exécuté **insecurement** (voir
-<https://warcraft.wiki.gg/wiki/Creating_key_bindings>) : il ouvre le panneau,
-et ne peut pas — ne doit pas — envoyer de ping.
+A **binding** `GIDEONRAID_INTERMISSION` (no default key) is declared in
+`Bindings.xml`: assign it in *Options > Keybindings > GideonRaid*. The body of
+the binding is Lua executed **insecurely** (see
+<https://warcraft.wiki.gg/wiki/Creating_key_bindings>): it opens the panel, and
+cannot — must not — send a ping.
 
-## 8. Tests hors jeu
+## 8. Out-of-game tests
 
 ```bash
-busted                                    # 88 tests, dont 59 pour ce module
-lua5.1 tools/intermission_cli.lua all     # les 3 états + macros
-lua5.1 tools/intermission_cli.lua 3V1R    # un état
+busted                                    # 111 tests, 60 of them for this module
+lua5.1 tools/intermission_cli.lua all     # the 3 states + macros
+lua5.1 tools/intermission_cli.lua 3V1R    # one state
 lua5.1 tools/intermission_cli.lua 1       # -> REFUS : numéro ambigu
 lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R    # -> MORT (5 verts)
 lua5.1 tools/intermission_cli.lua plan Velna
 ```
 
-Couvert par `tests/spec/intermission_spec.lua` :
+(The CLI is a developer tool and keeps printing French; only the in-game text is
+translated.)
 
-- les trois états de couleur (libellé, verts/rouges, numéros possibles, ping,
-  complément, consigne) et leur ordre déterministe ;
-- la normalisation tolérante (`3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`,
-  `vvrr`, `3 verts`, `1 vert 3 rouges`, « vert » = dominante), et le **refus
-  explicite** de « 1 » ou « 3 » seuls (message « ambigu », jamais de devinette) ;
-- les collisions par addition de couleurs : `3V1R+1V3R` sûr, `2V2R+2V2R` sûr,
-  `3V1R+2V2R` interdit (5 verts), `1V3R+1V3R` et `3V1R+3V1R` interdits ;
-- la génération de macro (par couleur dominante), l'absence de texte d'événement
-  interdit, et le refus de fabriquer une macro sur un numéro ambigu ;
-- la machine d'état : `IDLE → VISIBLE (3 s) → DARK → DONE`, déclaration avant
-  démarrage / après la fin refusée, `reset`, `dt` négatif ignoré, déterminisme ;
-- la timeline préparée (bornes, `durée > visibilité`) ;
-- la vue pré-pull (partenaire, rôle, position, paires triées, plan malformé,
-  rencontre sûre / mortelle / **non vérifiable** quand un rôle reste ambigu) ;
-- la configuration (bornes, types incohérents, absence d'alias entre comptes).
+Covered by `tests/spec/intermission_spec.lua`:
 
-Couvert par `tests/spec/load_spec.lua` (chargement réel, ordre du `.toc`) :
-`ENCOUNTER_START` ouvre le panneau, les trois boutons portent la composition et
-le numéro en indice, le clic sur un bouton affiche la consigne, le ticker bascule
-en salle obscurcie après 3 s, `ENCOUNTER_END` ferme le panneau, la désactivation
-est respectée, le panneau n'affiche aucune valeur dynamique.
+- the three color states (label, green/red counts, possible numbers, ping,
+  complement, instruction) and their deterministic order — in the default
+  language (English) **and** in the explicit French variant;
+- tolerant normalization (`3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`,
+  `vvrr`, `3 verts`, `1 vert 3 rouges`, "vert" = dominant), and the **explicit
+  refusal** of "1" or "3" alone (message "ambiguous", never a guess);
+- the collisions by color addition: `3V1R+1V3R` safe, `2V2R+2V2R` safe,
+  `3V1R+2V2R` forbidden (5 green), `1V3R+1V3R` and `3V1R+3V1R` forbidden;
+- the macro generation (by dominant color), the absence of forbidden event text,
+  and the refusal to build a macro on an ambiguous number;
+- the state machine: `IDLE → VISIBLE (3 s) → DARK → DONE`, declaration before
+  start / after the end refused, `reset`, negative `dt` ignored, determinism;
+- the prepared timeline (bounds, `duration > visibility`);
+- the pre-pull view (partner, role, position, sorted pairs, malformed plan, safe
+  / deadly / **unverifiable** meeting when a role stays ambiguous);
+- the configuration (bounds, inconsistent types, no alias between accounts).
 
-Couvert par `tests/spec/guard_spec.lua` (garde anti-API-interdite) : aucun
-fichier listé dans le `.toc` ne contient `COMBAT_LOG_EVENT`, `UnitAura`,
-`UnitBuff`, `UnitDebuff`, `UnitGUID`, `SendChatMessage`, `GetRaidRosterInfo`,
-`C_VoiceChat` hors commentaire ; `C_Ping` / `SendMacroPing` n'apparaissent
-**jamais comme appel** (seulement dans le **texte** de la macro, qui est du code
-sécurisé déclenché par le joueur) ; `Core/` reste sans `GetTime`,
-`math.random`, `CreateFrame`, `UnitName` ni `GideonRaidDB`.
+Covered by `tests/spec/load_spec.lua` (real loading, `.toc` order):
+`ENCOUNTER_START` opens the panel, the three buttons carry the composition and
+the number as a hint, clicking a button displays the instruction, the ticker
+switches to the darkened room after 3 s, `ENCOUNTER_END` closes the panel,
+disabling is honoured, the panel displays no dynamic value.
 
-## 9. À confirmer en jeu (liste honnête)
+Covered by `tests/spec/guard_spec.lua` (anti-forbidden-API guard): no file listed
+in the `.toc` contains `COMBAT_LOG_EVENT`, `UnitAura`, `UnitBuff`, `UnitDebuff`,
+`UnitGUID`, `SendChatMessage`, `GetRaidRosterInfo`, `C_VoiceChat` outside a
+comment; `C_Ping` / `SendMacroPing` **never appear as a call** (only inside the
+macro **text**, which is secure code triggered by the player); `Core/` stays free
+of `GetTime`, `math.random`, `CreateFrame`, `UnitName` and `GideonRaidDB`.
 
-1. Syntaxe exacte de la macro de ping (appel `C_Ping.SendMacroPing` depuis une
-   macro, sémantique de `targetToken = "player"`, jeton de la variante `/ping`).
-2. Apparition de la binding `GIDEONRAID_INTERMISSION` dans *Options > Raccourcis*
-   (fichier XML non testable hors client) et comportement `header`.
-3. Lisibilité réelle du panneau pendant l'obscurcissement (taille, position par
-   défaut) — non vérifiable hors client.
-4. Durée exacte de l'intermission : `durationSeconds` est un défaut **à ajuster**
-   après les premiers pulls.
-5. Convention de guilde définitive (position, ping vs `/say`) : le tableau du
-   §2 et la table `CONVENTION` de `Core/Intermission.lua` sont la source unique ;
-   s'ils changent, changer `CONVENTION` (et les tests) — jamais l'UI. Les lignes
-   positionnelles du guide raidstrats se contredisant, notre choix (rouge =
-   point fixe, vert = coureur, 2-2 = milieu) est explicite et révisable.
-6. Lien entre le **numéro affiché** et la **marque** (Mark of Acid / Mark of
-   Blood) : mesuré en jeu par le kit de diagnostic `GideonDiagAddon`
-   (`/gdiagmark`), qui note désormais **numéro + composition** par intermission.
+Covered by `tests/spec/locale_spec.lua` (language layer): default English,
+`GetLocale()` returning `"frFR"` → French, `"enUS"`/`"deDE"` → English, explicit
+override beating detection, unknown value → English, the auto-preference
+following the client, `/gr lang` printing the detected / effective / preferred
+language, `/gr lang fr|en|auto` persisted in the SavedVariables, refusal of an
+unknown value, missing key → the key itself, no exception.
+
+## 9. To be confirmed in game (honest list)
+
+1. Exact syntax of the ping macro (calling `C_Ping.SendMacroPing` from a macro,
+   semantics of `targetToken = "player"`, token of the `/ping` variant).
+2. The binding `GIDEONRAID_INTERMISSION` showing up in *Options > Keybindings*
+   (an XML file cannot be tested outside the client) and the `header` behaviour.
+3. **Client language detection**: validate `GetLocale()`
+   (<https://warcraft.wiki.gg/wiki/API:GetLocale>) **once on a frFR client**
+   (French must be served with the `auto` preference) **and once on an enUS
+   client** (English must be served). The out-of-game tests cover the two cases
+   with a stubbed `GetLocale`, but only an in-client run proves the real return
+   value.
+4. Real readability of the panel during the darkening (size, default position) —
+   not verifiable outside the client.
+5. Exact intermission duration: `durationSeconds` is a default **to be tuned**
+   after the first pulls.
+6. Final guild convention (position, ping vs `/say`): the table of §2 and the
+   `CONVENTION` table of `Core/Intermission.lua` are the single source; if they
+   change, change `CONVENTION` (and the tests) — never the UI. The positional
+   lines of the raidstrats guide contradicting each other, our choice (red =
+   fixed point, green = runner, 2-2 = middle) is explicit and revisable.
+7. Link between the **displayed number** and the **mark** (Mark of Acid / Mark of
+   Blood): measured in game by the `GideonDiagAddon` diagnostic kit
+   (`/gdiagmark`), which now records **number + composition** per intermission.

@@ -1,41 +1,43 @@
-# Plan de test — GideonRaid (4 étapes)
+# Test plan — GideonRaid (4 steps)
 
-Principe directeur : **on teste hors jeu tout ce qui peut l'être**, parce qu'en
-12.x, en combat, l'addon ne *peut pas* lire les valeurs qui l'intéressent (Secret
-Values) et ne peut pas s'échanger de messages en instance. Ce qui reste
-vérifiable en jeu est réduit au rendu et au câblage. Le plan est construit pour
-que 90 % du risque soit éliminé avant d'ouvrir le client.
+Guiding principle: **everything that can be tested out of game is tested out of
+game**, because in 12.x, during combat, the addon *cannot* read the values it is
+interested in (Secret Values) and cannot exchange messages in an instance. What
+remains verifiable in game is reduced to rendering and wiring. The plan is built
+so that 90 % of the risk is eliminated before opening the client.
 
-| Étape | Objet | Outil | Fréquence | Où |
+| Step | Subject | Tool | Frequency | Where |
 |---|---|---|---|---|
-| 1 | Logique d'appariement (pure) | busted + lua5.1 | à chaque commit | CI + local |
-| 1b | Intermission Coach : convention des orbes + machine d'état (pure) | busted + lua5.1 | à chaque commit | CI + local |
-| 2 | Chargement de l'addon (câblage, .toc, événements) | busted + stub API | à chaque commit | CI + local |
-| 3 | Rendu et ergonomie en jeu | client de test | avant chaque patch | client WoW |
-| 4 | Intégration GIDEON bout en bout | CLI Lua + Discord | avant chaque raid | VPS + Discord |
+| 1 | Pairing logic (pure) | busted + lua5.1 | on every commit | CI + local |
+| 1b | Intermission Coach: orb convention + state machine (pure) | busted + lua5.1 | on every commit | CI + local |
+| 1c | Language layer: strings, resolution, `/gr lang` | busted + lua5.1 | on every commit | CI + local |
+| 2 | Addon loading (wiring, .toc, events) | busted + API stub | on every commit | CI + local |
+| 3 | Rendering and ergonomics in game | test client | before every patch | WoW client |
+| 4 | End-to-end GIDEON integration | Lua CLI + Discord | before every raid | VPS + Discord |
 
-Porte de sortie unique : **`make check`** (stylua + luacheck + toc + busted).
+Single exit gate: **`make check`** (stylua + luacheck + toc + busted).
 
 ---
 
-## Étape 1 — Tests unitaires hors jeu de la logique d'appariement
+## Step 1 — Out-of-game unit tests of the pairing logic
 
-**Objectif** : le moteur `ns.Pairing` est du Lua 5.1 pur, sans aucun appel à
-l'API WoW. Il est donc exécutable par `lua5.1` et par `busted`, installés sur le
-VPS et sur le runner GitHub.
+**Goal**: the `ns.Pairing` engine is pure Lua 5.1, without any call to the WoW
+API. It is therefore runnable by `lua5.1` and by `busted`, installed on the VPS
+and on the GitHub runner.
 
-**Fichier** : `tests/spec/pairing_spec.lua` (11 tests ; le total du dépôt est de
-**71 tests** avec `load_spec.lua` (13) et `intermission_spec.lua` (47)).
+**File**: `tests/spec/pairing_spec.lua` (11 tests; the repository total is
+**111 tests**, spread over `intermission_spec.lua` (60), `load_spec.lua` (16),
+`locale_spec.lua` (20) and `guard_spec.lua` (4)).
 
-**Lancement** :
+**How to run**:
 
 ```bash
-cd GideonRaid && busted
+busted
 ```
 
-### Jeu de données de référence (« fixtures »)
+### Reference data set ("fixtures")
 
-Roster de 20 joueurs, 10 `ember` / 10 `frost`, fourni par GIDEON :
+Roster of 20 players, 10 `ember` / 10 `frost`, provided by GIDEON:
 
 ```
 Velna,ember      Bathman,frost    Kaela,ember     Ordan,frost     Sylvia,ember
@@ -44,9 +46,9 @@ Ilya,ember       Pax,frost       Zerun,ember     Halda,frost     Coren,ember
 Aster,frost      Bren,ember      Lumen,frost     Serka,ember     Vaelen,frost
 ```
 
-Fichier : `tools/sample_roster.csv`.
+File: `tools/sample_roster.csv`.
 
-### Résultat attendu (vérifié, sortie réelle)
+### Expected result (verified, real output)
 
 ```
 $ lua5.1 tools/pairing_cli.lua < tools/sample_roster.csv
@@ -62,98 +64,130 @@ Velna|Torgh
 Zerun|Vaelen
 ```
 
-10 paires, 0 non-apparié, exit code 0. L'appariement est **alphabétique**
-(Alice-Bob, puis Yann-Zoe…) : c'est ce qui garantit que le même roster produit
-exactement le même résultat, sur le client comme dans GIDEON.
+10 pairs, 0 unpaired, exit code 0. The pairing is **alphabetical**
+(Alice-Bob, then Yann-Zoe…): that is what guarantees that the same roster
+produces exactly the same result, in the client as well as in GIDEON.
 
-### Cas de test obligatoires (tous présents dans `pairing_spec.lua`)
+### Mandatory test cases (all present in `pairing_spec.lua`)
 
-| Cas | Entrée | Attendu |
+| Case | Input | Expected |
 |---|---|---|
-| nominal 3+3 | Tank1/Tank2/Dps1 ember, Heal1/Heal2/Dps2 frost | 3 paires alignées par nom |
-| déterminisme | même roster, ordre inversé | résultats identiques |
-| normalisation | `"  Ember "`, `"FROST"` | appariés |
-| surnuméraires | 3 ember, 1 frost | 1 paire + 2 `unpaired` `no_partner:frost` |
-| debuff manquant | joueur sans `debuff` | `unpaired` `missing_debuff` |
-| debuff inconnu | `poison` | `unpaired` `unknown_debuff:poison` |
-| entrée invalide | `"pas une table"` | `nil, err` (pas de crash) |
-| doublon | deux joueurs `A` | `nil, err` |
-| `findPartner` | bilatéral + inconnu | `"B"`, `"A"`, `nil` |
-| `validateAssignment` | bloc GIDEON valide / malformé | filtré / rejeté |
+| nominal 3+3 | Tank1/Tank2/Dps1 ember, Heal1/Heal2/Dps2 frost | 3 pairs aligned by name |
+| determinism | same roster, reversed order | identical results |
+| normalization | `"  Ember "`, `"FROST"` | paired |
+| extras | 3 ember, 1 frost | 1 pair + 2 `unpaired` `no_partner:frost` |
+| missing debuff | player without `debuff` | `unpaired` `missing_debuff` |
+| unknown debuff | `poison` | `unpaired` `unknown_debuff:poison` |
+| invalid input | `"pas une table"` | `nil, err` (no crash) |
+| duplicate | two players `A` | `nil, err` |
+| `findPartner` | both ways + unknown | `"B"`, `"A"`, `nil` |
+| `validateAssignment` | valid / malformed GIDEON block | filtered / rejected |
 
-**Critère de passage** : `71 successes / 0 failures / 0 errors`.
+**Pass criterion**: step 1 green (`11 successes / 0 failures / 0 errors`).
 
 ---
 
-## Étape 1b — Tests hors jeu de l'Intermission Coach (logique pure)
+## Step 1b — Out-of-game tests of the Intermission Coach (pure logic)
 
-**Objectif** : tout ce qui dépend d'une règle métier (états de couleur,
-collisions, machine d'état de l'intermission, vue pré-pull, bornes de
-configuration) est testé **hors du client**, parce qu'en jeu il n'y a rien à
-observer : l'addon ne lit aucune API de combat.
+**Goal**: everything that depends on a business rule (color states, collisions,
+intermission state machine, pre-pull view, configuration bounds) is tested
+**outside the client**, because in game there is nothing to observe: the addon
+reads no combat API.
 
-**Fichier** : `tests/spec/intermission_spec.lua` (59 tests).
+**File**: `tests/spec/intermission_spec.lua` (60 tests).
 
-**Ce qui est vérifié :**
+**What is verified:**
 
-| Famille | Cas |
+| Family | Cases |
 |---|---|
-| États de couleur | les trois états `1V3R` / `2V2R` / `3V1R` (libellé, verts ET rouges, numéros possibles, ping, complément, consigne), « 2 » seul non ambigu, « 1 »/« 3 » ambigus, ordre déterministe, copie non mutable |
-| Normalisation | `3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`, `vvrr`, `3 verts`, `1 vert 3 rouges`, couleur dominante seule (« vert », « majorité verte »), « 2 » accepté, **« 1 »/« 3 » seuls refusés avec message « ambigu »**, saisies vides/inconnues/inexploitables refusées |
-| Collisions | `3V1R+1V3R` OK dans les deux sens, `2V2R+2V2R` OK, `3V1R+2V2R` = 5 verts = mort, `1V3R+1V3R` et `3V1R+3V1R` refusés, comparaison sur un numéro ambigu refusée |
-| Macro | appel `C_Ping.SendMacroPing` par état (couleur dominante), jeton de cible, variante `/ping`, note « à confirmer », **absence de texte d'événement interdit**, aucune macro sur un numéro ambigu |
-| Timeline | valeurs par défaut (3 s), valeurs préparées, bornes (1–10 s, 3–120 s), `durée > visibilité` |
-| Machine d'état | `IDLE → VISIBLE (3 s) → DARK → DONE`, compte à rebours 3/2/1/0, déclaration pendant VISIBLE et DARK, refus avant démarrage, sur numéro ambigu et après la fin, `reset`, `dt` négatif/non numérique ignoré, déterminisme (mêmes entrées ⇒ même rapport) |
-| Vue pré-pull | partenaire, rôle (composition), position, rencontre `2V2R+2V2R` OK / `3V1R+2V2R` MORT / `1V3R+3V1R` OK / **non vérifiable si le rôle reste ambigu**, paires triées par nom et insensibles à l'ordre d'entrée, plan absent, plan malformé, joueur absent, assignment invalide |
-| Configuration | defaults frais (pas d'alias entre comptes), bornes d'échelle et de durées, types incohérents ignorés |
+| Color states | the three states `1V3R` / `2V2R` / `3V1R` (label, green AND red counts, possible numbers, ping, complement, instruction), "2" alone unambiguous, "1"/"3" ambiguous, deterministic order, non-mutable copy, **the French variant served explicitly when the active language is `fr`** |
+| Normalization | `3V1R`, `2v2r`, `1 V 3 R`, `vert-vert-vert-rouge`, `vvrr`, `3 verts`, `1 vert 3 rouges`, dominant color alone ("vert", "majorité verte"), "2" accepted, **"1"/"3" alone refused with an "ambiguous" message**, empty/unknown/unusable input refused |
+| Collisions | `3V1R+1V3R` OK both ways, `2V2R+2V2R` OK, `3V1R+2V2R` = 5 green = dead, `1V3R+1V3R` and `3V1R+3V1R` refused, comparison on an ambiguous number refused |
+| Macro | `C_Ping.SendMacroPing` call per state (dominant color), target token, `/ping` variant, "to be confirmed" note, **absence of forbidden event text**, no macro on an ambiguous number |
+| Timeline | default values (3 s), prepared values, bounds (1–10 s, 3–120 s), `duration > visibility` |
+| State machine | `IDLE → VISIBLE (3 s) → DARK → DONE`, countdown 3/2/1/0, declaration during VISIBLE and DARK, refusal before start, on an ambiguous number and after the end, `reset`, negative/non-numeric `dt` ignored, determinism (same inputs ⇒ same report) |
+| Pre-pull view | partner, role (composition), position, meeting `2V2R+2V2R` OK / `3V1R+2V2R` DEAD / `1V3R+3V1R` OK / **unverifiable when the role stays ambiguous**, pairs sorted by name and insensitive to input order, plan absent, malformed plan, player absent, invalid assignment |
+| Configuration | fresh defaults (no alias between accounts), scale and duration bounds, inconsistent types ignored |
 
-**Aperçu hors jeu** (vérifiable à la main, sans client) :
+**Out-of-game preview** (verifiable by hand, without a client — the developer CLI
+keeps printing French):
 
 ```
-$ lua5.1 tools/intermission_cli.lua all          # les 3 états + macros
-$ lua5.1 tools/intermission_cli.lua 1            # -> REFUS : numéro ambigu
+$ lua5.1 tools/intermission_cli.lua all            # les 3 états + macros
+$ lua5.1 tools/intermission_cli.lua 1              # -> REFUS : numéro ambigu
 $ lua5.1 tools/intermission_cli.lua pair 3V1R 2V2R # -> 3V1R+2V2R : MORT (5 verts = 5g)
 $ lua5.1 tools/intermission_cli.lua plan Velna
 ```
 
 ---
 
-## Étape 2 — Tests de chargement de l'addon
+## Step 1c — Out-of-game tests of the language layer
 
-**Objectif** : prouver que l'addon se charge dans l'ordre du `.toc`, que les
-événements ne lèvent pas, et que le rendu lit bien `GideonRaidDB`. On ne mocke
-**que** les frames (`tests/support/wowapi_stub.lua`, ~60 lignes) : aucune API de
-combat n'est mockée, car aucun fichier n'en appelle.
+**Goal**: prove that the addon is bilingual with English as the official
+language, that French is served automatically on a frFR client, and that no
+string can ever raise.
 
-**Fichier** : `tests/spec/load_spec.lua`.
+**File**: `tests/spec/locale_spec.lua` (20 tests), in three blocks:
 
-Le chargement se fait via `wowenv.loadAddon()`, qui **lit le `.toc`** et charge
-ses fichiers dans l'ordre : un fichier oublié, renommé ou mal ordonné fait
-échouer le test (c'est le bug n°1 des addons).
+1. `Locale.resolve` (pure): default English, `auto`/`nil` following the client
+   (`frFR` → French, `enUS`/`deDE` → English), an explicit preference beating the
+   detection, any unknown value falling back to English;
+2. `Locale.t` / `Locale.format`: the English variant by default and the French
+   one on demand (including a full `frFR` code), a key present in one language
+   only still served, a missing key returning the key itself **without raising**,
+   `format` total even without arguments, `setActive` falling back to English,
+   determinism;
+3. the wiring end to end (with the API stub): English by default, `GetLocale()`
+   returning `"frFR"` serving French (panel headline and buttons included),
+   `"enUS"`/`"deDE"`/`"esES"` serving English, a **missing `GetLocale`** not
+   raising, `/gr lang` printing the detected + effective + preferred language and
+   the rule, `/gr lang fr|en|auto` persisted in `GideonRaidDB.locale` and applied
+   immediately, an unknown value refused and persisting nothing, a hand-edited
+   (`"Klingon"`) preference falling back to `auto`.
 
-Ce qui est vérifié :
+**Pass criterion**: `locale_spec.lua` green + `intermission_spec.lua` green in the
+default (English) language.
 
-1. les 6 fichiers du `.toc` sont chargés dans l'ordre, et les 5 couches
-   (`ns.Pairing`, `ns.Config`, `ns.Intermission`, `ns.UI`, `ns.GR`) sont exposées ;
-2. `ADDON_LOADED` sur `GideonRaid` initialise `GideonRaidDB` avec les defaults
-   (dont `intermission`) ;
-3. `ADDON_LOADED` sur un **autre** addon ne touche pas aux SavedVariables ;
-4. `PLAYER_LOGIN` sans assignation ne lève pas ;
-5. `PLAYER_LOGIN` **avec** assignation affiche le plan (partenaire, rôle,
-   position, rencontre `2V2R+2V2R`) dans le panneau ;
-6. le slash handler (`/gr show`, `/gr status`, `/gr plan`, `/gr inter status`,
-   commande inconnue) répond sans lever ;
-7. `ENCOUNTER_START` (avec ses arguments d'instance) ouvre le panneau
-   d'intermission sans qu'aucun argument soit lu ;
-8. les trois boutons portent la composition visible (numéro en indice) et un clic
-   sur un bouton affiche la consigne complète et la macro de ping ;
-9. le ticker fait basculer l'affichage en « salle obscurcie » 3 s après le début
-   (35 ticks de 0,1 s) ;
-10. `ENCOUNTER_END` ferme le panneau ;
-11. la désactivation (`/gr inter off`) est respectée ;
-12. le panneau n'affiche aucune valeur dynamique (aucun appel d'API de combat).
+---
 
-**Vérification du `.toc`** (`tools/check_toc.py`, en CI) :
+## Step 2 — Addon loading tests
+
+**Goal**: prove that the addon loads in the `.toc` order, that the events do not
+raise, and that the rendering really reads `GideonRaidDB`. Only the frames are
+mocked (`tests/support/wowapi_stub.lua`): no combat API is mocked, because no
+file calls one. The stub does define `GetLocale` (the real client always has it)
+so that the language wiring is exercised.
+
+**File**: `tests/spec/load_spec.lua`.
+
+Loading goes through `wowenv.loadAddon()`, which **reads the `.toc`** and loads
+its files in order: a forgotten, renamed or badly ordered file makes the test
+fail (that is the number one addon bug).
+
+What is verified:
+
+1. the 7 files of the `.toc` are loaded in order (`Core/Locale.lua` second,
+   before the other `Core/` modules), and the 6 layers (`ns.Locale`,
+   `ns.Pairing`, `ns.Config`, `ns.Intermission`, `ns.UI`, `ns.GR`) are exposed;
+2. `ADDON_LOADED` on `GideonRaid` initializes `GideonRaidDB` with the defaults
+   (including `intermission` and `locale`);
+3. `ADDON_LOADED` on **another** addon does not touch the SavedVariables;
+4. `PLAYER_LOGIN` without an assignment does not raise;
+5. `PLAYER_LOGIN` **with** an assignment displays the plan (partner, role,
+   position, `2V2R+2V2R` meeting) in the panel;
+6. the slash handler (`/gr show`, `/gr status`, `/gr plan`, `/gr inter status`,
+   unknown command) answers without raising;
+7. `ENCOUNTER_START` (with its instance arguments) opens the intermission panel
+   without any argument being read;
+8. the three buttons carry the visible composition (number as a hint) and a click
+   on a button displays the full instruction and the ping macro;
+9. the ticker switches the display to "room darkened" 3 s after the start
+   (35 ticks of 0.1 s);
+10. `ENCOUNTER_END` closes the panel;
+11. disabling (`/gr inter off`) is honoured;
+12. the panel displays no dynamic value (no combat API call).
+
+**`.toc` verification** (`tools/check_toc.py`, in CI):
 
 ```
 $ python3 tools/check_toc.py GideonRaid.toc
@@ -161,20 +195,21 @@ OK GideonRaid.toc
   Interface  : 120100
   Version    : @project-version@
   SavedVar   : GideonRaidDB
-  Fichiers   : 6
+  Fichiers   : 7
 ```
 
-Il vérifie : nom du `.toc` == `package-as`, `## Interface:` numérique et
-≥ 120100, présence de `Title/Notes/Version`, et **existence sur disque de chaque
-fichier listé** (c'est le bug n°1 des addons : un fichier listé mais absent, ou
-un `/` au lieu d'un `\`).
+It checks: `.toc` name == `package-as`, `## Interface:` numeric and ≥ 120100,
+presence of `Title/Notes/Version`, and **the existence on disk of every listed
+file** (that is the number one addon bug: a listed file that is missing, or a `/`
+instead of a `\`).
 
-**Vérification syntaxique Lua 5.1** (le runtime réel du client) :
+**Lua 5.1 syntax verification** (the real client runtime):
 
 ```
 $ make syntax
 OK ./GideonRaid.lua
 OK ./UI/Panel.lua
+OK ./Core/Locale.lua
 OK ./Core/Config.lua
 OK ./Core/Pairing.lua
 OK ./tests/support/wowapi_stub.lua
@@ -184,108 +219,106 @@ OK ./tests/spec/pairing_spec.lua
 OK ./tools/pairing_cli.lua
 ```
 
-**Critère de passage** : étape 1 + étape 2 vertes, `luacheck .` = 0 warning.
+**Pass criterion**: step 1 + 1b + 1c + step 2 green, `luacheck .` = 0 warning.
 
-### Tests de chargement en profondeur (optionnel, si besoin plus tard)
+### Deeper loading tests (optional, if needed later)
 
-Deux harnais existent et sont réels (vérifiés le 22/09/2026) :
+Two harnesses exist and are real (verified on 22/09/2026):
 
-| Harnais | Nature | Usage | Contrainte VPS |
+| Harness | Nature | Usage | VPS constraint |
 |---|---|---|---|
-| [Osso/wow-ui-sim](https://github.com/Osso/wow-ui-sim) | Simulateur d'UI WoW, headless, tags jusqu'à `12.0.5` | `run-tests` d'un addon, screenshots de frame-tree, assertions `assertTableEquals`, tests async via `C_Timer.After` | Nécessite **docker**, dont le démon n'est **pas démarré** sur ce VPS → à utiliser **en GitHub Actions** (`uses: osso/wow-ui-sim@12.0.5`) |
-| [wowless/wowless](https://github.com/wowless/wowless) | Interpréteur Lua + FrameXML headless | Chargement du vrai code client | **Pre-alpha** (« les erreurs sont presque sûrement dans Wowless, pas dans votre addon »), build CMake/vcpkg lourd → non retenu |
+| [Osso/wow-ui-sim](https://github.com/Osso/wow-ui-sim) | Headless WoW UI simulator, tags up to `12.0.5` | an addon's `run-tests`, frame-tree screenshots, `assertTableEquals` assertions, async tests through `C_Timer.After` | Requires **docker**, whose daemon is **not started** on this VPS → use it **in GitHub Actions** (`uses: osso/wow-ui-sim@12.0.5`) |
+| [wowless/wowless](https://github.com/wowless/wowless) | Headless Lua + FrameXML interpreter | Loading the real client code | **Pre-alpha** ("errors are almost certainly in Wowless, not in your addon"), heavy CMake/vcpkg build → not retained |
 
-Décision : `wow-ui-sim` est le bon candidat pour automatiser l'étape 3 **quand**
-le besoin se présentera (par ex. vérifier que le panneau s'affiche). Il n'est pas
-activé dans la CI par défaut pour ne pas dépendre d'un composant GPL-3 qui
-change vite en pleine transition 12.x.
+Decision: `wow-ui-sim` is the right candidate to automate step 3 **when** the need
+arises (for example to check that the panel shows up). It is not enabled in the CI
+by default, to avoid depending on a GPL-3 component that changes fast in the
+middle of the 12.x transition.
 
 ---
 
-## Étape 3 — Tests manuels en jeu (protocole)
+## Step 3 — Manual in-game tests (protocol)
 
-**Prérequis** : client Midnight 12.1.0 (Interface `120100`), addon installé dans
-`Interface/AddOns/GideonRaid/`, `GideonRaidDB.assignment` peuplé par GIDEON.
+**Prerequisites**: Midnight 12.1.0 client (Interface `120100`), addon installed in
+`Interface/AddOns/GideonRaid/`, `GideonRaidDB.assignment` populated by GIDEON.
 
-### 3.0 Pré-vol : aucune valeur secrète
+### 3.0 Pre-flight: no secret value
 
-- Cocher « Afficher les erreurs Lua » et **jouer 10 minutes de raid réel**.
-  Aucune erreur `attempt to compare a secret value`, aucune erreur
-  `COMBAT_LOG_EVENT` (cette seconde erreur signifie qu'un événement interdit est
-  enregistré → régression bloquante).
-- Commande console : `/console scriptErrors 1`.
+- Tick "Display Lua errors" and **play 10 minutes of a real raid**. No
+  `attempt to compare a secret value` error, no `COMBAT_LOG_EVENT` error (that
+  second error means a forbidden event is registered → blocking regression).
+- Console command: `/console scriptErrors 1`.
 
-### 3.1 Hors combat, hors instance — chargement (2 min)
+### 3.1 Out of combat, out of instance — loading (2 min)
 
-1. Écrire à la main `WTF/Account/<COMPTE>/SavedVariables/GideonRaid.lua` avec un
-   bloc `assignment` de test (2 paires dont une contenant le personnage).
-2. `/reload` → `/gr` → vérifier : « Ton partenaire : <Nom> » + la liste des
-   paires.
-3. `/gr status` → « assignation OK, 2 paires ».
-4. `/gr reset` → puis `/reload` → le panneau affiche « Aucune assignation
-   GIDEON. » sans erreur.
+1. Hand-write `WTF/Account/<ACCOUNT>/SavedVariables/GideonRaid.lua` with a test
+   `assignment` block (2 pairs, one of them containing the character).
+2. `/reload` → `/gr` → check: "Your partner: <Name>" + the list of pairs.
+3. `/gr status` → "assignment OK, 2 pairs".
+4. `/gr reset` → then `/reload` → the panel shows "No GIDEON assignment."
+   without error.
 
-### 3.2 Hors combat, dans l'instance — lecture en raid
+### 3.2 Out of combat, inside the instance — reading in a raid
 
-5. Sur un boss de raid **avant le pull** : `/gr` doit afficher exactement les
-   mêmes paires qu'hors instance. *Test critique* : c'est là que l'on prouve que
-   l'addon ne dépend d'aucun canal interdit en instance.
-6. Pendant l'intermission : vérifier que le panneau reste lisible et **n'affiche
-   aucune valeur dynamique** (santé, aura). S'il en affiche une, c'est une
-   régression de conception → étape 1 échouée.
+5. On a raid boss **before the pull**: `/gr` must display exactly the same pairs
+   as outside the instance. *Critical test*: this is where we prove that the
+   addon does not depend on any forbidden channel in an instance.
+6. During the intermission: check that the panel stays readable and **displays no
+   dynamic value** (health, aura). If it displays one, it is a design regression
+   → step 1 failed.
 
-### 3.3 Robustesse
+### 3.3 Robustness
 
-7. Roster volontairement incomplet (un partenaire a `quit`) : la paire doit
-   apparaître telle quelle **sans** décalage — l'addon n'a pas à recalculer.
-8. `/gr` tapé 20 fois : aucune frame dupliquée, aucun ralentissement.
-9. Déplacer le panneau (drag), `/reload`, vérifier la position conservée.
-10. Tester avec un second personnage (autre `SavedVariablesPerCharacter`) : pas
-    de fuite de données entre personnages.
+7. Deliberately incomplete roster (a partner has `quit`): the pair must appear
+   as-is **without** shifting — the addon has nothing to recompute.
+8. `/gr` typed 20 times: no duplicated frame, no slowdown.
+9. Move the panel (drag), `/reload`, check the position is kept.
+10. Test with a second character (another `SavedVariablesPerCharacter`): no data
+    leak between characters.
 
-### 3.4 Ce qui n'est PAS testable en jeu (à documenter dans le rapport)
+### 3.4 What is NOT testable in game (to be documented in the report)
 
-- On ne teste pas l'*affichage correct de l'aura* de l'autre joueur : le client
-  ne nous la donne pas.
-- On ne teste pas la synchronisation « en direct » : aucun canal addon→addon en
-  instance. La synchronisation est asynchrone **par conception** (GIDEON → file
-  → `/reload`).
-- Pour l'intermission des *Entombed Sentinels* : on ne teste **pas** que l'addon
-  « connaît » l'orbes des autres joueurs — il ne les connaît pas et ne les
-  connaîtra jamais (valeurs secrètes). Le seul test possible est que **ce que le
-  joueur voit sur son écran** correspond à ce qu'il a déclaré.
+- We do not test the *correct display of the other player's aura*: the client
+  does not give it to us.
+- We do not test "live" synchronization: no addon→addon channel in an instance.
+  Synchronization is asynchronous **by design** (GIDEON → file → `/reload`).
+- For the *Entombed Sentinels* intermission: we do **not** test that the addon
+  "knows" the other players' orbs — it does not and never will (secret values).
+  The only possible test is that **what the player sees on their screen** matches
+  what they declared.
 
-### 3.5 Protocole en jeu — Intermission Coach (à faire avant le premier pull)
+### 3.5 In-game protocol — Intermission Coach (to be done before the first pull)
 
-| # | Action | Attendu |
+| # | Action | Expected |
 |---|---|---|
-| 1 | `/gr` hors instance | « Ton partenaire : … » + liste des paires (bloc `assignment` préparé par GIDEON) |
-| 2 | `/gr plan` | le plan détaillé dans le chat (rôle, position, rencontre) |
-| 3 | `bindings` : Options > Raccourcis > GideonRaid, assigner une touche | la binding apparaît ; la touche ouvre/ferme le panneau |
-| 4 | Entrer sur *Entombed Sentinels*, pull le boss | le panneau s'ouvre seul sur `ENCOUNTER_START` (points 1 et 2 : **à confirmer**) |
-| 5 | Pendant les 3 s de visibilité | le rappel affiche « REGARDE AU-DESSUS DES TETES : 3 » puis 2, 1 |
-| 6 | Compter ses orbes, clique `1` / `2` / `3` | la consigne (position + couleur de ping) et la macro apparaissent |
-| 7 | Coller la macro dans une macro de jeu (60 s avant le pull) | le ping part avec la bonne couleur — **syntaxe à confirmer, c'est le point n°1 de la liste `docs/INTERMISSION-COACH.md` §9** |
-| 8 | Vérifier après 3 s | « SALLE OBSCURCIE » : le panneau reste lisible, aucun texte dynamique |
-| 9 | Fin du combat | `ENCOUNTER_END` ferme le panneau |
-| 10 | `/console scriptErrors 1` sur 10 min de raid | **aucune** erreur Lua (typiquement `attempt to compare a secret value` = régression bloquante) |
+| 1 | `/gr` out of instance | "Your partner: …" + list of pairs (`assignment` block prepared by GIDEON) |
+| 2 | `/gr plan` | the detailed plan in the chat (role, position, meeting) |
+| 3 | `bindings`: Options > Keybindings > GideonRaid, assign a key | the binding shows up; the key opens/closes the panel |
+| 4 | Enter *Entombed Sentinels*, pull the boss | the panel opens on its own on `ENCOUNTER_START` (points 1 and 2: **to be confirmed**) |
+| 5 | During the 3 s of visibility | the reminder displays "LOOK AT THE ORB COLOR ABOVE THE HEADS: 3" then 2, 1 (French on a frFR client) |
+| 6 | Count your orbs, click `1` / `2` / `3` composition button | the instruction (position + ping color) and the macro appear |
+| 7 | Paste the macro into a game macro (60 s before the pull) | the ping goes out with the right color — **syntax to be confirmed, this is item 1 of the list in `docs/INTERMISSION-COACH.md` §9** |
+| 8 | Check after 3 s | "ROOM DARKENED": the panel stays readable, no dynamic text |
+| 9 | End of combat | `ENCOUNTER_END` closes the panel |
+| 10 | `/console scriptErrors 1` over 10 min of raid | **no** Lua error (typically `attempt to compare a secret value` = blocking regression) |
+| 11 | `/gr lang` on a frFR client and on an enUS client | detected language correct, text in the right language; TBD item 3 of `docs/INTERMISSION-COACH.md` §9 |
 
-### 3.6 Environnement de test recommandé
+### 3.6 Recommended test environment
 
-Un seul joueur « cobaye » suffit : l'essentiel (lecture de `GideonRaidDB`,
-rendu) ne dépend d'aucun autre joueur. Les tests à 2+ joueurs seraient
-nécessaires seulement pour un canal de communication, qui n'existe pas. **C'est
-un argument fort pour ne pas investir dans un client de test lourd.**
+A single "guinea pig" player is enough: the essential part (reading
+`GideonRaidDB`, rendering) does not depend on any other player. Tests with 2+
+players would only be needed for a communication channel, which does not exist.
+**That is a strong argument for not investing in a heavy test client.**
 
 ---
 
-## Étape 4 — Tests d'intégration avec GIDEON
+## Step 4 — Integration tests with GIDEON
 
-**Objectif** : garantir que le contrat de données GIDEON ↔ addon ne dérive pas.
+**Goal**: guarantee that the GIDEON ↔ addon data contract does not drift.
 
-### 4.1 Contrat de données (schéma figé, versionné)
+### 4.1 Data contract (frozen, versioned schema)
 
-`GideonRaidDB.assignment` (écrit par GIDEON, lu par l'addon) :
+`GideonRaidDB.assignment` (written by GIDEON, read by the addon):
 
 ```lua
 GideonRaidDB = {
@@ -297,76 +330,78 @@ GideonRaidDB = {
             { a = "Bathman", b = "Coren" },
             -- ...
         },
-        -- OPTIONNEL : plan prepare hors jeu (role / position par joueur).
-        -- `role` accepte la declaration "1" / "2" / "3" ou un role libre.
+        -- OPTIONAL: plan prepared out of game (role / position per player).
+        -- `role` accepts the composition "1V3R" / "2V2R" / "3V1R" or a free role.
         plan = {
-            { name = "Velna",   role = "2", position = "MIDDLE" },
-            { name = "Torgh",   role = "2", position = "MIDDLE" },
-            { name = "Bathman", role = "1", position = "LEFT"   },
-            { name = "Coren",   role = "3", position = "RIGHT"  },
+            { name = "Velna",   role = "2V2R", position = "MIDDLE" },
+            { name = "Torgh",   role = "2V2R", position = "MIDDLE" },
+            { name = "Bathman", role = "1V3R", position = "HOLD"   },
+            { name = "Coren",   role = "3V1R", position = "PURSUE" },
         },
     },
 }
 ```
 
-Fixture de contrat executable : `tests/fixtures/assignment_sample.lua`
-(utilisee par `tests/spec/intermission_spec.lua` et par
-`lua5.1 tools/intermission_cli.lua plan <Nom>`).
+Runnable contract fixture: `tests/fixtures/assignment_sample.lua` (used by
+`tests/spec/intermission_spec.lua` and by
+`lua5.1 tools/intermission_cli.lua plan <Name>`).
 
-- `schema` est **obligatoire** : si GIDEON passe à 2 et que l'addon est en 1,
-  l'addon doit refuser le bloc (aujourd'hui `validateAssignment` l'accepte et le
-  normalise → à durcir quand le schéma changera).
-- L'ordre des paires est alphabétique. C'est ce qui rend le contrat comparable
-  par diff (`diff` des deux sorties).
+- `schema` is **mandatory**: if GIDEON moves to 2 while the addon is on 1, the
+  addon must refuse the block (today `validateAssignment` accepts and normalizes
+  it → to be hardened when the schema changes).
+- The pair order is alphabetical. That is what makes the contract comparable with
+  a diff (`diff` of both outputs).
 
-### 4.2 Non-régression du contrat (test automatique, hors jeu)
+### 4.2 Contract non-regression (automatic test, out of game)
 
-GIDEON génère le fichier via le moteur Lua **partagé** :
+GIDEON generates the file through the **shared** Lua engine:
 
 ```bash
-# GIDEON : produit les paires à partir du roster
-lua5.1 tools/pairing_cli.lua < /tmp/roster_du_soir.csv
+# GIDEON: produces the pairs from the roster
+lua5.1 tools/pairing_cli.lua < /tmp/roster_of_the_evening.csv
 # -> Velna|Torgh .... exit 0
 ```
 
-Test à ajouter quand GIDEON est branché : un test de `tests/spec/` qui prend un
-exemple de fichier `SavedVariables` de référence (fixture) et vérifie que
-`Pairing.validateAssignment` accepte **exactement** ce que GIDEON écrit. C'est
-un test de contrat, pas un test d'implémentation : il doit casser *si et
-seulement si* le format change.
+Test to add once GIDEON is plugged in: a test in `tests/spec/` that takes a
+sample reference `SavedVariables` file (fixture) and checks that
+`Pairing.validateAssignment` accepts **exactly** what GIDEON writes. That is a
+contract test, not an implementation test: it must break *if and only if* the
+format changes.
 
-### 4.3 Round-trip manuel (10 min, avant le premier raid)
+### 4.3 Manual round-trip (10 min, before the first raid)
 
-| # | Action | Attendu |
+| # | Action | Expected |
 |---|---|---|
-| 1 | Commande Discord `!g roster assign` sur le roster réel | GIDEON répond avec la liste des paires |
-| 2 | Vérifier `WTF/.../SavedVariables/GideonRaid.lua` sur le VPS de test | `pairs` identiques à la réponse Discord, `schema = 1` |
-| 3 | `/reload` en jeu | panneau identique à la réponse Discord |
-| 4 | Couper GIDEON, `/reload` | l'addon fonctionne toujours (données déjà en cache) |
-| 5 | Roster avec un seul `frost` et 3 `ember` | GIDEON alerte (`NON-APPARIE: ... no_partner:frost` sur stderr) **et** l'addon affiche la même chose |
+| 1 | Discord command `!g roster assign` on the real roster | GIDEON answers with the list of pairs |
+| 2 | Check `WTF/.../SavedVariables/GideonRaid.lua` on the test VPS | `pairs` identical to the Discord answer, `schema = 1` |
+| 3 | `/reload` in game | panel identical to the Discord answer |
+| 4 | Stop GIDEON, `/reload` | the addon still works (data already cached) |
+| 5 | Roster with a single `frost` and 3 `ember` | GIDEON alerts (`NON-APPARIE: ... no_partner:frost` on stderr) **and** the addon displays the same thing |
 
-### 4.4 Test de dégradation
+### 4.4 Degradation test
 
-GIDEON écrit un bloc malformé (`pairs = {{a=1,b="B"}}`) : l'addon doit afficher
-« Aucune assignation GIDEON. (paire #1 invalide) » et **ne rien planter**. C'est
-déjà couvert à l'étape 1 et 2.
+GIDEON writes a malformed block (`pairs = {{a=1,b="B"}}`): the addon must display
+"No GIDEON assignment. (paire #1 invalide)" and **not crash**. That is already
+covered in steps 1 and 2.
 
 ---
 
-## Matrice de couverture (ce qui prouve quoi)
+## Coverage matrix (what proves what)
 
-| Risque | Étape qui le couvre | Preuve |
+| Risk | Step covering it | Evidence |
 |---|---|---|
-| Mauvais appariement | 1 | 17 tests, dataset de 20 joueurs |
-| Résultat non déterministe | 1 | test « insensible à l'ordre d'entrée » |
-| Convention des orbes / collisions fausses | 1b | 59 tests (états 3V1R/2V2R/1V3R, `3V1R+1V3R` et `2V2R+2V2R` sûrs, `3V1R+2V2R` = 5 verts, numéro ambigu refusé) |
-| Compte à rebours / passage en salle obscurcie faux | 1b + 2 | machine d'état déterministe + ticker testé |
-| Macro de ping inutilisable ou mal ciblée | 1b + 3 | texte généré + protocole §3.5 point 7 (« à confirmer en jeu ») |
-| Déclarer une chose et afficher une autre | 1b + 2 | consigne issue de la même table que la macro |
-| Fichier oublié dans le `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
-| Erreur de syntaxe Lua 5.1 | 2 | `make syntax` |
-| Crash au login / mauvais événement | 2 | `load_spec.lua` |
-| Panneau illisible en raid | 3 | protocole manuel §3.2 et §3.5 |
-| Erreur secret value en combat | 3 | §3.0 + revue de code (conventions §1 et §10) |
-| Dérive du format GIDEON (paires **et** `plan`) | 4 | test de contrat + round-trip |
-| Version d'Interface obsolète | 2 | `check_toc.py` (seuil 120100) |
+| Wrong pairing | 1 | 11 tests, 20-player data set |
+| Non-deterministic result | 1 | "insensitive to input order" test |
+| Orb convention / wrong collisions | 1b | 60 tests (states 3V1R/2V2R/1V3R, `3V1R+1V3R` and `2V2R+2V2R` safe, `3V1R+2V2R` = 5 green, ambiguous number refused) |
+| Wrong language served (English/French) | 1c | 20 tests (`resolve`, `t`/`format` fallbacks, `GetLocale` stubbed `frFR`/`enUS`/`deDE`, `/gr lang`, missing key) |
+| Hard-coded in-game string | 1c + 2 | all displayed text comes from `Core/Locale.lua`; the guard scans the loaded files |
+| Countdown / switch to the darkened room wrong | 1b + 2 | deterministic state machine + tested ticker |
+| Ping macro unusable or badly targeted | 1b + 3 | generated text + protocol §3.5 point 7 ("to be confirmed in game") |
+| Declaring one thing and displaying another | 1b + 2 | instruction coming from the same table as the macro |
+| File forgotten in the `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
+| Lua 5.1 syntax error | 2 | `make syntax` |
+| Crash at login / wrong event | 2 | `load_spec.lua` |
+| Unreadable panel in a raid | 3 | manual protocol §3.2 and §3.5 |
+| Secret value error in combat | 3 | §3.0 + code review (conventions §1 and §10) |
+| GIDEON format drift (pairs **and** `plan`) | 4 | contract test + round-trip |
+| Outdated Interface version | 2 | `check_toc.py` (threshold 120100) |

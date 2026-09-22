@@ -1,19 +1,23 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / UI / Panel.lua
 
-    COUCHE RENDU UNIQUEMENT. Ce fichier peut appeler l'API WoW (frames, fonts).
-    Il ne doit contenir AUCUN calcul metier : tout passe par ns.Pairing.
+    RENDERING LAYER ONLY. This file may call the WoW API (frames, fonts).
+    It must contain NO business computation: everything goes through ns.Pairing.
 
-    Interdictions 12.x (voir docs/CONVENTIONS.md) :
-      - ne jamais lire UnitAura / UnitHealth / UnitPower d'une autre unite et
-        faire un test dessus en combat : la valeur peut etre SECRETE.
-      - ne jamais enregistrer un evenement de JOURNAL DE COMBAT (erreur immediate
-        en 12.x, voir docs/CONVENTIONS.md section 1.2).
-      - ne jamais envoyer de message addon -> addon en instance.
-    Les donnees affichees ici viennent EXCLUSIVEMENT de GideonRaidDB (ecrites
-    hors jeu par GIDEON) ou de la saisie manuelle du joueur.
+    12.x prohibitions (see docs/CONVENTIONS.md):
+      - never read UnitAura / UnitHealth / UnitPower of another unit and test it
+        in combat: the value may be SECRET.
+      - never register a COMBAT LOG event (immediate error in 12.x, see
+        docs/CONVENTIONS.md section 1.2).
+      - never send an addon -> addon message in an instance.
+    The data displayed here comes EXCLUSIVELY from GideonRaidDB (written out of
+    game by GIDEON) or from the player's manual input.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
+
+--- Core/Locale.lua is loaded BEFORE this file by the .toc (every displayed
+--- string goes through it: English by default, French on a frFR client).
+local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before UI/Panel.lua")
 
 ---@class UI
 local UI = {}
@@ -77,14 +81,14 @@ function UI.Toggle()
     end
 end
 
---- Reconstruit l'affichage a partir des seules donnees non secretes.
---- Le contenu (partenaire, roles, positions, paires) est calcule par
---- Core/Intermission.buildPlan : cette couche ne fait que rendre des lignes.
+--- Rebuilds the display from non-secret data only.
+--- The content (partner, roles, positions, pairs) is computed by
+--- Core/Intermission.buildPlan: this layer only renders lines.
 function UI.Refresh()
     local p = ensurePanel()
-    --- Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
-    --- Contrainte : on ne lit que le NOM de sa propre unite ("player"), jamais
-    --- une valeur d'unite (sante, aura, ressource) qui pourrait etre secrete.
+    --- API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
+    --- Constraint: only the NAME of our own unit ("player") is read, never a
+    --- unit value (health, aura, resource) that could be secret.
     local me = UnitName("player")
     local lines = {}
     local assignment, err = ns.Config.getAssignment()
@@ -94,15 +98,15 @@ function UI.Refresh()
     end
 
     if not assignment then
-        lines[#lines + 1] = "Aucune assignation GIDEON."
+        lines[#lines + 1] = Locale.t("panel.noAssignment")
         lines[#lines + 1] = "|cff808080(" .. tostring(err) .. ")|r"
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "Demande a GIDEON :"
+        lines[#lines + 1] = Locale.t("panel.askGideon")
         lines[#lines + 1] = "!g roster assign"
     else
         local plan, planErr = ns.Intermission.buildPlan(assignment, me)
         if not plan then
-            lines[#lines + 1] = "|cffff5555Plan illisible|r (" .. tostring(planErr) .. ")"
+            lines[#lines + 1] = Locale.t("panel.unreadablePlan") .. " (" .. tostring(planErr) .. ")"
         else
             for _, line in ipairs(plan.lines) do
                 lines[#lines + 1] = line
@@ -116,10 +120,10 @@ end
 function UI.PrintStatus()
     local assignment, err = ns.Config.getAssignment()
     if not assignment then
-        UI.Print("pas d'assignation (" .. tostring(err) .. ")")
+        UI.Print(Locale.format("status.noAssignment", tostring(err)))
         return
     end
-    UI.Print(string.format("assignation OK, %d paires", #assignment.pairs))
+    UI.Print(Locale.format("status.ok", #assignment.pairs))
 end
 
 function UI.Initialize()

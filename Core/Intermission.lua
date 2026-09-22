@@ -1,76 +1,80 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / Core / Intermission.lua
 
-    « Intermission Coach » - boss Entombed Sentinels (mythique), raid
+    "Intermission Coach" - boss Entombed Sentinels (mythic), raid
     The Venomous Abyss (WoW Midnight 12.1.0).
 
-    LOGIQUE PURE (Lua 5.1). Ce fichier ne touche a AUCUNE API WoW, ne lit aucune
-    valeur d'unite, n'enregistre aucun evenement. Il tourne tel quel sous busted
-    et sous lua5.1 hors du client.
+    PURE LOGIC (Lua 5.1). This file touches NO WoW API, reads no unit value and
+    registers no event. It runs as-is under busted and under lua5.1 outside the
+    client.
 
-    MECANIQUE DE REFERENCE (modele CORRIGE, autoritaire)
+    REFERENCE MECHANICS (CORRECTED model, authoritative)
     https://raidstrats.gg/guides/entombed-sentinels/mythic/phase/quick-overview
-      - le NUMERO affiche au-dessus de la tete ne determine PAS les couleurs :
-          « 2 » = TOUJOURS 2 verts + 2 rouges, sans ambiguite ;
-          « 1 » ou « 3 » = soit 3 verts + 1 rouge, soit 1 vert + 3 rouges :
-          c'est la COULEUR des orbes qui tranche, jamais le numero.
-        Il n'existe donc que TROIS etats reels : 3V1R, 2V2R, 1V3R.
-      - la regle de survie est une ADDITION DE COULEURS : la somme des deux
-        joueurs doit faire 4 VERTS et 4 ROUGES. Appariements valides :
-        3V1R + 1V3R (= 4V4R) et 2V2R + 2V2R (= 4V4R). Toute autre combinaison
-        tue : 3V1R + 2V2R = 5 verts = le « 5g » du guide.
-      - environ 3 s apres le debut, la salle est obscurcie : chaque joueur ne
-        voit plus que SES propres orbes (son numero seul ne suffit pas).
+      - the NUMBER displayed above the head does NOT determine the colors:
+          "2" = ALWAYS 2 green + 2 red, unambiguously;
+          "1" or "3" = either 3 green + 1 red, or 1 green + 3 red:
+          it is the COLOR of the orbs that decides, never the number.
+        There are therefore only THREE real states: 3V1R, 2V2R, 1V3R.
+      - the survival rule is a COLOR ADDITION: the sum of the two players must
+        make 4 GREEN and 4 RED. Valid pairings: 3V1R + 1V3R (= 4V4R) and
+        2V2R + 2V2R (= 4V4R). Any other combination kills: 3V1R + 2V2R = 5 green
+        = the guide's "5g".
+      - about 3 s after the start, the room goes dark: each player then sees only
+        THEIR own orbs (their number alone is not enough).
 
-    REFUS DE L'ANCIEN MODELE : le code liait « 1 » a « 1 vert + 3 rouges » et
-    « 3 » a « 3 verts + 1 rouge », avec une position et un ping deduits du
-    numero. C'est FAUX : 1 et 3 sont ambigus sur les couleurs, seul 2 ne l'est
-    pas. Une declaration reduite a « 1 » ou « 3 » est donc REFUSEE avec un
-    message demandant la couleur dominante (jamais devinee).
+    REJECTION OF THE OLD MODEL: the code used to bind "1" to "1 green + 3 red"
+    and "3" to "3 green + 1 red", with a position and a ping deduced from the
+    number. That is WRONG: 1 and 3 are ambiguous about the colors, only 2 is
+    not. A declaration reduced to "1" or "3" is therefore REFUSED with a message
+    asking for the dominant color (never guessed).
 
-    Ref API 12.x : https://warcraft.wiki.gg/wiki/Secret_Values
-    Source contrainte : "Combat API functions may now return secret values ...
+    API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
+    Constrained source: "Combat API functions may now return secret values ...
     Tainted code is not allowed to compare or perform boolean tests on secret
     values."
-    => ce module ne compare JAMAIS une valeur d'unite. Tout ce qu'il manipule
-       vient du joueur (clic) ou d'un fichier prepare hors jeu (SavedVariables).
+    => this module NEVER compares a unit value. Everything it handles comes from
+       the player (click) or from a file prepared out of game (SavedVariables).
 
-    Ref API 12.1.0 : https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing
-    Source contrainte : "#protected - This can only be called from secure code."
-    => l'addon ne peut PAS envoyer de ping lui-meme : il genere le TEXTE d'une
-       macro que le joueur colle puis declenche (une macro est du code securise).
+    API ref 12.1.0: https://warcraft.wiki.gg/wiki/API:C_Ping.SendMacroPing
+    Constrained source: "#protected - This can only be called from secure code."
+    => the addon can NOT send a ping itself: it generates the TEXT of a macro
+       that the player pastes and triggers (a macro is secure code).
 
-    AUCUN GetTime, AUCUN math.random, AUCUN ordre non deterministe : le temps est
-    injecte dans tick(state, dt) par la couche de cablage.
+    NO GetTime, NO math.random, NO non-deterministic order: time is injected
+    into tick(state, dt) by the wiring layer.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
+
+--- Core/Locale.lua is loaded BEFORE this file by the .toc: the language layer is
+--- a hard dependency (every string displayed in game goes through it).
+local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Intermission.lua")
 
 ---@class Intermission
 local Intermission = {}
 ns.Intermission = Intermission
 
---- Version du modele d'intermission. 2 = modele par COULEURS (3V1R/2V2R/1V3R),
---- les numeros 1/2/3 n'etant que des indices (1 et 3 ambigus).
+--- Intermission model version. 2 = COLOR-based model (3V1R/2V2R/1V3R), the
+--- numbers 1/2/3 being only hints (1 and 3 ambiguous).
 Intermission.SCHEMA_VERSION = 2
 
---- Duree de la fenetre ou les indicateurs des autres joueurs sont visibles (guide).
+--- Duration of the window where the other players' indicators are visible (guide).
 Intermission.VISIBILITY_SECONDS = 3
 
---- Duree par defaut de l'intermission si la timeline preparee n'en fournit pas.
+--- Default intermission duration when the prepared timeline does not provide one.
 Intermission.DEFAULT_DURATION_SECONDS = 20
 
---- Jeton de cible par defaut de la macro de ping (se ping soi-meme).
+--- Default target token of the ping macro (ping yourself).
 Intermission.DEFAULT_TARGET_TOKEN = "player"
 
---- Trois ETATS canoniques, ordre d'affichage DETERMINISTE (verts croissants,
---- jamais pairs()) : 1V3R, 2V2R, 3V1R.
+--- Three canonical STATES, DETERMINISTIC display order (increasing green,
+--- never pairs()): 1V3R, 2V2R, 3V1R.
 Intermission.STATES = { "1V3R", "2V2R", "3V1R" }
 
---- Alias historique : le module parlait de « declarations 1/2/3 ». Ce sont
---- desormais des COMPOSITIONS d'orbes ; l'alias evite de casser les appelants.
+--- Historical alias: the module used to talk about "declarations 1/2/3". These
+--- are now ORB COMPOSITIONS; the alias avoids breaking the callers.
 Intermission.DECLARATIONS = Intermission.STATES
 
---- Phases de l'intermission.
+--- Intermission phases.
 Intermission.PHASE = {
     IDLE = "IDLE",
     VISIBLE = "VISIBLE",
@@ -83,126 +87,126 @@ local PHASE_VISIBLE = Intermission.PHASE.VISIBLE
 local PHASE_DARK = Intermission.PHASE.DARK
 local PHASE_DONE = Intermission.PHASE.DONE
 
---[[ Les TROIS etats de couleur (aucune lecture d'API en jeu).
+--[[ The THREE color states (no API read in game).
 
-     key            : cle courte utilisee partout (3V1R / 2V2R / 1V3R)
-     display        : libelle visuel (« 3 VERTS + 1 ROUGE »)
-     orbs / greens / reds : composition ; greens et reds sont la SEULE base de
-                      la regle de survie (somme 4 verts + 4 rouges = survie)
-     numbers        : numero(s) pouvant etre affiche(s) au-dessus de la tete
-     numberAmbiguous: true quand le numero ne permet PAS de connaitre la couleur
-     dominant       : couleur dominante (celle du ping)
-     position       : code de position ; positionLabel : texte affiche
-     ping           : valeur de Enum.PingSubjectType (source API 12.1.0)
-     pingToken      : jeton utilisable dans une macro /ping (a confirmer)
-     pingColor / pingColorHex : couleur du ping, VERIFIEE sur la galerie du wiki
+     key            : short key used everywhere (3V1R / 2V2R / 1V3R)
+     display        : locale key of the visual label ("3 GREEN + 1 RED" /
+                      "3 VERTS + 1 ROUGE" in French)
+     orbs / greens / reds : composition; greens and reds are the ONLY basis of
+                      the survival rule (sum 4 green + 4 red = survival)
+     numbers        : number(s) that can be displayed above the head
+     numberAmbiguous: true when the number does NOT reveal the color
+     dominant       : dominant color (the one used for the ping)
+     position       : position code; positionLabel: displayed text
+     ping           : Enum.PingSubjectType value (API source 12.1.0)
+     pingToken      : token usable in a /ping macro (to be confirmed)
+     pingColor / pingColorHex : ping color, VERIFIED on the wiki gallery
                       https://warcraft.wiki.gg/wiki/Ping_System :
-                      Warning = rouge, OnMyWay = bleu, Assist = vert.
-                      Convention du guide raidstrats, PAR COULEUR DOMINANTE :
-                      3 verts -> Assist (vert), 2-2 -> OnMyWay (bleu),
-                      3 rouges -> Warning (rouge).
-     action         : consigne operationnelle (ce que le joueur FAIT)
-     find           : quel etat peut le rejoindre + le calcul de somme
-     complement     : l'etat qui DOIT le rejoindre (4 verts + 4 rouges)
-     numberRule     : convention de guilde rappelee pour ce numero
-     buttonLabel    : libelle du bouton de declaration (composition, numero en
-                      indice). Calcule ICI : la couche UI ne calcule rien.
+                      Warning = red, OnMyWay = blue, Assist = green.
+                      raidstrats guide convention, BY DOMINANT COLOR:
+                      3 green -> Assist (green), 2-2 -> OnMyWay (blue),
+                      3 red -> Warning (red).
+     action         : operational instruction (what the player DOES)
+     find           : which state can join it + the sum computation
+     complement     : the state that MUST join it (4 green + 4 red)
+     numberRule     : guild convention recalled for this number
+     buttonLabel    : declaration button label (composition, number as a hint).
+                      Computed HERE: the UI layer computes nothing.
 
-     POSITIONS : les lignes positionnelles du guide se CONTREDISENT (elles
-     donnent a la fois « 1 vert 3 rouges -> gauche » et « 3 rouges 1 vert ->
-     droite »). Notre convention est donc EXPLICITE et CONFIGURABLE ici : par
-     defaut le point FIXE est l'etat a majorite ROUGE (1V3R, ping ROUGE) et le
-     COUREUR est l'etat a majorite VERTE (3V1R, ping VERT), les 2V2R allant au
-     milieu. C'est la seule convention coherente avec « la couleur tranche ».
+     POSITIONS: the positional lines of the guide CONTRADICT each other (they
+     give both "1 green 3 red -> left" and "3 red 1 green -> right"). Our
+     convention is therefore EXPLICIT and CONFIGURABLE here: by default the
+     FIXED point is the RED-majority state (1V3R, RED ping) and the RUNNER is
+     the GREEN-majority state (3V1R, GREEN ping), the 2V2R going to the middle.
+     It is the only convention consistent with "the color decides".
 ]]
+--- The record fields that are DISPLAYED hold a LOCALE KEY, never a literal:
+--- copyRecord() resolves them through Locale.t, so /gr lang applies immediately,
+--- without a reload. Structural fields (key, greens, reds, numbers, position,
+--- ping, pingToken, complement) are language-independent and stay literal.
 local CONVENTION = {
     ["1V3R"] = {
         key = "1V3R",
-        display = "1 VERT + 3 ROUGES",
-        orbs = "1 vert + 3 rouges",
+        display = "state.display.1V3R",
+        orbs = "state.orbs.1V3R",
         greens = 1,
         reds = 3,
         numbers = { "1", "3" },
-        numberText = "1 ou 3",
+        numberText = "state.numberText.1V3R",
         numberAmbiguous = true,
-        dominant = "ROUGE (3 orbes sur 4)",
+        dominant = "state.dominant.1V3R",
         position = "HOLD",
-        positionLabel = "SUR PLACE, la ou tu es",
+        positionLabel = "state.positionLabel.1V3R",
         ping = "Warning",
         pingToken = "Warning",
-        pingColor = "ROUGE",
+        pingColor = "state.pingColor.1V3R",
         pingColorHex = "|cffff4040",
-        action = "RESTE SUR PLACE et ping ROUGE (Warning) pour etre localise : un joueur en 3V1R vient a toi.",
-        find = "Seul un 3V1R peut te rejoindre : 1+3 verts = 4 verts, 3+1 rouges = 4 rouges.",
+        action = "state.action.1V3R",
+        find = "state.find.1V3R",
         complement = "3V1R",
-        numberRule = "convention de guilde : '1' = sur place + ping. C'est ta dominante ROUGE qui te fait reconnaitre.",
-        buttonLabel = "1 vert + 3 rouges\n1V3R\nnumero : 1 ou 3",
+        numberRule = "state.numberRule.1V3R",
+        buttonLabel = "state.buttonLabel.1V3R",
     },
     ["2V2R"] = {
         key = "2V2R",
-        display = "2 VERTS + 2 ROUGES",
-        orbs = "2 verts + 2 rouges",
+        display = "state.display.2V2R",
+        orbs = "state.orbs.2V2R",
         greens = 2,
         reds = 2,
         numbers = { "2" },
-        numberText = "2",
+        numberText = "state.numberText.2V2R",
         numberAmbiguous = false,
-        dominant = "AUCUNE (2-2)",
+        dominant = "state.dominant.2V2R",
         position = "MIDDLE",
-        positionLabel = "MILIEU / SOUS LE BOSS",
+        positionLabel = "state.positionLabel.2V2R",
         ping = "OnMyWay",
         pingToken = "OnMyWay",
-        pingColor = "BLEU",
+        pingColor = "state.pingColor.2V2R",
         pingColorHex = "|cff40a0ff",
-        action = "COURS te placer sous le milieu / sous le boss, puis ping BLEU (OnMyWay).",
-        find = "Seul un autre 2V2R peut te rejoindre : 2+2 verts = 4 verts, 2+2 rouges = 4 rouges.",
+        action = "state.action.2V2R",
+        find = "state.find.2V2R",
         complement = "2V2R",
-        numberRule = "le '2' est le SEUL numero non ambigu : 2 verts + 2 rouges, toujours.",
-        buttonLabel = "2 verts + 2 rouges\n2V2R\nnumero : 2 (non ambigu)",
+        numberRule = "state.numberRule.2V2R",
+        buttonLabel = "state.buttonLabel.2V2R",
     },
     ["3V1R"] = {
         key = "3V1R",
-        display = "3 VERTS + 1 ROUGE",
-        orbs = "3 verts + 1 rouge",
+        display = "state.display.3V1R",
+        orbs = "state.orbs.3V1R",
         greens = 3,
         reds = 1,
         numbers = { "1", "3" },
-        numberText = "1 ou 3",
+        numberText = "state.numberText.3V1R",
         numberAmbiguous = true,
-        dominant = "VERT (3 orbes sur 4)",
+        dominant = "state.dominant.3V1R",
         position = "PURSUE",
-        positionLabel = "VA TE COLLER A UN ETAT 1V3R (3 ROUGES)",
+        positionLabel = "state.positionLabel.3V1R",
         ping = "Assist",
         pingToken = "Assist",
-        pingColor = "VERT",
+        pingColor = "state.pingColor.3V1R",
         pingColorHex = "|cff40ff40",
-        action = "FONCE sur un joueur en 1V3R (3 ROUGES) : il reste sur place et t'attend.",
-        find = "Seul un 1V3R peut te rejoindre : 3+1 verts = 4 verts, 1+3 rouges = 4 rouges.",
+        action = "state.action.3V1R",
+        find = "state.find.3V1R",
         complement = "1V3R",
-        numberRule = "convention de guilde : '3' = tu rejoins un '1' de couleur complementaire. Tes 3 verts disent LAQUELLE.",
-        buttonLabel = "3 verts + 1 rouge\n3V1R\nnumero : 1 ou 3",
+        numberRule = "state.numberRule.3V1R",
+        buttonLabel = "state.buttonLabel.3V1R",
     },
 }
 
--- La table est exposee en lecture (UI : couleurs, libelles) mais jamais renvoyee
--- directement : getDeclaration() renvoie une copie.
+-- The table is exposed read-only (UI: colors, labels) but never returned
+-- directly: getDeclaration() returns a copy.
 Intermission.CONVENTION = CONVENTION
 
-local D_PROMPT = "Regarde la COULEUR de tes 4 orbes au-dessus de ta tete, puis clique la composition que tu vois."
-local D_AMBIGUITY = "1 ou 3 NE SUFFIT PAS : le numero ne dit pas la couleur. Seul le numero 2 est non ambigu (2 verts + 2 rouges)."
-local D_CAVEAT = "INCONNU : personne ne peut lire ton numero ni te dire qui a declare quoi."
-local D_CHANNEL = "Le seul signal visible par les autres joueurs : TON ping."
-
---- Correspondance compter-de-verts -> etat canonique (aucun etat a 0 ou 4 verts).
+--- Green-count -> canonical state mapping (no state with 0 or 4 green).
 local GREENS_TO_STATE = { [1] = "1V3R", [2] = "2V2R", [3] = "3V1R" }
 
---- Formes symboliques collees : « 3v1r », « 3 v 1 r » (une fois les espaces retires).
+--- Glued symbolic forms: "3v1r", "3 v 1 r" (once the spaces are removed).
 local STATE_BY_SYMBOLS = { ["3v1r"] = "3V1R", ["2v2r"] = "2V2R", ["1v3r"] = "1V3R" }
 
---- Numeros SEULS qui sont ambigus sur la couleur : refus explicite, jamais devine.
+--- BARE numbers that are ambiguous about the color: explicit refusal, never guessed.
 local AMBIGUOUS_NUMBERS = { ["1"] = true, ["3"] = true }
 
---- Mots acceptes pour chaque couleur (forme « v » / « r » comprise).
+--- Words accepted for each color ("v" / "r" forms included).
 local GREEN_WORDS = {
     ["vert"] = true,
     ["verts"] = true,
@@ -220,8 +224,8 @@ local RED_WORDS = {
     ["r"] = true,
 }
 
---- Remplacements UTF-8 -> ASCII, liste TRIEE (aucun pairs(), determinisme).
---- Permet de taper « majorité verte » sans accents : la saisie reste toleree.
+--- UTF-8 -> ASCII replacements, SORTED list (no pairs(), determinism).
+--- Allows typing "majorite verte" without accents: the input stays tolerated.
 local ACCENT_MAP = {
     { "\195\168", "e" },
     { "\195\169", "e" },
@@ -245,7 +249,7 @@ end
 
 local function flatten(raw)
     local text = deaccent(tostring(raw)):lower()
-    -- espaces insecables + tous les separateurs usuels -> espace simple
+    -- non-breaking spaces + all the usual separators -> single space
     text = text:gsub("[\194\160]", " ")
     text = text:gsub("[%-_+/,;:%.]+", " ")
     text = text:gsub("%s+", " ")
@@ -253,11 +257,7 @@ local function flatten(raw)
 end
 
 local function ambiguousMessage(number)
-    return "numero "
-        .. number
-        .. " ambigu : le numero affiche ne dit PAS la couleur des orbes. "
-        .. "Dis ce que tu VOIS : 3 verts (etat 3V1R) ou 1 vert (etat 1V3R). "
-        .. "Seul le numero 2 est non ambigu (2V2R)."
+    return Locale.format("err.numberAmbiguous", tostring(number))
 end
 
 local function round(n)
@@ -285,29 +285,29 @@ local function copyRecord(rec)
     end
     return {
         key = rec.key,
-        display = rec.display,
-        orbs = rec.orbs,
+        display = Locale.t(rec.display),
+        orbs = Locale.t(rec.orbs),
         greens = rec.greens,
         reds = rec.reds,
         numbers = numbers,
-        numberText = rec.numberText,
+        numberText = Locale.t(rec.numberText),
         numberAmbiguous = rec.numberAmbiguous,
-        dominant = rec.dominant,
+        dominant = Locale.t(rec.dominant),
         position = rec.position,
-        positionLabel = rec.positionLabel,
+        positionLabel = Locale.t(rec.positionLabel),
         ping = rec.ping,
         pingToken = rec.pingToken,
-        pingColor = rec.pingColor,
+        pingColor = Locale.t(rec.pingColor),
         pingColorHex = rec.pingColorHex,
-        action = rec.action,
-        find = rec.find,
+        action = Locale.t(rec.action),
+        find = Locale.t(rec.find),
         complement = rec.complement,
-        numberRule = rec.numberRule,
-        buttonLabel = rec.buttonLabel,
+        numberRule = Locale.t(rec.numberRule),
+        buttonLabel = Locale.t(rec.buttonLabel),
     }
 end
 
---- « vvvr » / « vvrr » / « vrrr » : 4 lettres de couleur, on compte les verts.
+--- "vvvr" / "vvrr" / "vrrr": 4 color letters, the green ones are counted.
 local function stateFromLetters(compact)
     if #compact ~= 4 or compact:match("^[vr]+$") == nil then
         return nil
@@ -321,10 +321,10 @@ local function stateFromLetters(compact)
     return GREENS_TO_STATE[greens]
 end
 
---- Compte les couleurs citees en texte : « 3 verts + 1 rouge », « vert-vert-vert-rouge ».
---- `explicit` compte les couleurs precedees d'un nombre ; `words` le nombre total
---- de mots de couleur (sert a distinguer « vert » seul = couleur dominante de
---- « vert vert vert rouge » = 3 verts + 1 rouge).
+--- Counts the colors cited in text: "3 verts + 1 rouge", "vert-vert-vert-rouge".
+--- `explicit` counts the colors preceded by a number; `words` the total number of
+--- color words (used to distinguish "vert" alone = dominant color from
+--- "vert vert vert rouge" = 3 green + 1 red).
 local function analyzeColors(flat)
     local greens, reds, explicit, words = 0, 0, 0, 0
     local hasGreenWord, hasRedWord = false, false
@@ -358,30 +358,30 @@ local function analyzeColors(flat)
     }
 end
 
---- Normalise la saisie du joueur en cle d'etat : « 3V1R » | « 2V2R » | « 1V3R ».
+--- Normalizes the player's input into a state key: "3V1R" | "2V2R" | "1V3R".
 ---
---- Formes acceptees (tolerantes : casse, espaces, accents, separateurs) :
----   composition courte : « 3V1R », « 2V2R », « 1V3R » (y compris « 3 v 1 r ») ;
----   lettres            : « vvvr », « vvrr », « vrrr », « vert-vert-vert-rouge » ;
----   texte              : « 3 verts + 1 rouge », « 3 verts », « 1 vert 3 rouges » ;
----   couleur dominante  : « vert » (= 3V1R), « rouge » (= 1V3R) ;
----   numero seul        : « 2 » (= 2V2R, NON ambigu).
+--- Accepted forms (tolerant: case, spaces, accents, separators):
+---   short composition  : "3V1R", "2V2R", "1V3R" (including "3 v 1 r");
+---   letters            : "vvvr", "vvrr", "vrrr", "vert-vert-vert-rouge";
+---   text               : "3 verts + 1 rouge", "3 verts", "1 vert 3 rouges";
+---   dominant color     : "vert" (= 3V1R), "rouge" (= 1V3R);
+---   bare number        : "2" (= 2V2R, NOT ambiguous).
 ---
---- REFUS EXPLICITE : « 1 » et « 3 » SEULS sont AMBIGUS (le numero ne dit pas la
---- couleur) -> (nil, message demandant la couleur dominante,
---- { ambiguous = true, number = ... }). Le code ne devine JAMAIS la couleur.
---- @return string|nil key, string|nil erreur, table|nil info
+--- EXPLICIT REFUSAL: "1" and "3" ALONE are AMBIGUOUS (the number does not reveal
+--- the color) -> (nil, message asking for the dominant color,
+--- { ambiguous = true, number = ... }). The code NEVER guesses the color.
+--- @return string|nil key, string|nil error, table|nil info
 function Intermission.normalizeDeclaration(raw)
     if type(raw) == "number" then
         raw = tostring(raw)
     end
     if type(raw) ~= "string" then
-        return nil, "declaration invalide (attendu une composition : 3V1R, 2V2R ou 1V3R)"
+        return nil, Locale.t("err.declarationInvalid")
     end
     local flat = flatten(raw)
     local compact = flat:gsub("%s+", "")
     if compact == "" then
-        return nil, "declaration vide (attendu une composition : 3V1R, 2V2R ou 1V3R)"
+        return nil, Locale.t("err.declarationEmpty")
     end
     if compact == "2" then
         return "2V2R"
@@ -399,9 +399,9 @@ function Intermission.normalizeDeclaration(raw)
     end
 
     local colors = analyzeColors(flat)
-    -- Un SEUL mot de couleur sans nombre = la couleur dominante annoncee :
-    -- « vert » -> 3 verts, « rouge » -> 3 rouges (les seules compositions a
-    -- dominante sont 3-1).
+    -- A SINGLE color word without a number = the announced dominant color:
+    -- "vert" -> 3 green, "rouge" -> 3 red (the only compositions with a
+    -- dominant color are 3-1).
     if colors.words == 1 and colors.explicit == 0 then
         if colors.hasGreenWord then
             return "3V1R"
@@ -413,20 +413,18 @@ function Intermission.normalizeDeclaration(raw)
         return GREENS_TO_STATE[colors.greens]
     end
     if total > 0 and colors.reds == 0 and GREENS_TO_STATE[colors.greens] ~= nil then
-        -- un seul compte donne : le reste se deduit (4 orbes au total)
+        -- a single count is given: the rest is deduced (4 orbs in total)
         return GREENS_TO_STATE[colors.greens]
     end
     if total > 0 then
-        return nil,
-            "composition non exploitable (" .. colors.greens .. " verts + " .. colors.reds .. " rouges) : dis la couleur dominante",
-            { ambiguous = true }
+        return nil, Locale.format("err.compositionUnusable", colors.greens, colors.reds), { ambiguous = true }
     end
-    return nil, "declaration inconnue : " .. raw .. " (attendu 3V1R, 2V2R ou 1V3R)", { ambiguous = false }
+    return nil, Locale.format("err.declarationUnknown", raw), { ambiguous = false }
 end
 
---- Retourne (copie de l'etat canonique, nil) ou (nil, erreur, info).
---- L'info porte { ambiguous = true } quand la saisie ne permettait PAS de
---- connaitre la couleur : l'appelant doit alors DEMANDER la couleur dominante.
+--- Returns (copy of the canonical state, nil) or (nil, error, info).
+--- The info carries { ambiguous = true } when the input did NOT reveal the
+--- color: the caller must then ASK for the dominant color.
 function Intermission.getDeclaration(raw)
     local key, err, info = Intermission.normalizeDeclaration(raw)
     if key == nil then
@@ -435,8 +433,8 @@ function Intermission.getDeclaration(raw)
     return copyRecord(CONVENTION[key])
 end
 
---- L'etat qui DOIT rejoindre `raw` pour faire 4 verts + 4 rouges.
---- @return string|nil key, string|nil erreur
+--- The state that MUST join `raw` to make 4 green + 4 red.
+--- @return string|nil key, string|nil error
 function Intermission.complementOf(raw)
     local rec, err = Intermission.getDeclaration(raw)
     if rec == nil then
@@ -445,13 +443,13 @@ function Intermission.complementOf(raw)
     return rec.complement
 end
 
---- Verifie si deux declarations peuvent se rejoindre SANS MOURIR.
---- Regle (ADDITION de couleurs) : la somme doit faire 4 VERTS et 4 ROUGES.
----   3V1R + 1V3R = 4V4R : sur ;
----   2V2R + 2V2R = 4V4R : sur ;
----   3V1R + 2V2R = 5 verts = « 5g » : mort ;
----   1V3R + 1V3R = 2 verts + 6 rouges : mort.
---- @return table|nil result { ok, label, greens, reds, reason, required }, string|nil erreur
+--- Checks whether two declarations can join WITHOUT DYING.
+--- Rule (COLOR ADDITION): the sum must make 4 GREEN and 4 RED.
+---   3V1R + 1V3R = 4V4R: safe;
+---   2V2R + 2V2R = 4V4R: safe;
+---   3V1R + 2V2R = 5 green = "5g": dead;
+---   1V3R + 1V3R = 2 green + 6 red: dead.
+--- @return table|nil result { ok, label, greens, reds, reason, required }, string|nil error
 function Intermission.checkMeeting(rawA, rawB)
     local a, errA = Intermission.getDeclaration(rawA)
     if a == nil then
@@ -467,18 +465,18 @@ function Intermission.checkMeeting(rawA, rawB)
     local ok = (greens == 4 and reds == 4)
     local reason
     if ok then
-        reason = "combinaison sure (" .. greens .. " verts + " .. reds .. " rouges)"
+        reason = Locale.format("meeting.safe", greens, reds)
     elseif greens == 5 then
-        reason = "5 verts = 5g : MORT"
+        reason = Locale.t("meeting.fiveGreen")
     else
-        reason = "combinaison interdite (" .. greens .. " verts + " .. reds .. " rouges) : il faut 4 verts ET 4 rouges"
+        reason = Locale.format("meeting.forbidden", greens, reds)
     end
     return { ok = ok, label = label, greens = greens, reds = reds, reason = reason, required = a.complement }
 end
 
---- Genere le texte de macro a coller (le joueur la declenche : une macro est du
---- code securise, seule façon d'appeler l'API #protected).
---- @return table|nil { primary, fallback, ping, target, note }, string|nil erreur
+--- Generates the macro text to paste (the player triggers it: a macro is secure
+--- code, the only way to call the #protected API).
+--- @return table|nil { primary, fallback, ping, target, note }, string|nil error
 function Intermission.buildMacro(raw, targetToken)
     local rec, err = Intermission.getDeclaration(raw)
     if rec == nil then
@@ -493,12 +491,12 @@ function Intermission.buildMacro(raw, targetToken)
         fallback = "/ping " .. rec.pingToken,
         ping = rec.ping,
         target = target,
-        note = "Syntaxe a confirmer en jeu (voir docs/INTERMISSION-COACH.md).",
+        note = Locale.t("macro.note"),
     }
 end
 
---- Valide une timeline preparee hors jeu (SavedVariables).
---- @return table|nil { name, visibilitySeconds, durationSeconds }, string|nil erreur
+--- Validates a timeline prepared out of game (SavedVariables).
+--- @return table|nil { name, visibilitySeconds, durationSeconds }, string|nil error
 function Intermission.validateTimeline(entry)
     if entry == nil then
         return {
@@ -508,7 +506,7 @@ function Intermission.validateTimeline(entry)
         }
     end
     if type(entry) ~= "table" then
-        return nil, "timeline invalide (table attendue)"
+        return nil, Locale.t("err.invalidTimeline")
     end
     local visibility = Intermission.VISIBILITY_SECONDS
     if type(entry.visibilitySeconds) == "number" then
@@ -528,7 +526,7 @@ function Intermission.validateTimeline(entry)
     return { name = name, visibilitySeconds = visibility, durationSeconds = duration }
 end
 
---- Cree un etat neuf (IDLE).
+--- Creates a fresh state (IDLE).
 function Intermission.newState(timeline)
     local resolved = Intermission.validateTimeline(timeline) or Intermission.validateTimeline(nil)
     return {
@@ -539,11 +537,11 @@ function Intermission.newState(timeline)
     }
 end
 
---- Demarre l'intermission (déclencheur : ENCOUNTER_START ou action du joueur).
---- @return table|nil state, string|nil erreur
+--- Starts the intermission (trigger: ENCOUNTER_START or a player action).
+--- @return table|nil state, string|nil error
 function Intermission.start(state, timeline)
     if type(state) ~= "table" then
-        return nil, "etat invalide"
+        return nil, Locale.t("err.invalidState")
     end
     if timeline ~= nil then
         local resolved, err = Intermission.validateTimeline(timeline)
@@ -558,8 +556,8 @@ function Intermission.start(state, timeline)
     return state
 end
 
---- Avance l'horloge de l'intermission. dt est fourni par la couche de cablage :
---- ce module n'appelle jamais GetTime (interdit dans Core/, voir CONVENTIONS 7).
+--- Advances the intermission clock. dt is provided by the wiring layer:
+--- this module never calls GetTime (forbidden in Core/, see CONVENTIONS 7).
 function Intermission.tick(state, dt)
     if type(state) ~= "table" then
         return state
@@ -583,19 +581,19 @@ function Intermission.tick(state, dt)
     return state
 end
 
---- Enregistre la declaration du joueur : la COMPOSITION d'orbes qu'il voit
---- (« 3V1R », « 2V2R », « 1V3R », ou une forme toleree comme « 3 verts »).
---- Un numero seul « 1 » ou « 3 » est REFUSE (ambigu) : voir normalizeDeclaration.
---- @return table|nil state, string|nil erreur
+--- Records the player's declaration: the ORB COMPOSITION they see ("3V1R",
+--- "2V2R", "1V3R", or a tolerated form such as "3 verts"). A bare number "1" or
+--- "3" is REFUSED (ambiguous): see normalizeDeclaration.
+--- @return table|nil state, string|nil error
 function Intermission.declare(state, raw)
     if type(state) ~= "table" then
-        return nil, "etat invalide"
+        return nil, Locale.t("err.invalidState")
     end
     if state.phase == PHASE_IDLE then
-        return nil, "intermission non demarree"
+        return nil, Locale.t("err.notStarted")
     end
     if state.phase == PHASE_DONE then
-        return nil, "intermission terminee"
+        return nil, Locale.t("err.finished")
     end
     local n, err = Intermission.normalizeDeclaration(raw)
     if n == nil then
@@ -605,10 +603,10 @@ function Intermission.declare(state, raw)
     return state
 end
 
---- Remet l'etat a zero (IDLE).
+--- Resets the state to zero (IDLE).
 function Intermission.reset(state)
     if type(state) ~= "table" then
-        return nil, "etat invalide"
+        return nil, Locale.t("err.invalidState")
     end
     state.phase = PHASE_IDLE
     state.elapsed = 0
@@ -616,7 +614,7 @@ function Intermission.reset(state)
     return state
 end
 
---- Secondes restantes de la fenetre de visibilite (0 une fois obscurci).
+--- Remaining seconds of the visibility window (0 once the room is dark).
 function Intermission.remainingVisibility(state)
     if type(state) ~= "table" or type(state.timeline) ~= "table" then
         return 0
@@ -628,7 +626,7 @@ function Intermission.remainingVisibility(state)
     return round(left)
 end
 
---- Etat affichable, entierement calcule ici : la couche UI ne fait que rendre.
+--- Displayable state, fully computed here: the UI layer only renders.
 function Intermission.snapshot(state)
     local phase = PHASE_IDLE
     local declaration, elapsed, timeline = nil, 0, Intermission.validateTimeline(nil)
@@ -650,85 +648,85 @@ function Intermission.snapshot(state)
         macroPrimary = nil,
         macroFallback = nil,
         macroNote = nil,
-        caveat = D_CAVEAT,
-        prompt = D_PROMPT,
-        ambiguity = D_AMBIGUITY,
+        caveat = Locale.t("inter.caveat"),
+        prompt = Locale.t("inter.prompt"),
+        ambiguity = Locale.t("inter.ambiguity"),
     }
 
     local lines = snap.lines
     if phase == PHASE_IDLE then
-        snap.headline = "INTERMISSION : PAS LANCEE"
-        lines[#lines + 1] = "Timeline pre-calculee : " .. timeline.visibilitySeconds .. " s visibles puis salle obscurcie."
-        lines[#lines + 1] = "Declenchement : debut de combat sur le boss, ou touche/bouton."
-        lines[#lines + 1] = D_PROMPT
-        lines[#lines + 1] = D_AMBIGUITY
+        snap.headline = Locale.t("inter.headline.idle")
+        lines[#lines + 1] = Locale.format("inter.line.idleTimeline", timeline.visibilitySeconds)
+        lines[#lines + 1] = Locale.t("inter.line.idleTrigger")
+        lines[#lines + 1] = Locale.t("inter.prompt")
+        lines[#lines + 1] = Locale.t("inter.ambiguity")
         return snap
     end
 
     if phase == PHASE_VISIBLE then
         local left = Intermission.remainingVisibility({ timeline = timeline, elapsed = elapsed })
         snap.countdownText = tostring(left)
-        snap.headline = "REGARDE LA COULEUR DES ORBES AU-DESSUS DES TETES : " .. left .. " s"
+        snap.headline = Locale.format("inter.headline.visible", left)
         if declaration == nil then
-            lines[#lines + 1] = "Les indicateurs des autres joueurs sont encore visibles."
-            lines[#lines + 1] = D_PROMPT
+            lines[#lines + 1] = Locale.t("inter.line.visibleIndicators")
+            lines[#lines + 1] = Locale.t("inter.prompt")
         end
     elseif phase == PHASE_DARK then
-        snap.headline = "SALLE OBSCURCIE : TU NE VOIS PLUS QUE TOI"
+        snap.headline = Locale.t("inter.headline.dark")
         if declaration == nil then
-            lines[#lines + 1] = "Les indicateurs des autres joueurs sont invisibles."
-            lines[#lines + 1] = D_PROMPT
+            lines[#lines + 1] = Locale.t("inter.line.darkIndicators")
+            lines[#lines + 1] = Locale.t("inter.prompt")
         end
     else
-        snap.headline = "INTERMISSION TERMINEE"
+        snap.headline = Locale.t("inter.headline.done")
     end
 
     local rec = declaration and CONVENTION[declaration] or nil
     if rec ~= nil then
-        snap.instruction = copyRecord(rec)
-        lines[#lines + 1] = "TU VOIS : " .. rec.display .. "  (" .. rec.key .. ")"
-        lines[#lines + 1] = "NUMERO AU-DESSUS DE TA TETE : "
-            .. rec.numberText
-            .. (rec.numberAmbiguous and "  -> il ne dit PAS la couleur" or "  -> non ambigu")
-        lines[#lines + 1] = "FAIS : " .. rec.action
-        lines[#lines + 1] = "POSITION : " .. rec.positionLabel
-        lines[#lines + 1] = "ETAT A REJOINDRE : " .. rec.complement .. " - " .. rec.find
-        lines[#lines + 1] = "PING A ENVOYER : " .. rec.pingColor .. " (" .. rec.ping .. ")"
-        lines[#lines + 1] = "CONVENTION DE GUILDE : " .. rec.numberRule
-        local macro = Intermission.buildMacro(rec.key, nil)
+        -- copyRecord resolves the locale keys: only the copy is displayed.
+        local shown = copyRecord(rec)
+        snap.instruction = shown
+        lines[#lines + 1] = Locale.format("inter.line.youSee", shown.display, shown.key)
+        local numberSuffix = shown.numberAmbiguous and Locale.t("inter.suffix.ambiguous") or Locale.t("inter.suffix.unambiguous")
+        lines[#lines + 1] = Locale.format("inter.line.number", shown.numberText, numberSuffix)
+        lines[#lines + 1] = Locale.format("inter.line.action", shown.action)
+        lines[#lines + 1] = Locale.format("inter.line.position", shown.positionLabel)
+        lines[#lines + 1] = Locale.format("inter.line.join", shown.complement, shown.find)
+        lines[#lines + 1] = Locale.format("inter.line.ping", shown.pingColor, shown.ping)
+        lines[#lines + 1] = Locale.format("inter.line.guildRule", shown.numberRule)
+        local macro = Intermission.buildMacro(shown.key, nil)
         if macro ~= nil then
             snap.macroPrimary = macro.primary
             snap.macroFallback = macro.fallback
             snap.macroNote = macro.note
         end
     end
-    lines[#lines + 1] = D_AMBIGUITY
-    lines[#lines + 1] = D_CAVEAT
-    lines[#lines + 1] = D_CHANNEL
+    lines[#lines + 1] = Locale.t("inter.ambiguity")
+    lines[#lines + 1] = Locale.t("inter.caveat")
+    lines[#lines + 1] = Locale.t("inter.channel")
     return snap
 end
 
---[[ Plan prepare hors jeu.
+--[[ Plan prepared out of game.
 
-     Bloc OPTIONNEL ecrit par GIDEON dans les SavedVariables :
+     OPTIONAL block written by GIDEON into the SavedVariables:
 
        assignment = {
            schema = 1,
            pairs = { { a = "Velna", b = "Torgh" }, ... },
-           plan  = {                                  -- optionnel
+           plan  = {                                  -- optional
                { name = "Velna", role = "2", position = "MIDDLE", note = "..." },
                ...
            },
        }
 
-     `role` peut contenir la COMPOSITION d'orbes preparee (« 3V1R », « 2V2R »,
-     « 1V3R », ou encore « 3 verts ») ou un role de raid libre (« Tank »,
-     « Heal »). Un numero seul « 1 » ou « 3 » est AMBIGU : il est signale comme
-     tel, jamais devine. Rien n'est invente : si GIDEON ne l'ecrit pas, l'addon
-     ne l'affiche pas.
+     `role` may contain the prepared ORB COMPOSITION ("3V1R", "2V2R", "1V3R", or
+     even "3 verts") or a free raid role ("Tank", "Heal"). A bare number "1" or
+     "3" is AMBIGUOUS: it is reported as such, never guessed. Nothing is
+     invented: if GIDEON does not write it, the addon does not display it.
 ]]
 
---- Valide le bloc `plan` : entrees malformees ecartees et listees, jamais de crash.
+--- Validates the `plan` block: malformed entries dropped and listed, never a crash.
 --- @return table { byName = {}, order = {}, errors = {} }
 function Intermission.validatePlan(plan)
     local out = { byName = {}, order = {}, errors = {} }
@@ -736,15 +734,15 @@ function Intermission.validatePlan(plan)
         return out
     end
     if type(plan) ~= "table" then
-        out.errors[#out.errors + 1] = "plan invalide (table attendue)"
+        out.errors[#out.errors + 1] = Locale.t("err.planInvalid")
         return out
     end
     for index = 1, #plan do
         local entry = plan[index]
         if type(entry) ~= "table" or type(entry.name) ~= "string" or entry.name == "" then
-            out.errors[#out.errors + 1] = "plan #" .. tostring(index) .. " ignore (name manquant)"
+            out.errors[#out.errors + 1] = Locale.format("err.planEntryNoName", index)
         elseif out.byName[entry.name] ~= nil then
-            out.errors[#out.errors + 1] = "plan #" .. tostring(index) .. " ignore (nom en double : " .. entry.name .. ")"
+            out.errors[#out.errors + 1] = Locale.format("err.planEntryDuplicate", index, entry.name)
         else
             local rec = { name = entry.name }
             if type(entry.role) == "string" and entry.role ~= "" then
@@ -787,10 +785,10 @@ local function describePlayer(plan, name)
     end
     local parts = {}
     if rec.role ~= nil then
-        parts[#parts + 1] = "role " .. rec.role
+        parts[#parts + 1] = Locale.format("plan.roleWord", rec.role)
     end
     if rec.position ~= nil then
-        parts[#parts + 1] = "position " .. rec.position
+        parts[#parts + 1] = Locale.format("plan.positionWord", rec.position)
     end
     if #parts == 0 then
         return nil
@@ -798,17 +796,17 @@ local function describePlayer(plan, name)
     return table.concat(parts, ", ")
 end
 
---- Construit la vue pre-pull : partenaire, role/position prepares, paires triees.
---- Aucune lecture d'API : tout vient du bloc GIDEON deja valide.
---- @param assignment table bloc valide par Pairing.validateAssignment
---- @param playerName string nom du joueur courant (chaine fournie par le cablage)
---- @return table|nil plan, string|nil erreur
+--- Builds the pre-pull view: partner, prepared role/position, sorted pairs.
+--- No API read: everything comes from the already validated GIDEON block.
+--- @param assignment table block validated by Pairing.validateAssignment
+--- @param playerName string name of the current player (string provided by the wiring)
+--- @return table|nil plan, string|nil error
 function Intermission.buildPlan(assignment, playerName)
     if type(assignment) ~= "table" or type(assignment.pairs) ~= "table" then
-        return nil, "assignment invalide"
+        return nil, Locale.t("err.invalidAssignment")
     end
     if type(playerName) ~= "string" or playerName == "" then
-        return nil, "nom de joueur invalide"
+        return nil, Locale.t("err.invalidPlayerName")
     end
 
     local plan = Intermission.validatePlan(assignment.plan)
@@ -834,37 +832,37 @@ function Intermission.buildPlan(assignment, playerName)
     local lines = out.lines
     local partner = ns.Pairing.findPartner(assignment, playerName)
     if partner == nil then
-        lines[#lines + 1] = "Tu n'es pas dans l'appariement GIDEON."
+        lines[#lines + 1] = Locale.t("plan.notPaired")
     else
         out.partner = partner
-        lines[#lines + 1] = "Ton partenaire : " .. partner
+        lines[#lines + 1] = Locale.format("plan.partner", partner)
         if out.me ~= nil and out.me.role ~= nil then
-            lines[#lines + 1] = "Ton role (prepare hors jeu) : " .. out.me.role
+            lines[#lines + 1] = Locale.format("plan.yourRole", out.me.role)
         end
         if out.me ~= nil and out.me.position ~= nil then
-            lines[#lines + 1] = "Ta position (preparee hors jeu) : " .. out.me.position
+            lines[#lines + 1] = Locale.format("plan.yourPosition", out.me.position)
         end
         local partnerInfo = describePlayer(plan, partner)
         if partnerInfo ~= nil then
-            lines[#lines + 1] = partner .. " : " .. partnerInfo
+            lines[#lines + 1] = Locale.format("plan.playerInfo", partner, partnerInfo)
         end
         if out.me ~= nil and out.me.role ~= nil and plan.byName[partner] ~= nil then
             local meeting, meetingErr = Intermission.checkMeeting(out.me.role, plan.byName[partner].role)
             if meeting ~= nil then
                 out.meeting = meeting
                 if meeting.ok then
-                    lines[#lines + 1] = "Rencontre " .. meeting.label .. " : OK (" .. meeting.reason .. ")"
+                    lines[#lines + 1] = Locale.format("meeting.labelOk", meeting.label, meeting.reason)
                 else
-                    lines[#lines + 1] = "|cffff5555Rencontre " .. meeting.label .. " : MORT (" .. meeting.reason .. ")|r"
+                    lines[#lines + 1] = Locale.format("meeting.labelDead", meeting.label, meeting.reason)
                 end
             else
-                -- Un role prepare « 1 » ou « 3 » seul est AMBIGU : on le dit, on ne devine pas.
-                lines[#lines + 1] = "|cffff8080Rencontre non verifiable : " .. tostring(meetingErr) .. "|r"
+                -- A prepared role of "1" or "3" alone is AMBIGUOUS: we say so, we do not guess.
+                lines[#lines + 1] = Locale.format("meeting.unverifiable", tostring(meetingErr))
             end
         end
     end
 
-    lines[#lines + 1] = "Paires (" .. #pairsList .. ") :"
+    lines[#lines + 1] = Locale.format("plan.pairsHeader", #pairsList)
     for index = 1, #pairsList do
         local pair = pairsList[index]
         local suffix = ""
@@ -881,8 +879,8 @@ function Intermission.buildPlan(assignment, playerName)
         lines[#lines + 1] = "  " .. index .. ". " .. pair.a .. " - " .. pair.b .. suffix
     end
     if #plan.errors > 0 then
-        lines[#lines + 1] = "|cffff8080Plan : " .. tostring(#plan.errors) .. " entree(s) ignoree(s).|r"
+        lines[#lines + 1] = Locale.format("plan.errorsLine", #plan.errors)
     end
-    lines[#lines + 1] = "Plan prepare hors jeu : aucune aura lue, aucun journal de combat."
+    lines[#lines + 1] = Locale.t("plan.disclaimer")
     return out
 end
