@@ -1,5 +1,11 @@
 name: Release
 
+# Le packager CRÉE la Release GitHub (et y attache le zip). Le jeton automatique
+# du workflow doit donc pouvoir ÉCRIRE dans le dépôt : sans ce bloc, le job échoue
+# avec "Resource not accessible by integration" (403) alors que tout le reste passe.
+permissions:
+  contents: write
+
 # Le dépôt BathmanTv/Gideon contient l'addon À SA RACINE (contrainte du
 # BigWigs packager : il exige un .git dans le dossier passé, donc le dossier
 # passé DOIT être la racine du dépôt). On ne passe donc aucun -t.

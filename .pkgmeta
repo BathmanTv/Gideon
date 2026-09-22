@@ -13,6 +13,7 @@ ignore:
   - .gitignore
   - .luacheckrc
   - .pkgmeta
+  - assets
   - docs
   - tests
   - tools

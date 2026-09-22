@@ -1,5 +1,9 @@
 # GideonRaid
 
+![GIDEON](assets/gideon-hero.png)
+
+*Le coach de raid de la guilde, et l'orchestrateur GIDEON — World of Warcraft : Midnight (12.1).*
+
 Addon de guilde (World of Warcraft : Midnight, `## Interface: 120100`) qui aide à
 la mécanique d'**appariement de joueurs portant des debuffs complémentaires**
 pendant une intermission de raid, avec le bot Discord **GIDEON** comme source
