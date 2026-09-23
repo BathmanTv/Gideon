@@ -4,7 +4,7 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
-## [Unreleased]
+## [0.9.0] - 2026-09-23
 
 Three corrections and one confirmed measurement from the raid lead's **fifth**
 in-game test: the placement mode had **no way to validate the chosen position**
@@ -459,6 +459,7 @@ was too verbose, and a wrong click could not be corrected.
   (`Core/Pairing.lua`) shared with the GIDEON Discord bot.
 - CI and release workflows (BigWigs packager), offline test suite with busted.
 
+[0.9.0]: https://github.com/BathmanTv/Gideon/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/BathmanTv/Gideon/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/BathmanTv/Gideon/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/BathmanTv/Gideon/compare/v0.5.0...v0.6.0
