@@ -345,8 +345,10 @@ Locale.STRINGS = {
         fr = "Prepare ton ping : Options > Raccourcis > systeme de ping, une touche par ping.",
     },
     ["ui.setup.ready"] = {
-        en = "Press OK: the panel opens by itself %d s before each intermission and closes at the end.",
-        fr = "Appuie sur OK : le panneau s'ouvre tout seul %d s avant chaque intermission et se ferme a la fin.",
+        en = "Place the panel where you want it to appear, then press OK: during the fight it opens by itself %d s "
+            .. "before each intermission and closes at the end.",
+        fr = "Place le panneau la ou tu veux qu'il apparaisse, puis appuie sur OK : pendant le combat il s'ouvre tout "
+            .. "seul %d s avant chaque intermission et se ferme a la fin.",
     },
     ["ui.setup.plan"] = {
         en = "Out-of-game plan loaded (%d pairs).",
@@ -450,13 +452,18 @@ Locale.STRINGS = {
         en = "CHASER",
         fr = "CHASSEUR",
     },
-    -- The ANCHOR action line states the REAL gesture, step by step (the ping
-    -- lands where the mouse is: hovering your own character frame pings YOU).
+    -- The ANCHOR action line states the REAL gesture, step by step, and it is now
+    -- a MEASURED fact: hovering your own character frame (the unit frame with
+    -- your health bar) then pressing the ping key displays the ping ON YOURSELF
+    -- (confirmed in game by the raid lead, fifth in-game test: "the ping on the
+    -- health bar works fine to show it on myself"). The line stays SHORT and
+    -- actionable: what to hover, which key, what it does, what to do next.
     -- %s = the label of the ping to use (Warning / Avertissement).
     ["state.actionPing.1V3R"] = {
-        en = "PING: YES - hover YOUR OWN character frame then press your ping key (%s), stay put and jump on the spot",
-        fr = "PING : OUI - survole TON propre cadre de personnage puis appuie sur ta touche de ping (%s), reste sur "
-            .. "place et saute sur place",
+        en = "PING: YES - hover YOUR OWN character frame (your health bar) then press your ping key (%s): you ping "
+            .. "yourself, stay put and jump on the spot",
+        fr = "PING : OUI - survole TON propre cadre de personnage (ta barre de vie) puis appuie sur ta touche de ping "
+            .. "(%s) : tu te pinges toi-meme, reste sur place et saute sur place",
     },
     ["state.actionNoPing.1V3R"] = {
         en = "STAY WHERE YOU ARE - jump on the spot (no ping in this policy)",

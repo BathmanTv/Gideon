@@ -197,6 +197,204 @@ describe("Layout : moteur pur (blocs ancres les uns sous les autres)", function(
         assert.is_true(L.textWidth(block.text, "button") + (2 * L.BUTTON_PADDING_X) <= block.width)
         assert.are.equal("", problemsOf(L, layout))
     end)
+    it("ancre CHAQUE bloc et CHAQUE bouton de ligne (regression du 5e test en jeu)", function()
+        -- Bug du 5e test : les boutons de ligne n'avaient AUCUNE ancre, donc
+        -- Frame:SetPoint recevait nil, levait, et l'applier s'arretait : les trois
+        -- boutons de composition et le bouton OK disparaissaient de l'ecran.
+        local layout = L.build({
+            minWidth = 300,
+            blocks = {
+                { id = "t", kind = "text", align = "left", style = "small", text = "x" },
+                { id = "b", kind = "button", align = "center", text = "OK" },
+                {
+                    id = "row",
+                    kind = "row",
+                    items = {
+                        { id = "gauche", text = "REDO", align = "left" },
+                        { id = "droite", text = "Close", align = "right" },
+                    },
+                },
+            },
+        })
+        for index = 1, #layout.blocks do
+            local block = layout.blocks[index]
+            assert.is_true(type(block.point) == "string" and block.point ~= "", "bloc sans ancre : " .. block.id)
+            if block.kind == "row" then
+                for item = 1, #block.items do
+                    local current = block.items[item]
+                    assert.is_true(type(current.point) == "string" and current.point ~= "", "bouton de ligne sans ancre : " .. current.id)
+                    -- L'ancre est celle de l'applier : TOPLEFT, x mesure depuis le
+                    -- bord gauche du cadre, top depuis le bord haut.
+                    assert.are.equal("TOPLEFT", current.point)
+                    assert.is_number(current.x)
+                    assert.is_number(current.top)
+                end
+            end
+        end
+        assert.are.equal("", problemsOf(L, layout))
+    end)
+
+    it("detecte un bloc sans ancre et un libelle plus grand que son bouton", function()
+        local layout = {
+            width = 200,
+            height = 100,
+            marginX = 16,
+            blocks = {
+                {
+                    id = "sans",
+                    kind = "button",
+                    align = "left",
+                    style = "button",
+                    text = "OK",
+                    x = 16,
+                    top = -10,
+                    bottom = -38,
+                    width = 80,
+                    height = 28,
+                },
+                {
+                    id = "etroit",
+                    kind = "button",
+                    align = "left",
+                    point = "TOPLEFT",
+                    style = "button",
+                    text = "UN LIBELLE BEAUCOUP TROP LONG",
+                    x = 16,
+                    top = -45,
+                    bottom = -75,
+                    width = 60,
+                    height = 30,
+                },
+            },
+        }
+        local problems = problemsOf(L, layout)
+        assert.is_true(contains(problems, "has no anchor point"), problems)
+        assert.is_true(contains(problems, "is wider than its button"), problems)
+    end)
+end)
+
+describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
+    local ns = wowenv.loadCore()
+    local L, I, S = ns.Layout, ns.Intermission, ns.Simulation
+
+    before_each(function()
+        ns.Locale.setActive("en")
+    end)
+
+    --- Tous les boutons d'un plan : blocs boutons + boutons de ligne.
+    local function buttonsOf(layout)
+        local out = {}
+        for index = 1, #layout.blocks do
+            local block = layout.blocks[index]
+            if block.kind == "button" then
+                out[#out + 1] = block
+            elseif block.kind == "row" then
+                for item = 1, #block.items do
+                    out[#out + 1] = block.items[item]
+                end
+            end
+        end
+        return out
+    end
+
+    --- Le libelle d'un bouton tient dans le bouton, AVEC la marge interieure du
+    --- module : ni trop large, ni trop haut (c'est le retour en jeu « le texte
+    --- sort du bouton »).
+    local function assertLabelFits(block, label)
+        assert.is_number(block.width, label .. " : largeur manquante")
+        assert.is_number(block.height, label .. " : hauteur manquante")
+        local paddingX = block.paddingX or L.BUTTON_PADDING_X
+        local paddingY = block.paddingY or L.BUTTON_PADDING_Y
+        local drawn = L.textWidth(block.text, block.style)
+        assert.is_true(drawn <= (block.width - (2 * paddingX)), label .. " : libelle plus large que le bouton")
+        local lines = #L.splitLines(block.text)
+        local needed = lines * L.FONTS[block.style or "button"].height
+        assert.is_true(needed <= (block.height - (2 * paddingY)), label .. " : libelle plus haut que le bouton")
+    end
+
+    --- Les cinq surfaces de l'addon, telles que la couche UI/ les demande.
+    local function surfaces()
+        local run = S.newRun()
+        local rehearsal = S.forRehearsal(I.snapshot(I.start(I.newState(), { leadSeconds = 0 }), "anchors"), run)
+        return {
+            { id = "panneau-principal", layout = L.mainPanel({ bodyLines = { "plan" } }) },
+            { id = "placement", layout = L.intermissionPanel({ headline = "h", bodyLines = { "b" }, showOk = true }) },
+            {
+                id = "repetition",
+                layout = L.intermissionPanel({
+                    bannerLines = rehearsal.simBannerLines,
+                    headline = rehearsal.headline,
+                    bodyLines = rehearsal.lines,
+                    showChoices = true,
+                }),
+            },
+            {
+                id = "apres-clic",
+                layout = L.intermissionPanel({
+                    stateText = "1V3R",
+                    headline = "h",
+                    pingBanner = "PING: YES",
+                    bodyLines = { "b" },
+                    showRedo = true,
+                }),
+            },
+            { id = "aide-au-ping", layout = L.pingHelpPanel({ lines = { "l" }, keyLines = { "k" } }) },
+        }
+    end
+
+    it("aucun libelle ne touche ni ne depasse le bord de son bouton (deux langues)", function()
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            for _, surface in ipairs(surfaces()) do
+                local buttons = buttonsOf(surface.layout)
+                assert.is_true(#buttons > 0, surface.id .. " : aucun bouton dans le plan")
+                for index = 1, #buttons do
+                    assertLabelFits(buttons[index], lang .. " / " .. surface.id .. " / " .. buttons[index].id)
+                end
+                -- Le plan complet reste sain : c'est AUSSI ce que verifie
+                -- Layout.violations (largeur ET hauteur du libelle).
+                assert.are.equal("", problemsOf(L, surface.layout), lang .. " / " .. surface.id)
+            end
+        end
+    end)
+
+    it("le bouton OK du mode placement est mesure, ancre et present", function()
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            local layout = L.intermissionPanel({ headline = "h", bodyLines = { "b" }, showOk = true })
+            local ok = rowItemOf(layout, "actions", "ok")
+            assert.is_truthy(ok, "le bouton OK manque en " .. lang)
+            assert.are.equal(ns.Locale.t("ui.ok"), ok.text)
+            assert.are.equal("TOPLEFT", ok.point)
+            assert.is_true(ok.width >= L.BUTTON_MIN_WIDTH)
+            assert.is_true(ok.height >= L.BUTTON_MIN_HEIGHT)
+            assertLabelFits(ok, "ok/" .. lang)
+            -- Close est toujours la, et les deux ne se recouvrent pas.
+            local close = rowItemOf(layout, "actions", "close")
+            assert.is_truthy(close)
+            assert.is_true(ok.x + ok.width <= close.x)
+        end
+    end)
+
+    it("buttonSize suit le libelle le plus long et le nombre de lignes", function()
+        local shortWidth = L.buttonSize("OK")
+        local longWidth = L.buttonSize(string.rep("A", 30))
+        assert.is_true(longWidth > shortWidth, "un libelle plus long doit donner un bouton plus large")
+        -- Un libelle court garde la taille minimale cliquable.
+        assert.are.equal(L.BUTTON_MIN_WIDTH, shortWidth)
+        local _, shortHeight = L.buttonSize("OK")
+        assert.is_true(shortHeight >= L.BUTTON_MIN_HEIGHT, "hauteur minimale cliquable")
+        -- Trois lignes explicites : le bouton grandit en hauteur.
+        local oneLine = L.buttonSize("1V3R")
+        local threeLines = L.buttonSize("1 vert + 3 rouges\n1V3R\nnumero : 1 ou 3")
+        assert.is_true(threeLines > oneLine)
+        -- La ligne la PLUS LONGUE decide (pas la concatenation des lignes).
+        assert.are.equal(L.buttonSize("aaaa"), L.buttonSize("aaaa\nbb"))
+        -- Les planchers demandes sont respectes.
+        local flooredWidth, flooredHeight = L.buttonSize("OK", "button", 300, 90)
+        assert.are.equal(300, flooredWidth)
+        assert.are.equal(90, flooredHeight)
+    end)
 end)
 
 describe("Layout : panneau principal /gr (ordre, bords, deux langues)", function()
@@ -369,6 +567,65 @@ describe("Layout : panneau d'intermission (chevauchements, deux langues)", funct
             assert.is_nil(blockOf(afterClick, "choices"))
             assert.are.equal("", problemsOf(L, afterClick), lang)
             assert.is_truthy(rowItemOf(afterClick, "actions", "redo"))
+        end
+    end)
+
+    it("la REPETITION affiche les trois boutons de composition (5e test en jeu)", function()
+        -- Retour en jeu : « le panneau de repetition n'affiche plus les 3 boutons,
+        -- c'est tout son interet ». Le plan de la repetition est construit ici
+        -- EXACTEMENT comme UI.IntermissionRefresh le fait (meme snapshot, meme
+        -- spec) : tant qu'aucune composition n'est declaree, la ligne de choix
+        -- est la, avec les libelles de Core et une taille mesuree.
+        local run = S.newRun()
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            local state = I.newState()
+            I.start(state, { leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
+            local snap = S.forRehearsal(I.snapshot(state, "anchors"), run)
+            assert.is_true(snap.showButtons, lang .. " : les choix doivent etre affiches")
+            local layout = planFor({
+                bannerLines = snap.simBannerLines,
+                stateText = snap.stateText,
+                headline = snap.headline,
+                pingBanner = snap.pingBanner,
+                bodyLines = snap.lines,
+                showChoices = snap.showButtons,
+                showRedo = snap.showRedo,
+            })
+            local row = blockOf(layout, "choices")
+            assert.is_truthy(row, lang .. " : la ligne des trois compositions manque")
+            assert.are.equal(#I.STATES, #row.items)
+            assertStacked(layout, "body", "choices", lang)
+            for index = 1, #row.items do
+                local item = row.items[index]
+                local key = I.STATES[index]
+                local rec = I.getDeclaration(key)
+                assert.are.equal("choice" .. index, item.id)
+                assert.are.equal(rec.buttonLabel, item.text)
+                assert.is_true(contains(item.text, key), item.text)
+                assert.is_true(item.width >= L.CHOICE_MIN_WIDTH, "bouton trop etroit en " .. lang)
+                assert.is_true(item.height >= L.CHOICE_MIN_HEIGHT, "bouton trop court en " .. lang)
+                assert.are.equal("TOPLEFT", item.point)
+            end
+            -- Une fois la composition cliquee, Core ne fournit plus les choix :
+            -- le panneau ne garde que le resultat et CORRIGER.
+            I.declare(state, "1V3R")
+            local afterSnap = S.forRehearsal(I.snapshot(state, "anchors"), run)
+            assert.is_false(afterSnap.showButtons)
+            local after = planFor({
+                bannerLines = afterSnap.simBannerLines,
+                stateText = afterSnap.stateText,
+                headline = afterSnap.headline,
+                pingBanner = afterSnap.pingBanner,
+                bodyLines = afterSnap.lines,
+                showChoices = afterSnap.showButtons,
+                showRedo = afterSnap.showRedo,
+            })
+            assert.is_nil(blockOf(after, "choices"))
+            assert.is_truthy(rowItemOf(after, "actions", "redo"))
+            assert.is_truthy(rowItemOf(after, "actions", "close"))
+            assert.are.equal("", problemsOf(L, after), lang)
+            assert.are.equal("", problemsOf(L, layout), lang)
         end
     end)
 

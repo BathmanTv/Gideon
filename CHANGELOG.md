@@ -4,6 +4,73 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+Three corrections and one confirmed measurement from the raid lead's **fifth**
+in-game test: the placement mode had **no way to validate the chosen position**
+(no OK button, and the panel said "press OK" without one), the **rehearsal panel had
+lost its three composition buttons** — its whole point — and the **button labels ran
+out of their frames** (`SIMULATION : GROUPE INTER` came out of its button). The
+self-ping gesture that the whole ANCHOR convention rests on was **confirmed in the
+client** during the same pass.
+
+### Added
+- **`OK` button in placement mode** (new locale key `ui.ok`): it **saves the current
+  panel position and closes the window** — the close cross and the **Close** button
+  keep their meaning (they *cancel* the placement and save nothing). The panel's
+  explanatory text now says exactly what to do, in both languages
+  (`ui.setup.ready`): *"Place the panel where you want it to appear, then press OK:
+  during the fight it opens by itself N s before each intermission and closes at the
+  end."* / *"Place le panneau la ou tu veux qu'il apparaisse, puis appuie sur OK :
+  pendant le combat il s'ouvre tout seul N s avant chaque intermission et se ferme a
+  la fin."*
+- **Button sizing in `Core/Layout.lua`**: `Layout.buttonSize(label, style, minWidth,
+  minHeight)` measures a button from its **own label** (widest explicit line + inner
+  margin `Layout.BUTTON_PADDING_X` for the width, number of lines of the font +
+  vertical margin for the height, floored by a minimum clickable size), with
+  `Layout.buttonNeeds` as the single source used by every button of the addon
+  (composition buttons, `REDO`, `OK`, `Close`, and the four buttons of the main
+  panel — which keep **one common size** so the row stays aligned). A new
+  violation is reported: **a label wider than its button**.
+
+### Fixed
+- **The three composition buttons are back in the rehearsal** (`/gr sim inter`):
+  they are part of the pure layout (`showChoices`) as long as no composition is
+  declared, they are **clickable** (click -> state + ROLE + `PING: YES/NO` + ONE
+  action line, then the three disappear and **CORRECT** brings them back), exactly
+  like the real intermission flow.
+- **Root cause of both disappearances: an element drawn without an anchor point.**
+  Row buttons built by `Core/Layout.lua` could come out of the engine **without a
+  `point`**, and `Frame:SetPoint(nil, ...)` **raises** in the client: `UI.ApplyLayout`
+  stopped right there and **everything placed after that element was never applied**
+  — which is how the composition buttons and the OK button ended up missing (the
+  layout was computed, the panel just never drew them). The engine now **anchors
+  every block and every row button**, `UI/Panel.lua` has a safety net on a missing
+  anchor, and the test stub **refuses a non-string anchor like the client does**, so
+  the regression can never pass CI again (removing the anchor in `Core/Layout.lua`
+  makes the suite fail).
+- **No button label touches or leaves its frame** any more, in English **and** in
+  French, on **all five surfaces** (main panel, placement with `OK`, rehearsal with
+  the three compositions, post-click with `REDO`, ping help): asserted label by
+  label, plus the envelope of every button.
+
+### Changed
+- **Self-ping: CONFIRMED IN GAME (fifth in-game test, 2026-09-23)** — hovering **your
+  own character frame / your health bar** and pressing the ping key **displays the
+  ping on yourself** (raid lead: *"the ping on the health bar works fine to show it
+  on myself"*). It was the last open assumption of the ANCHOR convention; it is no
+  longer on the "to be confirmed" list (`README.md`, `docs/INTERMISSION-COACH.md`
+  §9, `docs/TESTPLAN.md`, where only the **other players' view** and the **ping
+  duration** stay to be watched with a second player).
+- **The ANCHOR action line** spells the gesture out and stops being a slogan
+  (`state.actionLine.1V3R`, both languages): *"PING: YES - hover YOUR OWN character
+  frame (your health bar) then press your ping key (Warning): you ping yourself,
+  stay put and jump on the spot."* The ping help window (`/gr sim ping`) uses the
+  same wording.
+- Tests: **219 -> 228** (`layout_spec.lua` 16 -> 22, `load_spec.lua` 46 -> 49),
+  documents and their counts updated (`README.md`, `docs/INTERMISSION-COACH.md`,
+  `docs/TESTPLAN.md`, including a new §3.5c in-game protocol for the fifth pass).
+
 ## [0.8.0] - 2026-09-23
 
 Four corrections requested by the raid lead after the **fourth** in-game test:

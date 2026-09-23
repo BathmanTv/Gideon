@@ -28,9 +28,9 @@ API. It is therefore runnable by `lua5.1` and by `busted`, installed on the VPS
 and on the GitHub runner.
 
 **File**: `tests/spec/pairing_spec.lua` (11 tests; the repository total is
-**219 tests**, spread over `intermission_spec.lua` (84), `load_spec.lua` (46),
-`locale_spec.lua` (21), `pingpolicy_spec.lua` (20), `layout_spec.lua` (16 — pure
-panel geometry), `simulation_spec.lua` (14), `pairing_spec.lua` (11) and
+**228 tests**, spread over `intermission_spec.lua` (84), `load_spec.lua` (49),
+`locale_spec.lua` (21), `pingpolicy_spec.lua` (20), `layout_spec.lua` (22 — pure
+panel geometry and button sizing), `simulation_spec.lua` (14), `pairing_spec.lua` (11) and
 `guard_spec.lua` (7)).
 
 **How to run**:
@@ -213,18 +213,21 @@ busted tests/spec/simulation_spec.lua
 busted tests/spec/guard_spec.lua
 ```
 
-**Pass criterion**: both green, `make check` green (219 tests).
+**Pass criterion**: both green, `make check` green (228 tests).
 
 ---
 
-## Step 1e — Out-of-game tests of the PANEL LAYOUT (pure geometry)
+## Step 1e — Out-of-game tests of the PANEL LAYOUT (pure geometry and button sizing)
 
 **Goal**: prove, **out of game and in both languages**, that no panel can draw one
 element on top of another or run text over its frame — the two bugs of the fourth
 in-game test (the French labels leaving the main panel, the big state drawn over the
-SIMULATION banner).
+SIMULATION banner) — and that **no button label ever comes out of its button** and
+that **no element is drawn without an anchor point** — the two bugs of the fifth
+in-game test (the text leaving the buttons, the composition buttons and the OK
+button missing from the panel).
 
-**File**: `tests/spec/layout_spec.lua` (16 tests). The geometry is computed by
+**File**: `tests/spec/layout_spec.lua` (22 tests). The geometry is computed by
 `Core/Layout.lua` (pure Lua 5.1, no WoW API) and **applied as is** by `UI/Panel.lua`
 (`UI.ApplyLayout`).
 
@@ -233,10 +236,23 @@ SIMULATION banner).
 - the engine **stacks** blocks one under the other (`top = previous.bottom - gap`),
   never at an absolute offset, so two blocks can never share a Y band; an extra
   `gapBefore` is available for a utility button that must be visually separated;
+- **every block and every row button carries its anchor point** (`point`), and
+  `tests/support/wowapi_stub.lua` **refuses a non-string point like the client
+  does**: a nil point raises in game and the applier stops right there, which is
+  exactly how the three composition buttons and the OK button disappeared (fifth
+  in-game test). Removing the anchor from `Core/Layout.lua` makes the suite fail;
+- **button sizing**: `Layout.buttonSize` measures **every** button from its label
+  (widest explicit line + inner margin for the width, number of lines + vertical
+  margin for the height, floored by a minimum size), and the tests check, in
+  English **and** in French, the five surfaces of the addon (main panel, placement
+  with the `OK` button, rehearsal with the three compositions, post-click with
+  `REDO`, ping help) — for every button: the label fits **with its margin** both
+  ways;
 - the **violation report** really fires: a hand-built overlapping layout is reported
   (`overlap`), a block running over the frame is reported (`border`), a block whose
-  **longest word** does not fit is reported (`wider than its block`), and a block
-  drawn under the close cross is reported too;
+  **longest word** does not fit is reported (`wider than its block`), a block drawn
+  under the close cross is reported too, and so are a **missing anchor** and a
+  **label wider than its button**;
 - the **frame follows the content**: width ≥ the longest label + padding, height
   computed from the stacked blocks, and a longer body **grows** the frame instead of
   overflowing it;
@@ -251,13 +267,17 @@ SIMULATION banner).
   (rehearsal with the two-line banner, dark room with the big state, placement mode):
   the big state is always **below** the banner, then the headline, then the ping
   banner, then the body, then the action row — the exact fourth-test bug;
-- the three **composition buttons** fit inside the frame in both languages, and when
-  the layout does not contain them (after a click) they are **not part of the layout
-  at all**: `UI.ApplyLayout` hides and empties every element the layout does not
-  mention, so nothing can be drawn on top of the banner and no stale `1V3R` can
-  survive a CORRECT;
-- the frame width is **wider than the old 300 px** (main panel ≈360 px) precisely so
-  the French labels fit.
+- the **placement mode** carries the `OK` button (measured, anchored, next to
+  `Close`, never overlapping it) — the fifth-test request;
+- the **rehearsal** carries the **three composition buttons** (their Core labels, one
+  measured size for the row, anchors, minimum size) as long as nothing is clicked,
+  and when the layout does not contain them (after a click) they are **not part of
+  the layout at all**: `UI.ApplyLayout` hides and empties every element the layout
+  does not mention, so nothing can be drawn on top of the banner and no stale `1V3R`
+  can survive a CORRECT;
+- the frame width is **wider than the old 300 px** (main panel ≈360 px, intermission
+  panel ≈650 px) precisely so the French labels fit — in the frame **and** in the
+  buttons.
 
 **How to run**:
 
@@ -265,7 +285,7 @@ SIMULATION banner).
 busted tests/spec/layout_spec.lua
 ```
 
-**Pass criterion**: green, `make check` green (219 tests).
+**Pass criterion**: green, `make check` green (228 tests).
 
 ---
 
@@ -331,7 +351,21 @@ What is verified:
 21. the ping help window (`/gr sim ping` **and** `/gr pinghelp`) carries the binding
     path, the self-ping reminder, the bound keys (or `no key bound`) and the explicit
     "cannot detect a ping" line, and it closes through its button, its cross or
-    `/gr sim stop`.
+    `/gr sim stop`;
+22. the **placement text** says exactly what to do (fifth in-game feedback): *place
+    the panel where you want it to appear, then press OK: during the fight it opens
+    by itself* — checked in English **and** on a `frFR` client — and the **OK** button
+    really saves the position and closes;
+23. the **rehearsal** shows the **three composition buttons** (fifth in-game feedback:
+    the panel had lost them) and each one **works**: `1V3R` → state + `ROLE: ANCHOR` +
+    `PING: YES` + the ANCHOR action line, `2V2R` → `ROLE: MIDDLE` + `PING: NO` +
+    "go to the middle", `3V1R` → `ROLE: CHASER` + `PING: NO` + "run to a ping"; the
+    three disappear on the click and **CORRIGER brings them back**; each button is
+    **anchored** (`TOPLEFT`) and **sized on its label**;
+24. the **stub refuses a non-string anchor** exactly like the client
+    (`tests/support/wowapi_stub.lua`): the whole panel flow is exercised with that
+    strictness, so an element without an anchor point (the fifth-test bug) can never
+    pass CI again.
 
 **`.toc` verification** (`tools/check_toc.py`, in CI):
 
@@ -449,13 +483,13 @@ Aide » (+ « Activer le ciblage de ping ») — measured in game by the raid le
 | 1 | `/gr` out of instance | "Your partner: …" + list of pairs (`assignment` block prepared by GIDEON); with no plan: `No out-of-game plan loaded (optional).` and **no** mention of a Discord command |
 | 2 | `/gr plan` | the detailed plan in the chat (role, position, meeting) |
 | 3 | `bindings`: Options > Keybindings > GideonRaid, assign a key | the binding shows up; the key opens/closes the panel |
-| 3b | **Before the pull**: `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`) | the intermission panel appears, can be **dragged** where the player wants it; the body recalls the ping keybind and the lead; **OK** validates, saves the position and closes the panel. Re-doable, and usable several times |
+| 3b | **Before the pull**: `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`) | the intermission panel appears, can be **dragged** where the player wants it; the body recalls the ping keybind and the lead **and says exactly what to do** (fifth in-game feedback): *place the panel where you want it to appear, then press OK: during the fight it opens by itself*; the **OK** button is on screen (right of the frame, next to **Close**), **saves the position and closes** the panel. **Close** and the **X** cancel instead. Re-doable, and usable several times |
 | 3c | Bind each ping: Options > Keybindings > **ping system** (or Raccourcis) | one key per ping exists (Avertissement / En route / Aide) — **already measured**; `/gr inter ping` then shows `PING: Avertissement - press <key>` if the binding command name matches a candidate (TBD item 1 of `docs/INTERMISSION-COACH.md` §9) |
 | 4 | Enter *Entombed Sentinels*, pull the boss | `ENCOUNTER_START` **arms the schedule** (the panel does **not** open at the pull) and the chat confirms the number of planned intermissions and the 2 s lead. Its arguments are never read |
 | 4b | Wait for the first intermission | **1–2 s before** it, the panel opens **by itself** with "GET READY: 2 s" then the 3 s countdown — the timing (≈46.3 s, then 148.9 / 251.5 / 353.2 s) is TBD item 3 of §9 |
 | 5 | During the 3 s of visibility | the reminder displays "LOOK AT THE ORB COLOR ABOVE THE HEADS: 3" then 2, 1 (French on a frFR client) |
 | 6 | Count your orbs, click `1` / `2` / `3` composition button | the panel shows **the essential only**: the state in very large type, **ROLE** (ANCHOR / MIDDLE / CHASER), **"PING: YES/NO"** (colored) and **ONE** action line — no role order, no policy line, no caveat, no paragraph — and **the three buttons disappear at once** (only the result and CORRECT stay) |
-| 7 | Press the **native ping key** of the instructed ping (once) — for a `1V3R` ANCHOR: **hover YOUR OWN character frame first** | the ping goes out (the addon does not ping, and never with a macro); **never ask for a burst** (3 pings in a row max per player). The action line states the gesture: `PING: YES - hover YOUR OWN character frame then press your ping key (Warning), stay put and jump on the spot` |
+| 7 | Press the **native ping key** of the instructed ping (once) — for a `1V3R` ANCHOR: **hover YOUR OWN character frame first** | the ping goes out (the addon does not ping, and never with a macro); **never ask for a burst** (3 pings in a row max per player). The action line states the gesture: `PING: YES - hover YOUR OWN character frame (your health bar) then press your ping key (Warning): you ping yourself, stay put and jump on the spot` |
 | 7b | Click a wrong composition, then **REDO**, then the right one (twice) | the three buttons come back, the panel returns to the choice state, the correction is unlimited and never leaves a stale state |
 | 8 | Check after 3 s | "ROOM DARKENED": the panel stays readable, no dynamic text |
 | 8b | End of the intermission | the panel **closes by itself** (`durationSeconds`, 20 s by default), even with no click |
@@ -465,8 +499,8 @@ Aide » (+ « Activer le ciblage de ping ») — measured in game by the raid le
 | 11 | `/gr lang` on a frFR client and on an enUS client | detected language correct, text in the right language, and the **ping label follows it** (`PING : Avertissement` in French); TBD item 6 of `docs/INTERMISSION-COACH.md` §9 |
 | 12 | `/gr ping` then `/gr ping anchors|color|none`, then re-open the intermission panel | the header banner switches between **PING: YES** and **PING: NO** and the action line follows the policy (never a contradictory order for the same role) — the policy itself stays **out** of the panel |
 | 13 | Send a burst of pings yourself (3 in a row, then a 4th) | **CONFIRMED MEASUREMENT, 2026-09-22**: 3 in a row are accepted, then the client waits about 5 s before accepting 3 again. No longer to be confirmed — it is the reference for the ping budget (§2.1 of `docs/INTERMISSION-COACH.md`) |
-| 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — **the only part still to be confirmed in game** |
-| 14b | **THE OPEN QUESTION of the third in-game test** — the ANCHOR hovers **their own character frame**, presses the ping key and self-pings; a second player watches | does the ping placed **on oneself** show for the **others**, and **above the character** (which is what a CHASER runs to)? Note **how long** it stays visible, and on which frames (world, raid frames). This is the assumption the whole ANCHOR convention rests on; the addon cannot detect a ping, so only the players can confirm it |
+| 14 | With `anchors`: one anchor pings, several CHASERS run to it | the ping stays visible **long enough** after the room darkens, and it shows on the **raid frame** of the anchored player (raid frame pings since patch 12.1) — the remaining thing to watch in game (with the self-ping already confirmed, row 14b) |
+| 14b | **SELF-PING — CONFIRMED IN GAME (fifth in-game test, 2026-09-23).** The ANCHOR hovers **their own character frame**, presses the ping key and self-pings | **the ping is displayed ON YOURSELF** — the raid lead's words: *"the ping on the health bar works fine to show it on myself"*. No longer to be confirmed. What is left **to watch with a second player**: does that self-ping show for the **others**, **above the character** (which is what a CHASER runs to), and **how long** does it stay visible after the room darkens (world frame, raid frames)? The addon cannot detect a ping, so only the players can answer that part |
 | 14c | Move the **main panel** (or ask the other players to move theirs) during the raid, then `/reload` between two intermissions | the panel is draggable (it was frozen before), the position is kept after the `/reload`, and `/gr lock` keeps it in place if it hides something |
 | 15 | Count the pings in the raid with the `anchors` policy (expected ~8) versus `color` (expected ~20) | the `anchors` policy keeps the channel readable: at most one ping per anchor, 4 per side, **one ping per player per intermission** — far from the 3-per-5-s client limit |
 
@@ -484,13 +518,13 @@ Keep `/console scriptErrors 1` on: no Lua error is allowed here either.
 | 2 | Click that **X** | the main panel closes; `/gr` brings it back (the plan and the buttons are unchanged) |
 | 3 | `/gr inter place`, then click the **X** of the intermission panel | the placement is **cancelled** exactly like the Close button: the panel closes and **no** position is saved; `/gr inter place` works again |
 | 4 | `/gr inter start` (or wait for a real intermission), then click the **X** | the panel hides; the intermission clock keeps running, the panel **closes by itself** at the end and **opens again at the next intermission** (nothing was disarmed) |
-| 5 | `/gr sim inter` (same as the **SIMULATION** button of the main panel) | the chat states `SIMULATION (no boss, no raid): the intermission panel opens RIGHT AWAY. Click your composition, then close it yourself (X or Close button). The ENCOUNTER_START timeline is NOT armed.`; the panel opens **IMMEDIATELY** (no delay) with the **two-line** banner `SIMULATION - NO BOSS, NO RAID` / `SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF` |
+| 5 | `/gr sim inter` (same as the **SIMULATION** button of the main panel) | the chat states `SIMULATION (no boss, no raid): the intermission panel opens RIGHT AWAY. Click your composition, then close it yourself (X or Close button). The ENCOUNTER_START timeline is NOT armed.`; the panel opens **IMMEDIATELY** (no delay) with the **two-line** banner `SIMULATION - NO BOSS, NO RAID` / `SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF` **and the three composition buttons** |
 | 6 | Click a composition | state in very large type **below the banner**, `ROLE`, `PING: YES/NO` and ONE action line, exactly like a real intermission; **the three buttons disappear** (they are not drawn anywhere, in particular not on the banner); **CORRECT** brings them back with an **empty state** (no stale `1V3R` left on screen) |
 | 7 | Wait without clicking | the panel **stays open**: nothing closes it, nothing relaunches it. It is **you** who closes it (X or Close) - the chat then reports `Simulation closed (no boss, no raid, nothing was published).` |
 | 7b | Watch the whole rehearsal | no line contradicts the situation: no countdown (`... : 0 s`), no `SIMULATED INTERMISSION 1/1`, and the banner, the state, the role and the action lines are **all separated** (nothing drawn over the banner, in French as well: `/gr lang fr`) |
 | 8 | After the rehearsal, `/gr inter status` | the **real** module is untouched: phase `IDLE`, schedule **not armed**, no decision published (the diagnostic kit must see nothing) |
 | 9 | `/gr sim ping` (or `/gr pinghelp`) | the **help window** opens at once (draggable, position kept) with `PING: YES = PING YOURSELF`, the binding path (`1. Bind one key per ping: Options > Keybindings > Ping (Ping, Warning, On My Way, Assist)`), the operational reminder (`2. During the boss, ... hover YOUR OWN character frame ... then press your key: you ping yourself, where you stand.`), the `Keys found for your pings:` list (`Warning = Q`, or `no key bound` while the binding command name is still unknown — TBD item 1 of `docs/INTERMISSION-COACH.md` §9), the group reminder and the explicit **"the addon CANNOT detect a ping"** line. **No countdown, no `PING PLACED`, no step progression** |
-| 10 | Hover **your own character frame** with the mouse and press the real ping key while **grouped** | a ping appears **on you** (you pinged yourself). The window claims nothing else: the addon **counts nothing** and detects nothing — only your screen tells you |
+| 10 | Hover **your own character frame** with the mouse and press the real ping key while **grouped** | a ping appears **on you** (you pinged yourself) — **CONFIRMED IN GAME (fifth in-game test): "the ping on the health bar works fine to show it on myself"**. The window claims nothing else: the addon **counts nothing** and detects nothing — only your screen tells you |
 | 10b | Redo the gesture **alone** (not grouped, no raid) | **nothing** appears on screen and the addon does not claim otherwise: this is expected and stated on the frame |
 | 11 | Move the mouse **away from your character frame** (over the world, or over another player's frame) and press the same key | the ping lands where the **mouse** is (world position, or on the other player) instead of on you — that is the measurement that made the gesture explicit: **the ping follows the mouse, so the ANCHOR must hover their own frame** |
 | 12 | Start a rehearsal, then close it with `/gr sim stop` (or the **Close** button, or the **X**, or the close button of the ping help window) | it closes at once with an honest report (`Simulation closed (no boss, no raid, nothing was published).`); `/gr sim stop` again answers `No simulation running.` |
@@ -502,6 +536,26 @@ Keep `/console scriptErrors 1` on: no Lua error is allowed here either.
 | 18 | `/gr resetposition` | the main panel, the intermission panel and the ping help window all come back to the **center** of the screen |
 | 19 | Open the main panel in French, then in English (`/gr lang fr` / `/gr lang en`) | **no label touches or leaves the frame** in either language and the four buttons keep the order **PLACE LE PANNEAU -> SIMULATION: TE PINGER -> SIMULATION: GROUPE INTER -> VERROUILLER** (the utility separated by a small space, all the same width) |
 | 20 | Switch to French during a rehearsal, then look at the panel | the big state, the SIMULATION banner, the `PING : OUI` line, the ROLE line and the action line stay **separated** (French labels are longer: that is the case that used to overlap) |
+
+### 3.5c In-game protocol — the fifth pass (buttons and layout, 5 min, ALONE)
+
+**Goal**: check the four points of the fifth in-game feedback (OK button, composition
+buttons of the rehearsal, button labels, and the now-confirmed self-ping) **without a
+boss and without a raid**. Keep `/console scriptErrors 1`: a Lua error here is a
+blocking regression (the applier stops on the first faulty element and the panel loses
+everything placed after it — that is exactly how the composition buttons and the OK
+button had disappeared).
+
+| # | Action | Expected |
+|---|---|---|
+| 1 | `/gr inter place` | the panel shows the placement text **including** *Place the panel where you want it to appear, then press OK: during the fight it opens by itself*; the **OK** button is **on screen**, at the bottom right next to **Close** (not clipped, not overlapping it) |
+| 2 | Drag the panel where you want it, then click **OK** | the panel closes, the chat confirms `Placement saved. Pull when you want: the panel opens by itself before each intermission.`; `/gr inter place` shows the panel **at the new position** |
+| 3 | `/gr inter place`, then click the **X** (or **Close**) | the placement is **cancelled**: nothing is saved (that is the difference with OK) |
+| 4 | `/gr sim inter` | the panel opens right away with the banner **and the three composition buttons** (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, French labels in game), each with its **three lines of label fully inside its button** — no character out of the frame, no label touching the border |
+| 5 | Click each of the three buttons | `1V3R` → `ROLE : ANCRE` + `PING : OUI` + the ANCHOR action line; `2V2R` → `ROLE : MILIEU` + `PING : NON`; `3V1R` → `ROLE : CHASSEUR` + `PING : NON` — and **the three buttons disappear** each time; **CORRIGER** brings them back |
+| 6 | Look at every button of both panels in **French then English** (`/gr lang fr`, `/gr lang en`) | no label touches nor leaves its button (`PLACER LE PANNEAU`, `SIMULATION : TE PINGER`, `SIMULATION : GROUPE INTER`, `VERROUILLER`, `CORRIGER`, `Fermer`, `OK`, and the composition labels) — if a label still looks tight, raise `Layout.BUTTON_PADDING_X` / `Layout.FONTS.button.charWidth` in `Core/Layout.lua` (the tests measure through the same module) |
+| 7 | Look at the width of the intermission panel | it is now **≈650 px** (as wide as its three composition labels require). Nothing to fix technically; if it feels too wide at your UI scale, lower the panel `scale` |
+| 8 | Grouped, hover **your own character frame / health bar** and press the ping key | the ping is displayed **on yourself** — this is the fifth-pass confirmation; it is written in the doc and is **no longer on the "to be confirmed" list** |
 
 ### 3.6 Recommended test environment
 

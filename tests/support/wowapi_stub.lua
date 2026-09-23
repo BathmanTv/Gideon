@@ -54,8 +54,15 @@ function stub.install()
     --- Tous les arguments sont conserves (point, relativeTo, relativePoint, x, y) :
     --- les positions PERSISTEES (panneau principal, panneau intermission, fenetre
     --- de simulation) sont ainsi verifiables hors jeu.
-    function Frame:SetPoint(...)
-        self.__point = { ... }
+    --- Le CLIENT exige une CHAINE d'ancre en 1er argument : le stub fait pareil,
+    --- sinon un bloc sans ancre (bug du 5e test en jeu : les trois boutons de
+    --- composition et le bouton OK disparaissaient) passerait la suite de tests.
+    function Frame:SetPoint(point, ...)
+        assert(
+            type(point) == "string" and point ~= "",
+            "SetPoint attend une chaine d'ancre (recu : " .. tostring(point) .. ") - le client refuse une ancre nulle"
+        )
+        self.__point = { point, ... }
     end
     function Frame:ClearAllPoints()
         self.__point = nil
@@ -86,8 +93,13 @@ function stub.install()
         local fs = {}
         -- Les points sont ENREGISTRES (comme pour les cadres) : un test peut
         -- verifier que UI/ applique bien la disposition calculee par Core/Layout.
-        function fs:SetPoint(...)
-            fs.__point = { ... }
+        -- Comme le client, le stub REFUSE une ancre nulle (1er argument).
+        function fs:SetPoint(point, ...)
+            assert(
+                type(point) == "string" and point ~= "",
+                "FontString:SetPoint attend une chaine d'ancre (recu : " .. tostring(point) .. ")"
+            )
+            fs.__point = { point, ... }
         end
         --- SetPoint(point, x, y) : le cadre est ancre au PARENT au meme point,
         --- avec les decalages demandes (c'est exactement ce que fait l'applier).

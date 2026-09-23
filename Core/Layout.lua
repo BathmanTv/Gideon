@@ -17,13 +17,33 @@
     button rows) requires. The rendering layer applies the list AS-IS
     (UI.ApplyLayout) and computes nothing.
 
+    ANCHORS (fifth in-game test). Every block AND every button of a row carries
+    its own anchor point ("point"), i.e. the first argument of Frame:SetPoint:
+    the client refuses a nil point, and an error inside the applier used to
+    abort the WHOLE refresh, so every block placed after the faulty one (the
+    three composition buttons, the OK button...) silently disappeared. Hence:
+      - packRow() gives every row item point = "TOPLEFT" (its x is measured from
+        the left edge of the frame, its top from the top edge);
+      - Layout.violations() reports a block or a row item WITHOUT an anchor, and
+        tests/support/wowapi_stub.lua now refuses a non-string point like the
+        client does, so this can never come back unnoticed.
+
+    BUTTON SIZING (same in-game test: "the text comes out of the button").
+    A button is never given a fixed size any more: its width comes from the
+    WIDEST line of its label (explicit newlines included) plus a wide inner
+    margin, its height from the NUMBER OF LINES plus a vertical margin, and both
+    are floored by a minimum size. Layout.buttonSize() is the single source of
+    that computation, used by every panel spec here and asserted, for both
+    languages, by tests/spec/layout_spec.lua.
+
     The text metrics below are ESTIMATES (the game font cannot be measured out
     of game): they are deliberately CONSERVATIVE (wider and taller than the real
     glyphs) so a real in-game line is never longer nor taller than the estimated
     one. Every block is measured, wrapped and stacked here, which makes the
     whole layout TESTABLE: tests/spec/layout_spec.lua asserts, for BOTH
-    languages, that no two blocks overlap, that no text runs over the borders
-    and that nothing is drawn under the close cross.
+    languages, that no two blocks overlap, that no text runs over the borders,
+    that no label touches the border of its button and that nothing is drawn
+    under the close cross.
 ----------------------------------------------------------------------------]]
 --
 --
@@ -54,8 +74,12 @@ Layout.FONTS = {
     large = { height = 18, charWidth = 9 },
     normal = { height = 15, charWidth = 7 },
     small = { height = 13, charWidth = 6 },
-    -- Buttons of UIPanelButtonTemplate: a little narrower than GameFontNormal.
-    button = { height = 15, charWidth = 6.2 },
+    -- Buttons of UIPanelButtonTemplate draw their label with GameFontNormal, so
+    -- their estimate is the WIDEST one on purpose: the fifth in-game test
+    -- showed labels running over the button borders with the former 6.2 px/char
+    -- (the real client font is wider than that). Same reasoning for the height:
+    -- a whole line, never less.
+    button = { height = 16, charWidth = 7.5 },
 }
 Layout.FONT_FALLBACK = "normal"
 
@@ -65,8 +89,15 @@ Layout.MARGIN_TOP = 12
 Layout.MARGIN_BOTTOM = 12
 --- Space between two stacked blocks: never zero, so two blocks can never touch.
 Layout.GAP = 6
---- Horizontal padding of a button label (both sides together).
-Layout.BUTTON_PADDING_X = 12
+--- Inner margin of a button label. BOTH sides together (so a label always keeps
+--- Layout.BUTTON_PADDING_X / 2 px of real margin on each side): the fifth
+--- in-game test reported labels touching the border of their button.
+Layout.BUTTON_PADDING_X = 14
+--- Vertical inner margin of a button label (both sides together).
+Layout.BUTTON_PADDING_Y = 6
+--- A button is never smaller than this, whatever its label (still clickable).
+Layout.BUTTON_MIN_WIDTH = 80
+Layout.BUTTON_MIN_HEIGHT = 24
 --- The close cross ("X") of UI.AttachCloseCross occupies this small box in the
 --- top-right corner of every panel: no block may be drawn under it.
 Layout.CROSS_SIZE = 22
@@ -78,10 +109,11 @@ Layout.MAIN_PANEL_WIDTH = 360
 Layout.INTERMISSION_WIDTH = 560
 Layout.PING_HELP_WIDTH = 520
 
---- Composition buttons of the intermission panel (fixed in game: their three
---- line labels were validated in game, they are not measured here).
-Layout.CHOICE_WIDTH = 168
-Layout.CHOICE_HEIGHT = 64
+--- Composition buttons of the intermission panel: their three-line labels are
+--- MEASURED like every other button (wide inner margin included) and are only
+--- floored by the size validated in game.
+Layout.CHOICE_MIN_WIDTH = 168
+Layout.CHOICE_MIN_HEIGHT = 64
 Layout.CHOICE_GAP = 8
 
 Layout.DEFAULT_WIDTH = 320
@@ -190,6 +222,63 @@ function Layout.textHeight(text, style, width)
     return lines * metrics.height
 end
 
+--[[ ------------------------------------------------------------ button sizing
+
+     The single source of truth for the size of a BUTTON. The fifth in-game test
+     reported labels running over their button ("augmente un peu le bouton, le
+     texte sort") because the actions row and the composition buttons were given
+     FIXED sizes (130 / 90 / 168 x 64) that the active language could exceed.
+     From now on a button is measured exactly like a text block:
+       - width  = widest EXPLICIT line of the label + 2 x BUTTON_PADDING_X
+                  (a label may carry explicit newlines: every line is measured);
+       - height = number of lines x font line height + 2 x BUTTON_PADDING_Y;
+       - both floored by the caller's minimum size (and by the generic ones).
+     A label therefore NEVER touches nor leaves the border of its button.
+]]
+
+--- One line of a button label, in pixels (same estimator as a text block).
+local function linePixels(line, metrics)
+    return #(type(line) == "string" and line or "") * metrics.charWidth
+end
+
+--- Size a button needs for `text`, in pixels.
+--- @param text string|nil button label (explicit newlines allowed)
+--- @param style string|nil font style key ("button" by default)
+--- @param minWidth number|nil minimum width (Layout.BUTTON_MIN_WIDTH otherwise)
+--- @param minHeight number|nil minimum height (Layout.BUTTON_MIN_HEIGHT otherwise)
+--- @return number width, number height, number lines, number paddingX, number paddingY
+function Layout.buttonNeeds(text, style, minWidth, minHeight)
+    local metrics = font(type(style) == "string" and style or "button")
+    local lines = Layout.splitLines(text)
+    local paddingX = Layout.BUTTON_PADDING_X
+    local paddingY = Layout.BUTTON_PADDING_Y
+    local widest = 0
+    for index = 1, #lines do
+        local width = linePixels(lines[index], metrics)
+        if width > widest then
+            widest = width
+        end
+    end
+    local width = widest + (2 * paddingX)
+    local floor = tonumber(minWidth) or Layout.BUTTON_MIN_WIDTH
+    if floor > width then
+        width = floor
+    end
+    local height = (#lines * metrics.height) + (2 * paddingY)
+    local heightFloor = tonumber(minHeight) or Layout.BUTTON_MIN_HEIGHT
+    if heightFloor > height then
+        height = heightFloor
+    end
+    return round(width), round(height), #lines, paddingX, paddingY
+end
+
+--- Width and height of a button, as used by the panel specs below.
+--- @return number width, number height
+function Layout.buttonSize(text, style, minWidth, minHeight)
+    local width, height = Layout.buttonNeeds(text, style, minWidth, minHeight)
+    return width, height
+end
+
 --[[ --------------------------------------------------------------- packing
 ]]
 
@@ -201,8 +290,7 @@ local function fixedWidth(raw, gap)
         if type(raw.width) == "number" then
             return raw.width
         end
-        local padding = tonumber(raw.paddingX) or Layout.BUTTON_PADDING_X
-        return Layout.textWidth(raw.text, raw.style or "button") + (2 * padding)
+        return Layout.buttonSize(raw.text, raw.style, raw.minWidth, raw.minHeight)
     end
     if raw.kind == "row" then
         local items = raw.items or {}
@@ -215,8 +303,7 @@ local function fixedWidth(raw, gap)
             if type(item.width) == "number" then
                 total = total + item.width
             else
-                local padding = tonumber(item.paddingX) or Layout.BUTTON_PADDING_X
-                total = total + Layout.textWidth(item.text, item.style or "button") + (2 * padding)
+                total = total + Layout.buttonSize(item.text, item.style, item.minWidth, item.minHeight)
             end
         end
         return total + ((#items - 1) * (tonumber(raw.gap) or gap))
@@ -228,11 +315,15 @@ Layout.fixedWidth = fixedWidth
 
 --- Packs the buttons of one row: "left" items from the left margin, "right"
 --- items from the right margin (the FIRST right item is the rightmost one).
---- @param items table array of { id, text, align, width, height, style }
+--- EVERY item gets point = "TOPLEFT" (its x is measured from the left edge of
+--- the frame, and build() gives it its top): without that anchor the client
+--- raises on Frame:SetPoint and the applier stops, which is exactly how the
+--- composition buttons and the OK button disappeared in game (fifth test).
+--- @param items table array of { id, text, align, width, height, style, minWidth, minHeight }
 --- @param frameWidth number
 --- @param marginX number
 --- @param gap number
---- @return table array of items with x/width/height/top (top is filled later)
+--- @return table array of items with x/width/height/top/point (top is filled later)
 local function packRow(items, frameWidth, marginX, gap)
     local packed = {}
     local leftCursor = marginX
@@ -240,16 +331,9 @@ local function packRow(items, frameWidth, marginX, gap)
     for index = 1, #items do
         local raw = items[index]
         local style = raw.style or "button"
-        local metrics = font(style)
-        local width = raw.width
-        if type(width) ~= "number" then
-            local padding = tonumber(raw.paddingX) or Layout.BUTTON_PADDING_X
-            width = Layout.textWidth(raw.text, style) + (2 * padding)
-        end
-        local height = raw.height
-        if type(height) ~= "number" then
-            height = metrics.height + 6
-        end
+        local neededWidth, neededHeight, lines, paddingX, paddingY = Layout.buttonNeeds(raw.text, style, raw.minWidth, raw.minHeight)
+        local width = type(raw.width) == "number" and raw.width or neededWidth
+        local height = type(raw.height) == "number" and raw.height or neededHeight
         local item = {
             id = raw.id or ("item" .. index),
             kind = "button",
@@ -258,6 +342,11 @@ local function packRow(items, frameWidth, marginX, gap)
             style = style,
             width = width,
             height = height,
+            lines = lines,
+            paddingX = paddingX,
+            paddingY = paddingY,
+            -- The anchor point of the button: TOPLEFT of its frame (see above).
+            point = "TOPLEFT",
         }
         if item.align == "right" then
             item.x = rightCursor - width
@@ -305,11 +394,13 @@ local function measureBlock(raw, frameWidth, marginX, gap)
     end
     if block.kind == "button" then
         local style = raw.style or "button"
-        local metrics = font(style)
-        local padding = tonumber(raw.paddingX) or Layout.BUTTON_PADDING_X
+        local neededWidth, neededHeight, lines, paddingX, paddingY = Layout.buttonNeeds(block.text, style, raw.minWidth, raw.minHeight)
         block.style = style
-        block.height = type(raw.height) == "number" and raw.height or (metrics.height + 6)
-        block.width = type(raw.width) == "number" and raw.width or (Layout.textWidth(block.text, style) + (2 * padding))
+        block.width = type(raw.width) == "number" and raw.width or neededWidth
+        block.height = type(raw.height) == "number" and raw.height or neededHeight
+        block.lines = lines
+        block.paddingX = paddingX
+        block.paddingY = paddingY
         if block.align == "center" then
             block.point = "TOP"
             block.x = 0
@@ -441,6 +532,40 @@ local function blockIsWide(block)
     return Layout.wordWidth(block.text, block.style) > block.width
 end
 
+--- A block or a row button MUST carry the anchor point Frame:SetPoint expects
+--- (a nil point raises in the client and used to abort the whole applier: the
+--- fifth in-game test lost the composition buttons and the OK button that way).
+--- @return boolean true when the element is anchored
+local function isAnchored(block)
+    return type(block.point) == "string" and block.point ~= ""
+end
+
+--- Every way a BUTTON label can fail to fit its button: too wide for the width,
+--- too tall for the height (the two in-game reports of the fifth test). The
+--- padding is the one the button was measured with, so "the label keeps a real
+--- margin from the border" is asserted here, not only "it is not over".
+--- Tolerant by design: an element handed in without a size (a hand-made layout)
+--- is simply not checked on that axis, never an error.
+--- @param scope string "button" or "row button"
+--- @param target table button block or row item
+--- @return table array of strings
+local function labelProblems(scope, target)
+    local out = {}
+    local paddingX = tonumber(target.paddingX) or Layout.BUTTON_PADDING_X
+    local paddingY = tonumber(target.paddingY) or Layout.BUTTON_PADDING_Y
+    local style = target.style or "button"
+    local lines = tonumber(target.lines) or #Layout.splitLines(target.text)
+    local width = tonumber(target.width)
+    if width ~= nil and Layout.textWidth(target.text, style) > (width - (2 * paddingX)) then
+        out[#out + 1] = string.format("label of %s '%s' is wider than its button", scope, target.id)
+    end
+    local height = tonumber(target.height)
+    if height ~= nil and (lines * font(style).height) > (height - (2 * paddingY)) then
+        out[#out + 1] = string.format("label of %s '%s' is taller than its button", scope, target.id)
+    end
+    return out
+end
+
 --- True when a rectangle (block or row item) is drawn under the close cross.
 --- @param top number top edge (negative offsets from the frame top)
 --- @param bottom number bottom edge
@@ -455,11 +580,15 @@ local function underCross(layout, left, right, top, bottom)
 end
 
 --- Every layout defect, as readable strings (empty table = the layout is sound).
---- Two rules, the two bugs reported in game:
+--- Three rules, the three families of bugs reported in game:
+---   - no block may be drawn without an anchor point (a nil point raised in the
+---     client and the blocks placed after the faulty one never appeared: the
+---     composition buttons and the OK button were simply missing on screen);
 ---   - no two blocks may share a Y band (the state must never be drawn on top of
 ---     the SIMULATION banner);
 ---   - no block may run over the borders of the frame, nor under the close
----     cross, and no unbreakable word may be wider than its block.
+---     cross, no unbreakable word may be wider than its block, and no button
+---     label may be wider or taller than the button it is drawn in.
 --- @param layout table
 --- @return table array of strings
 function Layout.violations(layout)
@@ -475,6 +604,9 @@ function Layout.violations(layout)
 
     for index = 1, #blocks do
         local block = blocks[index]
+        if not isAnchored(block) then
+            report(string.format("block '%s' has no anchor point", block.id))
+        end
         local left, right = Layout.bounds(block, layout)
         if left < 0 or right > layout.width then
             report(string.format("block '%s' runs over the side border (%.1f..%.1f of %d)", block.id, left, right, layout.width))
@@ -496,11 +628,15 @@ function Layout.violations(layout)
         if block.kind == "row" then
             for item = 1, #block.items do
                 local current = block.items[item]
+                if not isAnchored(current) then
+                    report(string.format("row button '%s' has no anchor point", current.id))
+                end
                 if current.x < 0 or (current.x + current.width) > layout.width then
                     report(string.format("row button '%s' runs over the side border", current.id))
                 end
-                if current.text ~= nil and Layout.wordWidth(current.text, current.style) > current.width then
-                    report(string.format("label of row button '%s' is wider than its button", current.id))
+                local labelIssues = labelProblems("row button", current)
+                for issue = 1, #labelIssues do
+                    report(labelIssues[issue])
                 end
                 if underCross(layout, current.x, current.x + current.width, current.top, current.bottom) then
                     report(string.format("row button '%s' runs under the close cross", current.id))
@@ -511,6 +647,11 @@ function Layout.violations(layout)
                         report(string.format("row buttons '%s' and '%s' overlap", current.id, candidate.id))
                     end
                 end
+            end
+        elseif block.kind == "button" then
+            local labelIssues = labelProblems("button", block)
+            for issue = 1, #labelIssues do
+                report(labelIssues[issue])
             end
         elseif block.text ~= nil then
             if blockIsWide(block) then
@@ -564,14 +705,19 @@ function Layout.mainPanel(spec)
         { id = "title", kind = "text", align = "center", style = "normal", text = Locale.t("ui.mainTitle") },
         { id = "body", kind = "text", align = "left", style = "small", text = table.concat(bodyLines, "\n") },
     }
-    -- ONE width for the four buttons: the three FLOW buttons then line up exactly
+    -- ONE size for the four buttons: the three FLOW buttons then line up exactly
     -- (same left/right edges, regular spacing) whatever the language, and the
-    -- widest label decides for all of them.
-    local buttonWidth = 0
+    -- widest label decides for all of them. The height comes from the label too
+    -- (a button is never a fixed box any more): a label can not touch nor leave
+    -- the border, in English as in French.
+    local buttonWidth, buttonHeight = 0, 0
     for index = 1, #Layout.MAIN_PANEL_ORDER do
-        local width = Layout.textWidth(labels[Layout.MAIN_PANEL_ORDER[index]], "button") + (2 * Layout.BUTTON_PADDING_X)
-        if width > buttonWidth then
-            buttonWidth = width
+        local neededWidth, neededHeight = Layout.buttonSize(labels[Layout.MAIN_PANEL_ORDER[index]], "button", nil, nil)
+        if neededWidth > buttonWidth then
+            buttonWidth = neededWidth
+        end
+        if neededHeight > buttonHeight then
+            buttonHeight = neededHeight
         end
     end
     for index = 1, #Layout.MAIN_PANEL_ORDER do
@@ -581,7 +727,7 @@ function Layout.mainPanel(spec)
             kind = "button",
             align = "center",
             width = buttonWidth,
-            height = id == "place" and 24 or nil,
+            height = buttonHeight,
             text = labels[id],
             -- The utility button is set apart from the flow buttons.
             gapBefore = id == "lock" and Layout.MAIN_PANEL_UTILITY_GAP or nil,
@@ -625,27 +771,58 @@ function Layout.intermissionPanel(spec)
         blocks[#blocks + 1] = { id = "body", kind = "text", align = "left", style = "normal", text = table.concat(bodyLines, "\n") }
     end
     if opts.showChoices then
+        -- THE THREE COMPOSITION BUTTONS (fifth in-game test: they must be there
+        -- as long as no composition is declared, with their own functionality -
+        -- a click shows the state, the role, the ping and the action line and
+        -- the three buttons disappear). Their labels come from the canonical
+        -- states and their SIZE from those labels: one single size for the row
+        -- (the widest label of the ACTIVE language decides), never a fixed box
+        -- a longer French label could overflow.
+        local labels = {}
+        local width, height = Layout.CHOICE_MIN_WIDTH, Layout.CHOICE_MIN_HEIGHT
         local items = {}
         for index = 1, #Intermission.STATES do
             local key = Intermission.STATES[index]
             local rec = Intermission.getDeclaration(key)
-            items[#items + 1] = {
-                id = "choice" .. index,
-                text = rec ~= nil and rec.buttonLabel or key,
-                width = Layout.CHOICE_WIDTH,
-                height = Layout.CHOICE_HEIGHT,
-            }
+            labels[index] = rec ~= nil and rec.buttonLabel or key
+            local neededWidth, neededHeight = Layout.buttonSize(labels[index], "button", width, height)
+            if neededWidth > width then
+                width = neededWidth
+            end
+            if neededHeight > height then
+                height = neededHeight
+            end
+        end
+        for index = 1, #labels do
+            items[#items + 1] = { id = "choice" .. index, text = labels[index], width = width, height = height }
         end
         blocks[#blocks + 1] = { id = "choices", kind = "row", gap = Layout.CHOICE_GAP, items = items }
     end
-    -- Action row: CORRECT on the left, then (right to left) Close, OK.
+    -- Action row: CORRECT on the left, then (right to left) Close, OK. Same rule
+    -- as every other button here: the labels are measured, never a fixed width
+    -- ("Close" / "Fermer" / "OK" / "REDO" / "CORRIGER" all fit, in both
+    -- languages, with a real margin from the border).
     local actions = {}
     if opts.showRedo then
-        actions[#actions + 1] = { id = "redo", align = "left", text = Locale.t("ui.redo"), width = 130, height = 22 }
+        actions[#actions + 1] = { id = "redo", align = "left", text = Locale.t("ui.redo") }
     end
-    actions[#actions + 1] = { id = "close", align = "right", text = Locale.t("ui.close"), width = 90, height = 22 }
+    actions[#actions + 1] = { id = "close", align = "right", text = Locale.t("ui.close") }
     if opts.showOk then
-        actions[#actions + 1] = { id = "ok", align = "right", text = Locale.t("ui.ok"), width = 90, height = 22 }
+        actions[#actions + 1] = { id = "ok", align = "right", text = Locale.t("ui.ok") }
+    end
+    local actionWidth, actionHeight = Layout.BUTTON_MIN_WIDTH, Layout.BUTTON_MIN_HEIGHT
+    for index = 1, #actions do
+        local neededWidth, neededHeight = Layout.buttonSize(actions[index].text, "button", actionWidth, actionHeight)
+        if neededWidth > actionWidth then
+            actionWidth = neededWidth
+        end
+        if neededHeight > actionHeight then
+            actionHeight = neededHeight
+        end
+    end
+    for index = 1, #actions do
+        actions[index].width = actionWidth
+        actions[index].height = actionHeight
     end
     blocks[#blocks + 1] = { id = "actions", kind = "row", gap = Layout.CHOICE_GAP, items = actions }
 
@@ -665,7 +842,15 @@ function Layout.pingHelpPanel(spec)
     if type(opts.keyLines) == "table" and #opts.keyLines > 0 then
         blocks[#blocks + 1] = { id = "keys", kind = "text", align = "left", style = "small", text = table.concat(opts.keyLines, "\n") }
     end
-    blocks[#blocks + 1] = { id = "close", kind = "button", align = "right", text = Locale.t("ui.close"), width = 90, height = 22 }
+    local closeWidth, closeHeight = Layout.buttonSize(Locale.t("ui.close"), "button", nil, nil)
+    blocks[#blocks + 1] = {
+        id = "close",
+        kind = "button",
+        align = "right",
+        text = Locale.t("ui.close"),
+        width = closeWidth,
+        height = closeHeight,
+    }
     return Layout.build({ minWidth = Layout.PING_HELP_WIDTH, blocks = blocks })
 end
 

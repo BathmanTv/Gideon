@@ -74,6 +74,20 @@ end
 --- this list only tells the shared applier (UI.ApplyLayout) which frame carries
 --- which block id. The geometry, the labels and the ORDER come from Core/.
 --- @return table array of { id = string, frame = Frame|FontString }
+--- The anchor point of a block or of a row button. Core/Layout.lua ALWAYS
+--- provides one (a test asserts it block by block): this fallback is a safety net
+--- only, because a nil point raises in the client and the whole applier then
+--- stops - which is exactly how the three composition buttons and the OK button
+--- disappeared in game (fifth in-game test: an element without an anchor).
+--- @param block table
+--- @return string anchor point
+local function anchorOf(block)
+    if type(block.point) == "string" and block.point ~= "" then
+        return block.point
+    end
+    return "TOPLEFT"
+end
+
 --- Applies ONE block of a PURE layout (Core/Layout.lua) to its element: the
 --- rendering layer copies the geometry and the text, it computes NOTHING.
 --- @param frame Frame|FontString|nil
@@ -83,7 +97,7 @@ local function applyBlock(frame, block)
         return nil
     end
     frame:ClearAllPoints()
-    frame:SetPoint(block.point, block.x, block.top)
+    frame:SetPoint(anchorOf(block), block.x, block.top)
     if block.kind == "button" then
         frame:SetSize(block.width, block.height)
     else

@@ -569,6 +569,91 @@ describe("chargement de l'addon", function()
         assert.is_false(panel.simBanner:IsShown(), "plus de bandeau SIMULATION hors repetition")
     end)
 
+    it("5e test : les trois boutons de composition sont affiches, poses et fonctionnels", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim inter")
+        local panel = _G.GideonRaidIntermissionPanel
+        local layout = ns.Layout
+        assert.is_true(panel:IsShown())
+        for index = 1, 3 do
+            local button = panel.buttons[index]
+            assert.is_true(button:IsShown(), "le bouton de composition " .. index .. " doit etre affiche")
+            -- ANCRE : le bug du 5e test etait une ancre NULLE (SetPoint(nil) leve
+            -- en jeu, l'applier s'arretait et ces trois boutons disparaissaient).
+            assert.are.equal("TOPLEFT", button.__point[1])
+            assert.is_number(button.__point[2])
+            assert.is_number(button.__point[3])
+            -- TAILLE mesuree depuis le libelle : plus jamais un cadre fixe.
+            assert.is_true(button.__width >= layout.CHOICE_MIN_WIDTH, "bouton trop etroit")
+            assert.is_true(button.__height >= layout.CHOICE_MIN_HEIGHT, "bouton trop court")
+            assert.is_true(
+                layout.textWidth(button:GetText(), "button") <= (button.__width - (2 * layout.BUTTON_PADDING_X)),
+                "le libelle doit tenir dans le bouton avec sa marge"
+            )
+        end
+        -- Le bouton Fermer est la lui aussi ; OK n'a rien a faire dans une
+        -- repetition (il valide une POSITION, pas un choix).
+        assert.is_true(panel.close:IsShown())
+        assert.is_false(panel.ok:IsShown())
+        -- CHAQUE bouton remplit sa fonction : etat + role + PING + ligne d'action.
+        local expected = {
+            { index = 1, state = "1V3R", role = "ROLE: ANCHOR", ping = "PING: YES", action = "PING: YES - hover YOUR OWN" },
+            { index = 2, state = "2V2R", role = "ROLE: MIDDLE", ping = "PING: NO", action = "DO NOT PING - go to the middle" },
+            { index = 3, state = "3V1R", role = "ROLE: CHASER", ping = "PING: NO", action = "DO NOT PING - run to a ping" },
+        }
+        for _, case in ipairs(expected) do
+            panel.buttons[case.index]:Click()
+            assert.are.equal(case.state, panel.state:GetText())
+            local body = panel.body:GetText()
+            assert.is_true(contains(body, case.role), case.state .. " : role manquant")
+            assert.are.equal(case.ping, panel.pingBanner:GetText())
+            assert.is_true(panel.pingBanner:IsShown())
+            assert.is_true(contains(body, case.action), case.state .. " : ligne d'action manquante")
+            for index = 1, 3 do
+                assert.is_false(panel.buttons[index]:IsShown(), "les trois choix disparaissent apres le clic")
+            end
+            -- CORRIGER ramene les trois boutons et vide l'etat.
+            assert.is_true(panel.redo:IsShown())
+            panel.redo:Click()
+            assert.are.equal("", panel.state:GetText())
+            assert.is_false(panel.redo:IsShown())
+            for index = 1, 3 do
+                assert.is_true(panel.buttons[index]:IsShown(), "CORRIGER doit ramener les trois choix")
+            end
+        end
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+    end)
+
+    it("placement : le texte dit de placer le panneau puis d'appuyer sur OK", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GideonRaidPanel.place:Click()
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.is_true(panel.ok:IsShown(), "le bouton OK doit etre affiche en mode placement")
+        local body = panel.body:GetText()
+        assert.is_true(contains(body, "Place the panel where you want it to appear, then press OK"), body)
+        assert.is_true(contains(body, "during the fight it opens by itself"), body)
+        -- ... et OK valide vraiment : il sauvegarde la position et ferme.
+        panel.ok:Click()
+        assert.is_false(panel:IsShown())
+        assert.is_table(_G.GideonRaidDB.intermission.position)
+        assert.matches("Placement saved", messages())
+    end)
+
+    it("placement : le texte francais dit la meme chose (client frFR)", function()
+        _G.GetLocale = function()
+            return "frFR"
+        end
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GideonRaidPanel.place:Click()
+        local panel = _G.GideonRaidIntermissionPanel
+        local body = panel.body:GetText()
+        assert.is_true(contains(body, "Place le panneau la ou tu veux qu'il apparaisse, puis appuie sur OK"), body)
+        assert.is_true(contains(body, "pendant le combat il s'ouvre tout seul"), body)
+        assert.matches("OK", panel.ok:GetText())
+        assert.matches("Fermer", panel.close:GetText())
+    end)
+
     it("la croix de la repetition la ferme aussi (un seul cycle, pas de relance)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
