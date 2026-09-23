@@ -14,6 +14,11 @@
     panneau demande alors au joueur de binder une touche). Une spec qui veut
     tester l'affichage d'une touche l'installe elle-meme explicitement
     (_G.GetBindingKey = function(name) ... end).
+
+    PlaySoundFile EST defini ici (et enregistre ses appels) : c'est le SEUL appel
+    audio de l'addon, la couche de rendu l'encadre d'un pcall, et une spec doit
+    pouvoir verifier qu'un son est joue une seule fois avec le bon fichier - puis
+    le casser (error / nil) pour prouver que le rendu continue.
 ----------------------------------------------------------------------------]]
 --
 local stub = {}
@@ -239,8 +244,23 @@ function stub.install()
         end,
     }
 
+    -- SON D'ASSIGNATION : PlaySoundFile est le SEUL appel audio de l'addon, et il
+    -- vient de la couche de rendu (UI/), sous pcall. Le stub l'ENREGISTRE (chemin
+    -- + canal) pour qu'une spec puisse verifier « un seul son, le bon fichier, une
+    -- seule fois ». Une spec qui veut un client en echec le remplace elle-meme
+    -- (_G.PlaySoundFile = function() error("...") end) ou le supprime
+    -- (_G.PlaySoundFile = nil) : l'addon doit alors rester SILENCIEUX sans lever.
+    -- Le stub de la lecture de raccourci (GetBindingKey ci-dessus) n'existe toujours
+    -- pas ici : hors client, aucun raccourci n'est connu (cas par defaut teste).
+    local sounds = {}
+    _G.PlaySoundFile = function(path, channel)
+        sounds[#sounds + 1] = { path = path, channel = channel }
+        return true
+    end
+
     stub.frames = frames
     stub.tickers = tickers
+    stub.sounds = sounds
     -- Le Frame racine cree par GideonRaid.lua est le 1er de la liste.
     stub.mainFrame = function()
         return frames[1]

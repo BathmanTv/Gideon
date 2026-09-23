@@ -14,6 +14,11 @@ local _, ns = ...
 --- a hard dependency (the persisted preference is normalized against it).
 local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Config.lua")
 
+--- Core/Sound.lua is loaded BEFORE this file by the .toc: it owns the pure table
+--- "canonical state -> soundboard file", the one-playback-per-assignment gate
+--- and the BOUNDED resolvers of the assignment-sound preference (/gr sound).
+local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before Core/Config.lua")
+
 local Config = {}
 ns.Config = Config
 
@@ -102,6 +107,10 @@ function Config.defaultIntermission()
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
         -- and changeable in game with /gr ping anchors|color|none.
         pingMode = Config.DEFAULT_PING_MODE,
+        -- ASSIGNMENT SOUNDBOARD (see Core/Sound.lua): enabled by default, one
+        -- sound per canonical state, played ONCE when the player declares their
+        -- composition. /gr sound on|off, /gr sound test 1v3r|2v2r|3v1r.
+        soundEnabled = Sound.DEFAULT_ENABLED,
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 },
     }
 end
@@ -351,6 +360,12 @@ function Config.resolveIntermission(raw)
     -- Ping policy: pure and bounded resolution, an unknown value falls back to
     -- "anchors" (never an error, never nil).
     out.pingMode = Config.resolvePingMode(raw.pingMode)
+    -- Assignment soundboard: TOTAL resolution (only an exact `false` mutes the
+    -- sound, everything else - an older SavedVariables without the field, a
+    -- hand-edited value - falls back to the default: ENABLED). The soft
+    -- migration of the existing saves is exactly this: a missing field means
+    -- "enabled", no schema bump is needed.
+    out.soundEnabled = Sound.resolveEnabled(raw.soundEnabled)
 
     local pos = raw.position
     if type(pos) == "table" then

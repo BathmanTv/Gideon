@@ -144,6 +144,58 @@ local function setPingMode(mode)
     return accepted
 end
 
+--- /gr sound (no argument): state of the ASSIGNMENT SOUNDBOARD preference and
+--- how to change it. The sound itself is played by the rendering layer the moment
+--- a composition is declared; Core/ owns the bounded resolution (only an exact
+--- `false` mutes it).
+local function printSoundSetting()
+    local db = _G.GideonRaidDB
+    local resolved = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
+    local word = ns.Locale.t(resolved.soundEnabled and "ui.wordEnabled" or "ui.wordDisabled")
+    ns.UI.Print(ns.Locale.format("cmd.sound.status", word))
+end
+
+--- /gr sound on|off: rules on the ASSIGNMENT SOUNDBOARD preference, persists it in
+--- the SavedVariables and says the new state. An unknown value is REFUSED
+--- (nothing is persisted, nothing is guessed): same mechanics as /gr lang and
+--- /gr ping.
+local function setSoundSetting(raw)
+    local wanted = type(raw) == "string" and raw:lower() or ""
+    local accepted = ns.Sound.resolveSwitch(wanted)
+    if accepted == nil then
+        ns.UI.Print(ns.Locale.format("cmd.sound.unknown", tostring(raw)))
+        return nil
+    end
+    local db = _G.GideonRaidDB
+    if type(db) == "table" then
+        if type(db.intermission) ~= "table" then
+            db.intermission = ns.Config.defaultIntermission()
+        end
+        db.intermission.soundEnabled = accepted
+    end
+    local word = ns.Locale.t(accepted and "ui.wordEnabled" or "ui.wordDisabled")
+    ns.UI.Print(ns.Locale.format("cmd.sound.updated", word))
+    return accepted
+end
+
+--- /gr sound test <1v3r|2v2r|3v1r> (and `/gr sound test` alone, which recalls the
+--- setting): plays ONE soundboard on request so the three files can be checked
+--- without waiting for a fight. An unknown state is REFUSED and nothing is played.
+local function soundCommand(argument)
+    local tested = argument:match("^test%s+(.+)$")
+    if tested ~= nil then
+        ns.UI.SoundTest(tested)
+        return
+    end
+    if argument == "test" then
+        -- The state is missing: recall the setting (its text names the three
+        -- accepted test values) instead of guessing which sound to play.
+        printSoundSetting()
+        return
+    end
+    setSoundSetting(argument)
+end
+
 local function slashHandler(cmd)
     cmd = (cmd or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     -- Intermission declaration: any form accepted by Core ("3V1R", "2V2R",
@@ -157,6 +209,10 @@ local function slashHandler(cmd)
     -- /gr ping <mode> : same mechanics (the pattern accepts anything and
     -- setPingMode() judges it: an unknown value is refused).
     local pingMode = cmd:match("^ping%s+(.+)$")
+    -- /gr sound <on|off|test ETA> : ASSIGNMENT SOUNDBOARD preference and its test
+    -- entry. The pattern accepts anything and soundCommand() judges it: an unknown
+    -- value is REFUSED (nothing is persisted, nothing is played).
+    local soundArg = cmd:match("^sound%s+(.+)$")
     -- /gr sim <mode> : SIMULATION MODE (rehearsal alone, no boss, no raid).
     -- The pattern accepts anything and Core/Simulation.resolveCommand() judges it:
     -- an unknown value is REFUSED (nothing is guessed, nothing is launched).
@@ -180,6 +236,10 @@ local function slashHandler(cmd)
         printPingMode()
     elseif pingMode ~= nil then
         setPingMode(pingMode)
+    elseif cmd == "sound" then
+        printSoundSetting()
+    elseif soundArg ~= nil then
+        soundCommand(soundArg)
     elseif cmd == "lock" then
         -- The main panel is movable by default; these three commands are the
         -- lock / unlock / reset-position entry points (same effect as the

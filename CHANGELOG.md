@@ -4,6 +4,70 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+**Assignment soundboards** requested by the raid lead: the moment a player
+declares their orb composition — a click on one of the three buttons, in the
+**real flow as in the `/gr sim inter` rehearsal** — the soundboard of **that**
+state is played, **once**. One file per canonical state, three **silent
+placeholders** shipped now (the real recordings are a plain file drop later, no
+code change), one **new persisted preference** (`/gr sound on|off`) and one
+**test entry** that does not need a fight (`/gr sound test 1v3r|2v2r|3v1r`).
+
+### Added
+
+- **Assignment soundboards** — `Core/Sound.lua`, PURE (no WoW API, testable out
+  of game): `1V3R` → `Sound/assign-1v3r.ogg`, `2V2R` →
+  `Sound/assign-2v2r.ogg`, `3V1R` → `Sound/assign-3v1r.ogg`, referenced through
+  `Interface\AddOns\GideonRaid\Sound\<file>`. The sound of the **declared** state
+  is played the moment the declaration is accepted, **once**: nothing is played
+  before a declaration, and a repeated declaration of the same composition, a
+  panel tick or a re-render can never double it. **CORRECT** re-arms the gate — a
+  new click plays the sound of the composition it declares, even when it is the
+  same one (natural behaviour, documented) — and so does every new intermission
+  and every new rehearsal.
+- **`PlaySoundFile` — the only audio call of the addon** — lives in
+  `UI/Intermission.lua`, on the **`Master`** channel, behind a `type()` guard and
+  a `pcall`: a missing file, a refused call or an absent API leaves the addon
+  **silent, without a Lua error and without interrupting the rendering**
+  (`tests/spec/sound_spec.lua` proves the declaration and the panel keep working
+  when the call raises or when the API is gone; `tests/spec/guard_spec.lua` now
+  fails if `PlaySoundFile` ever appears in `Core/`, outside `UI/`, or on a line
+  that is not guarded).
+- **`/gr sound`** (is the sound enabled, and how to change it), **`/gr sound
+  on|off`** (a value that is not `on` or `off` is **REFUSED without persisting
+  anything** — same mechanics as `/gr lang` and `/gr ping`) and **`/gr sound test
+  <1v3r|2v2r|3v1r>`**: plays one soundboard on request, so the three files can be
+  heard **without waiting for a fight**, and names the file it played. An unknown
+  state is refused and nothing is played; a muted sound stays silent and says so
+  (the test never contradicts the setting). `/gr inter status` now reports the
+  setting, and the `/gr` help lists the new commands in both languages.
+- **`Sound/assign-1v3r.ogg`, `Sound/assign-2v2r.ogg`, `Sound/assign-3v1r.ogg`**:
+  **silent placeholders** (0.2 s of silence, Ogg Vorbis, mono 44.1 kHz) that keep
+  the addon complete — and silent — until the raid lead delivers the real
+  recordings. They are **listed in `GideonRaid.toc`** (the client does not load a
+  sound that is not listed) and therefore packaged. `README.md` documents the
+  replacement procedure (section *Replacing the three sounds*): same names, same
+  folder, same format, **no code change**; a test also checks that `.pkgmeta`
+  never excludes `Sound/`.
+- **`GideonRaidDB.intermission.soundEnabled`**, `true` by default and resolved
+  TOTAL (only an exact `false` mutes the sound: an absent field — an older
+  SavedVariables — or a hand-edited value falls back to the default, so the soft
+  migration of the existing saves is a no-op).
+
+### Changed
+
+- Tests: **228 → 260** (`sound_spec.lua`: 31 new; `guard_spec.lua`: 7 → 8;
+  `load_spec.lua`: 49, `.toc` order and the new layer included), luacheck
+  **22 → 24 files**, `.toc` **9 → 13 entries** (10 Lua files + the 3 sounds),
+  and the test harness lists the whole `.toc` again
+  (`wowenv.tocEntries`; `wowenv.tocFiles` keeps returning the Lua files only).
+- Documents updated: `README.md` (soundboards section + replacement procedure +
+  command list + real `make check` output), `docs/INTERMISSION-COACH.md`
+  (configuration, commands, tests, in-game status) and `docs/TESTPLAN.md` (new
+  §1f, step 2 items and a new §3.5d in-game protocol: right sound on the click,
+  in EN and FR, no sound when the preference is off).
+
 ## [0.9.0] - 2026-09-23
 
 Three corrections and one confirmed measurement from the raid lead's **fifth**

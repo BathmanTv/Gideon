@@ -13,6 +13,7 @@ so that 90 % of the risk is eliminated before opening the client.
 | 1c | Language layer: strings, resolution, `/gr lang` | busted + lua5.1 | on every commit | CI + local |
 | 1d | Simulation mode: rehearsal + ping help (pure) | busted + lua5.1 | on every commit | CI + local |
 | 1e | Panel layout: stacking, overlap, overflow, button order (pure) | busted + lua5.1 | on every commit | CI + local |
+| 1f | Assignment soundboards: state → file table, one playback per assignment, `/gr sound` preference (pure) | busted + lua5.1 | on every commit | CI + local |
 | 2 | Addon loading (wiring, .toc, events, close cross, simulations) | busted + API stub | on every commit | CI + local |
 | 3 | Rendering and ergonomics in game | test client | before every patch | WoW client |
 | 4 | End-to-end GIDEON integration | Lua CLI + Discord | before every raid | VPS + Discord |
@@ -28,10 +29,10 @@ API. It is therefore runnable by `lua5.1` and by `busted`, installed on the VPS
 and on the GitHub runner.
 
 **File**: `tests/spec/pairing_spec.lua` (11 tests; the repository total is
-**228 tests**, spread over `intermission_spec.lua` (84), `load_spec.lua` (49),
+**260 tests**, spread over `intermission_spec.lua` (84), `load_spec.lua` (49),
 `locale_spec.lua` (21), `pingpolicy_spec.lua` (20), `layout_spec.lua` (22 — pure
-panel geometry and button sizing), `simulation_spec.lua` (14), `pairing_spec.lua` (11) and
-`guard_spec.lua` (7)).
+panel geometry and button sizing), `simulation_spec.lua` (14), `sound_spec.lua` (31 —
+assignment soundboards), `pairing_spec.lua` (11) and `guard_spec.lua` (8)).
 
 **How to run**:
 
@@ -305,10 +306,12 @@ fail (that is the number one addon bug).
 
 What is verified:
 
-1. the 9 files of the `.toc` are loaded in order (`Core/Locale.lua` second,
-   `Core/Layout.lua` before the `UI/` layer,
-   before the other `Core/` modules), and the 6 layers (`ns.Locale`,
-   `ns.Pairing`, `ns.Config`, `ns.Intermission`, `ns.UI`, `ns.GR`) are exposed;
+1. the 10 Lua files of the `.toc` are loaded in order (`Core/Locale.lua` second,
+   `Core/Sound.lua` third, `Core/Layout.lua` before the `UI/` layer,
+   before the other `Core/` modules), and the 9 layers (`ns.Locale`, `ns.Sound`,
+   `ns.Pairing`, `ns.Config`, `ns.Intermission`, `ns.Simulation`, `ns.Layout`,
+   `ns.UI`, `ns.GR`) are exposed — the three sound files listed in the `.toc` are
+   checked separately (`sound_spec.lua`: `.toc` entries, files on disk, packaging);
 2. `ADDON_LOADED` on `GideonRaid` initializes `GideonRaidDB` with the defaults
    (including `intermission` and `locale`);
 3. `ADDON_LOADED` on **another** addon does not touch the SavedVariables;
@@ -365,7 +368,21 @@ What is verified:
 24. the **stub refuses a non-string anchor** exactly like the client
     (`tests/support/wowapi_stub.lua`): the whole panel flow is exercised with that
     strictness, so an element without an anchor point (the fifth-test bug) can never
-    pass CI again.
+    pass CI again;
+25. **the assignment soundboard** (Step 1f, `sound_spec.lua`): the sound of the
+    **declared** composition is played **once**, on the `Master` channel, with the
+    file path of that state; **nothing** is played before a declaration, a repeated
+    declaration of the same composition does not replay it, **CORRECT** re-arms it,
+    a new intermission and a new rehearsal re-arm it, and `/gr sound off` silences
+    it while the panel keeps rendering;
+26. **`PlaySoundFile` is called from `UI/` only, under `pcall`** — a call that
+    raises or an absent API leaves the addon silent **without a Lua error** and
+    without interrupting the rendering (`guard_spec.lua` fails if the identifier
+    appears in `Core/`, outside `UI/`, or unguarded);
+27. **the three sound files ship with the addon**: they are listed in
+    `GideonRaid.toc` (the client does not load an unlisted sound), present on disk
+    (real Ogg Vorbis), and never excluded by `.pkgmeta` — a test fails if one of
+    them disappears.
 
 **`.toc` verification** (`tools/check_toc.py`, in CI):
 
@@ -557,6 +574,39 @@ button had disappeared).
 | 7 | Look at the width of the intermission panel | it is now **≈650 px** (as wide as its three composition labels require). Nothing to fix technically; if it feels too wide at your UI scale, lower the panel `scale` |
 | 8 | Grouped, hover **your own character frame / health bar** and press the ping key | the ping is displayed **on yourself** — this is the fifth-pass confirmation; it is written in the doc and is **no longer on the "to be confirmed" list** |
 
+### 3.5d In-game protocol — assignment soundboards (5 min, ALONE)
+
+**Goal**: validate what the out-of-game tests cannot hear: the **real playback** by
+the client. The three shipped files are **silent placeholders**, so this protocol
+checks the **plumbing** (which file is requested, when, once) and the preference;
+the real sounds only exist once the raid lead has dropped his recordings in `Sound/`
+(`README.md` §3.3 — same names, Ogg Vorbis, no code change, only a `/reload`).
+Keep `/console scriptErrors 1`: a Lua error here is a blocking regression (the
+playback is wrapped in `pcall`, so a refused call must stay silent and never break
+the panel).
+
+| # | Action | Expected |
+|---|---|---|
+| 1 | `/gr sound` | the chat answers `Assignment sound: enabled - one soundboard per composition (1V3R / 2V2R / 3V1R), played once when you click your composition. /gr sound on\|off to change it, /gr sound test 1v3r\|2v2r\|3v1r to hear one now.` (`actif`/`desactive` in French) |
+| 2 | `/gr sound test 1v3r`, then `2v2r`, then `3v1r` | each command **names its own file** in the chat: `Sound test: 1V3R (assign-1v3r.ogg)…`, `Sound test: 2V2R (assign-2v2r.ogg)…`, `Sound test: 3V1R (assign-3v1r.ogg)…` — with the **placeholders** you hear nothing (the files are silence, by design) but the plumbing is proven; **once the raid lead's recordings are in place**, each command plays its own soundboard: `1v3r` must play the **1V3R** sound, not the `3v1r` one — hear the three in a row to tell them apart |
+| 3 | `/gr sound test bidon` | refused: `Unknown sound 'bidon': accepted values are 1v3r, 2v2r, 3v1r.` and **nothing** is played |
+| 4 | `/gr sound yes` (or any value that is not `on`/`off`) | refused: `Unknown value 'yes': accepted values are on, off.`; `/gr sound` still reports the **previous** state (nothing was persisted) |
+| 5 | `/gr sim inter` (or a real intermission), then click a composition | the soundboard of **that** state plays **exactly once**, **at the click** — the state, the role, `PING: YES/NO` and the action line appear as usual, in the same instant |
+| 6 | Click the same composition again (`/gr inter 3V1R` twice, or force a click) | **no second sound**: one playback per assignment |
+| 7 | Click **CORRIGER**, then click a composition (the same one or another) | the sound of the newly clicked composition plays: a correction is a new decision |
+| 8 | Let the intermission end, wait for the **next** one, click the same composition as before | the sound plays again (a new intermission re-arms the playback) |
+| 9 | `/gr sound off`, then click a composition | **nothing plays**, and the panel is **unchanged**: state, role, `PING` banner and action line are all there (no Lua error, no frozen panel). `/gr inter status` reports `assignment sound: disabled` |
+| 10 | `/gr sound on`, then `/gr sound test 3v1r` | the sound plays again |
+| 11 | Switch the language (`/gr lang fr`, then `/gr lang en`) and redo points 1, 2 and 4 | the same messages in French (`/gr sound` = état, `/gr sound test` = « Test du son : … »), and an unknown value is still refused: the messages follow the active language like the rest of the addon |
+| 12 | `/reload`, then `/gr sound` | the preference survived (a `/gr sound off` before the reload is still off) — it lives in `GideonRaidDB.intermission.soundEnabled` |
+| 13 | Replace the three files in `Sound/` with the raid lead's recordings, `/reload`, then redo point 2 | the three **real** sounds play, one per composition, and nothing else had to be rebuilt |
+
+**Failure reading**: if a sound never plays while the chat says `Sound test: …`, the
+file is not where the `.toc` says it is (`Sound/`, lower case names) or the client
+did not load the addon: `PlaySoundFile` fails silently by design, and the addon stays
+silent too — check the **file names** first, then that the addon folder really is
+`Interface/AddOns/GideonRaid/`.
+
 ### 3.6 Recommended test environment
 
 A single "guinea pig" player is enough: the essential part (reading
@@ -660,6 +710,11 @@ covered in steps 1 and 2.
 | Player stuck on a wrong click | 1b + 2 | **REDO** button (`clearDeclaration`), unlimited and idempotent, tested in `intermission_spec.lua` and `load_spec.lua` |
 | Panel does not open (or opens too late) at the intermission | 1b + 2 | schedule machine tested out of game (opening at `intermission − lead`, no skip even with a huge `dt`) + protocol §3.5 points 4b/8c |
 | File forgotten in the `.toc` | 2 | `wowenv.loadAddon()` + `check_toc.py` |
+| **Sound file forgotten in the `.toc`** (the client does not load an unlisted sound) or deleted from the repository | 1f + 2 | `sound_spec.lua`: the three client paths are entries of the `.toc`, the three files exist on disk (real Ogg Vorbis) and `.pkgmeta` never excludes `Sound/`; `check_toc.py` also fails if a listed file is missing |
+| **Wrong sound for a composition** (file swapped between two states) | 1f + 3 | pure table `state -> file` tested state by state (three distinct names, no sharing) + protocol §3.5d point 2 (hear the three in a row) |
+| **Sound played twice / played without a declaration** | 1f + 2 | `Sound.takeAssignSound` refuses a repeat of the same assignment ("already") and an unknown state ("unknown") — asserted in `sound_spec.lua`; protocol §3.5d points 5/6/8 |
+| **Sound still playing when the player muted it** | 1f + 2 + 3 | total resolver (only an exact `false` mutes), `/gr sound off` then a click asserts **zero** `PlaySoundFile` call while the panel still renders; protocol §3.5d points 9/10 |
+| **A failing/absent sound call breaks the panel** | 2 | `PlaySoundFile` under `pcall` + `type()` guard, `guard_spec.lua` restricts it to `UI/`, `sound_spec.lua` runs the whole declaration flow with a raising and with an absent API |
 | Lua 5.1 syntax error | 2 | `make syntax` |
 | Crash at login / wrong event | 2 | `load_spec.lua` |
 | **A rehearsal corrupts a real fight** (timeline armed/disarmed, decision published, double state) | 1d + 2 + 3 | guard: `Core/Simulation.lua` must not reference `ENCOUNTER_START` / `Intermission.newRun` / `advanceRun` / `resetRun` / `RegisterEvent`; the two crosses, the two simulations and the refusals are driven tick by tick in `load_spec.lua`; no decision ever published; protocol §3.5b points 8/13 |

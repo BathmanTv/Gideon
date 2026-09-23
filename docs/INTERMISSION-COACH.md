@@ -342,6 +342,50 @@ Rules enforced by `tests/spec/layout_spec.lua` (22 tests) **in both languages**:
 is what makes "no overlap in either language" testable **out of game**, with a
 stubbed API, on every commit.
 
+### 2.7 Assignment soundboards (one sound per composition)
+
+Raid-lead request: the moment the player **declares** their orb composition — a click
+on one of the three buttons, in the **real flow** as in the **`/gr sim inter`
+rehearsal** — the soundboard of **that** state is heard, **once**.
+
+| State | File (in `Sound/`) | Client path |
+|---|---|---|
+| `1V3R` | `assign-1v3r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-1v3r.ogg` |
+| `2V2R` | `assign-2v2r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-2v2r.ogg` |
+| `3V1R` | `assign-3v1r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-3v1r.ogg` |
+
+Where each part of the rule lives:
+
+| Concern | Where | Why there |
+|---|---|---|
+| state → file table, client path | `Core/Sound.lua` (`Sound.FILES_BY_STATE`, `Sound.pathFor`) | pure data, testable out of game, and the ONLY place a file name appears |
+| "one playback per assignment" | `Core/Sound.lua` (`Sound.newAssigner`, `Sound.takeAssignSound`, `Sound.resetAssigner`) | it is a business rule, not rendering: a repeat, a tick or a re-render must not double the sound |
+| the preference (`on` / `off`) | `Core/Sound.lua` (`resolveSwitch` STRICT, `resolveEnabled` TOTAL) + `GideonRaidDB.intermission.soundEnabled` (`Core/Config.lua`) | bounded like `pingMode` and `locale`: an unknown value is refused, a hand-edited one falls back to the default (enabled) |
+| the actual playback | `UI/Intermission.lua` (`playSoundFile`, `UI.PlayAssignSound`, `UI.SoundTest`) | the only file allowed to call `PlaySoundFile`, on the `Master` channel, under `pcall` (a missing file or a refused call leaves the addon silent, with no Lua error) |
+| the trigger | `UI.IntermissionDeclare` (real flow **and** rehearsal) | the sound is a consequence of a **player click**, never of a clock or of an automatic decision |
+
+Behaviours, frozen out of game:
+
+- **no sound without a declaration**: the panel is silent until a composition is
+  clicked; a state that is not canonical is refused, nothing is guessed;
+- **once**: re-declaring the same composition (`/gr inter 3V1R` twice, a forced
+  click, a panel refresh, the engine ticks) **cannot** replay it;
+- **CORRECT re-arms it**: `REDO` then a click plays the sound of the composition
+  declared next — even when it is the same one (documented behaviour: a correction
+  is a new decision);
+- **a new intermission and a new rehearsal re-arm it** (`beginIntermission`,
+  `UI.SimulationInterStart`), so the same composition is sounded at every
+  intermission of the evening;
+- **`/gr sound test <state>`** plays one soundboard on request (no fight needed) and
+  names the file; an unknown state is refused and nothing is played; when the
+  preference is **off** nothing plays and the chat says so (`/gr sound on` first) —
+  the test never contradicts the setting;
+- the three shipped files are **silent placeholders** (0.2 s of silence, Ogg
+  Vorbis): replacing them with the raid lead's recordings is a **file drop** with
+  the same names (procedure in `README.md` §3.3), **no code change**. They are
+  **listed in `GideonRaid.toc`** (the client does not load an unlisted sound) and a
+  test fails if one of the three disappears from the repository or from `.pkgmeta`.
+
 ## 3. What the addon does / can NOT do (to be told to the players as is)
 
 **It can:**
@@ -364,6 +408,10 @@ stubbed API, on every commit.
   `GetBindingKey`, under `pcall`;
 - display the **2 s lead**, the **3 s visibility countdown**, then report that the
   room went dark, then close itself at the end;
+- play **one soundboard per composition** (1V3R / 2V2R / 3V1R) **once**, the moment
+  the player declares it — real flow and rehearsal alike — on the `Master` channel,
+  with `/gr sound on|off` to mute it and `/gr sound test 1v3r|2v2r|3v1r` to hear one
+  on request;
 - offer **REDO**: a mistaken click is corrected in one click, as many times as
   needed;
 - publish the player's decision (timestamped) into the SavedVariables: that is
@@ -511,6 +559,7 @@ In `GideonRaidDB.intermission` (values resolved and clamped by
 | `durationSeconds` | `20` | intermission duration, after which the panel closes itself (clamped, > visibility) |
 | `scheduleSeconds` | `{46.3, 148.9, 251.5, 353.2}` | **pre-computed intermission times**, in seconds since the pull (positive numbers only, sorted, 12 entries max) |
 | `pingMode` | `"anchors"` | **ping policy**: `anchors` (only the `1V3R` anchors ping), `color` (every state pings its own ping), `none` (nobody pings) — see `/gr ping`; an unknown value falls back to `"anchors"` |
+| `soundEnabled` | `true` | **assignment soundboard**: `true` plays the sound of the declared composition once (see §2.7), `false` mutes it — see `/gr sound on|off`; only an **exact `false`** mutes: an absent field (an older SavedVariables) or a hand-edited value falls back to the default |
 | `position` | `CENTER` | intermission panel position, saved on drag and drop (placement mode) |
 
 Outside `intermission`, the top level of the SavedVariables holds the **language
@@ -534,6 +583,12 @@ preference** and the **panel preferences** (positions + lock):
 /gr lang auto|en|fr       rules on the language and persists it in the SavedVariables
 /gr ping                  current ping policy and what it means for the roles
 /gr ping anchors|color|none   rules on the PING POLICY and persists it (default anchors)
+/gr sound                 is the assignment soundboard enabled? (and how to change it)
+/gr sound on | off        enables/disables the assignment soundboard (persisted; an
+                          unknown value is REFUSED and nothing is written)
+/gr sound test 1v3r       plays ONE soundboard now (also 2v2r, 3v1r) and names the
+                          file it played; an unknown state is refused, nothing plays
+                          when the sound is off (`/gr sound on` first)
 /gr inter                 shows/hides the intermission panel (close cross too)
 /gr inter start|stop      starts/stops ONE intermission manually
 /gr inter place           placement mode: drag the panel, prepare the ping, press OK
@@ -555,6 +610,9 @@ preference** and the **panel preferences** (positions + lock):
 `/gr inter 1` or `/gr inter 3` are **refused** with a message asking for the
 dominant color: the module never guesses the composition from the number.
 `/gr ping` with an unknown value is refused the same way (nothing is persisted).
+`/gr sound` with a value that is not `on` or `off` is refused the same way, and
+`/gr sound test <state>` refuses a state that is not `1v3r` / `2v2r` / `3v1r`
+(nothing is played).
 `/gr inter macro` **no longer exists**: the macro route is dead (see §4).
 
 A **binding** `GIDEONRAID_INTERMISSION` (no default key) is declared in
@@ -564,13 +622,17 @@ the panel; the ping keybinds are the client's own (ping system).
 ## 8. Out-of-game tests
 
 ```bash
-busted                                    # 228 tests: 84 for this module, 49 for the real loading
+busted                                    # 260 tests: 84 for this module, 49 for the real loading
                                           # (panels, close cross, simulations, button order,
                                           #  placement OK button, rehearsal composition buttons),
+                                          # 31 for the ASSIGNMENT SOUNDBOARDS (table state -> file,
+                                          #  .toc + files on disk + packaging, bounded /gr sound
+                                          #  preference, one playback per assignment, survival to a
+                                          #  failing or absent PlaySoundFile),
                                           # 21 for the language, 20 for the ping policy,
                                           # 22 for the pure panel geometry + button sizing (EN + FR),
                                           # 14 for the rehearsal + ping help (pure),
-                                          # 11 for the pairing, 7 for the anti-API guard
+                                          # 11 for the pairing, 8 for the anti-API guard
 lua5.1 tools/intermission_cli.lua all     # the 3 states + action lines
 lua5.1 tools/intermission_cli.lua roles   # the 3 states under the 3 ping policies
 lua5.1 tools/intermission_cli.lua 3V1R    # one state
@@ -832,3 +894,12 @@ they are kept here as a record and are no longer open questions.
     icon of the fix is `scale` in `GideonRaidDB.intermission` (`/gr inter` status shows
     it), or a shorter label in `Core/Locale.lua` (`state.buttonLabel.*`) - never a
     hard-coded size in `UI/`.
+18. **The assignment soundboards in the client** (see §2.7 and
+    `docs/TESTPLAN.md` §3.5d): the three shipped files are SILENT placeholders, so
+    what must be checked first is the plumbing — `/gr sound` says `enabled`,
+    `/gr sound test 1v3r` (then `2v2r`, `3v1r`) plays and names each file,
+    `/gr sound off` then a click on a composition plays **nothing** while the panel
+    keeps rendering, and `/gr sound on` restores it. The **real** sounds only exist
+    once the raid lead has dropped his three recordings in `Sound/` (same names,
+    Ogg Vorbis, `README.md` §3.3): after replacing them there is **nothing to
+    rebuild**, only a `/reload`.

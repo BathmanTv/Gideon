@@ -45,6 +45,18 @@
     panel: the intermission clock keeps running, the panel still closes by itself
     at the end and opens again at the next intermission (nothing is disarmed).
 
+    ASSIGNMENT SOUNDBOARDS (raid-lead request): the moment the player DECLARES
+    their orb composition - a click on one of the three buttons, in the REAL flow
+    as in a rehearsal - the soundboard OF THAT STATE is played ONCE, on the
+    Master channel. Core/Sound.lua owns the pure table state -> file, the
+    one-playback-per-assignment gate and the bounded preference (/gr sound
+    on|off); THIS file is the only one that calls PlaySoundFile, under pcall, so a
+    missing file or a refused call leaves the addon silent without a Lua error and
+    without blocking the rest of the rendering. CORRECT re-arms the gate (the next
+    click plays the sound of the new composition) and so does every new
+    intermission. The three files are SILENT PLACEHOLDERS until the raid lead
+    delivers the real recordings (README.md, "Replacing the three sounds").
+
     SIMULATION MODE (two entries, reachable from the main panel AND from the
     chat): see the dedicated block below. It never arms, disarms or advances the
     ENCOUNTER_START timeline, never touches the live intermission state, never
@@ -67,6 +79,11 @@ local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before UI/Inter
 --- renders it and feeds it the injected time step.
 local Simulation = assert(ns.Simulation, "Core/Simulation.lua must be loaded before UI/Intermission.lua")
 
+--- Core/Sound.lua is loaded BEFORE this file by the .toc: it owns the PURE table
+--- "canonical state -> soundboard file", the one-playback-per-assignment gate and
+--- the bounded preference. THIS layer is the only one that plays anything.
+local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before UI/Intermission.lua")
+
 local UI = ns.UI or {}
 ns.UI = UI
 
@@ -75,6 +92,12 @@ ns.UI = UI
 local TICK_SECONDS = 0.1
 
 local panel, ticker, state, run, setupMode
+
+--- ONE-PLAYBACK-PER-ASSIGNMENT gate of the assignment soundboards (Core/Sound.lua).
+--- It is reset at every new intermission, at every rehearsal and by CORRECT: a
+--- repeated declaration of the SAME composition is sounded once, and a new
+--- declaration plays the sound of the NEW composition (documented behaviour).
+local soundAssigner = Sound.newAssigner()
 
 --- SIMULATION MODE owns its OWN run and state (see the block further down): the
 --- rehearsal can therefore never arm, disarm or move the real flow. The ping
@@ -115,6 +138,81 @@ local function resolveBindingKey(bindNames)
         end
     end
     return nil
+end
+
+--- ---------------------------------------------------------------------------
+--- ASSIGNMENT SOUNDBOARDS: the ONLY audio call of the whole addon.
+--- ---------------------------------------------------------------------------
+
+--- Plays one sound file on the MASTER channel. The FILE and the CHANNEL are
+--- decided by Core/Sound.lua; this layer only hands them to the client.
+--- API ref 12.x: https://warcraft.wiki.gg/wiki/API_PlaySoundFile
+--- Constraint: a file that does not exist, a path the client refuses or an API
+--- that is not there must leave the addon SILENT, without an error and without
+--- interrupting the rest of the rendering: hence the type() guard and the pcall,
+--- exactly like the ping keybind read above (GetBindingKey).
+--- @param path string|nil client path ("Interface\AddOns\GideonRaid\Sound\...")
+--- @param channel string|nil sound channel ("Master")
+--- @return boolean played
+local function playSoundFile(path, channel)
+    if type(path) ~= "string" or path == "" then
+        return false
+    end
+    if type(_G.PlaySoundFile) ~= "function" then
+        return false
+    end
+    local ok = pcall(_G.PlaySoundFile, path, channel)
+    return ok == true
+end
+
+--- THE ASSIGNMENT SOUNDBOARD of the composition the player just declared (real
+--- flow as in a rehearsal). Core decides: one file per canonical state, ONE
+--- playback per assignment, and the player preference; an unknown declaration, a
+--- disabled preference or an already sounded assignment simply stays silent.
+--- @param declaration string|nil canonical state ("1V3R" | "2V2R" | "3V1R")
+--- @return boolean played
+function UI.PlayAssignSound(declaration)
+    local c = config()
+    local request = Sound.takeAssignSound(soundAssigner, declaration, c.soundEnabled)
+    if request == nil then
+        return false
+    end
+    return playSoundFile(request.path, request.channel)
+end
+
+--- Forgets the current assignment (CORRECT, `/gr inter stop`, every new
+--- intermission and every rehearsal): the NEXT click plays the sound of the
+--- composition it declares - the natural behaviour after a correction.
+function UI.ResetAssignSound()
+    Sound.resetAssigner(soundAssigner)
+    return soundAssigner
+end
+
+--- `/gr sound test <1v3r|2v2r|3v1r>`: plays ONE soundboard on request, so the
+--- raid lead can hear and identify the three files WITHOUT waiting for a fight.
+--- BOUNDED: an unknown state is REFUSED (nothing is played), and the player
+--- preference is honoured - a muted sound stays silent and says so, so a test can
+--- never contradict the setting.
+--- @param raw string|nil state written by the player ("1v3r", "2V2R", ...)
+--- @return boolean played
+function UI.SoundTest(raw)
+    local resolved = Sound.resolveState(raw)
+    if resolved == nil then
+        UI.Print(Locale.format("cmd.sound.unknownState", tostring(raw)))
+        return false
+    end
+    local c = config()
+    if not c.soundEnabled then
+        UI.Print(Locale.t("cmd.sound.testDisabled"))
+        return false
+    end
+    local played = playSoundFile(Sound.pathFor(resolved), Sound.CHANNEL)
+    if not played then
+        UI.Print(Locale.format("cmd.sound.failed", tostring(Sound.fileName(resolved))))
+        return false
+    end
+    UI.Print(Locale.format("cmd.sound.test", resolved, tostring(Sound.fileName(resolved))))
+    return true
 end
 
 --- The engine ticks only while something is timed: a SIMULATION (rehearsal or
@@ -496,6 +594,8 @@ end
 local function clearSimulation()
     simRun = nil
     simState = nil
+    -- The rehearsal is over: its assignment soundboard is forgotten too.
+    UI.ResetAssignSound()
     if pingPanel ~= nil then
         pingPanel:Hide()
     end
@@ -679,6 +779,8 @@ function UI.SimulationInterStart(options)
         UI.Print(Locale.format("ui.intermissionError", tostring(startErr)))
         return
     end
+    -- NEW REHEARSAL: the soundboard gate is re-armed (see beginIntermission).
+    UI.ResetAssignSound()
     UI.IntermissionShow()
     UI.Print(Locale.t("cmd.sim.inter"))
 end
@@ -807,6 +909,9 @@ local function beginIntermission(c)
         UI.Print(Locale.format("ui.intermissionError", tostring(err)))
         return false
     end
+    -- NEW INTERMISSION: the assignment soundboard gate is re-armed, so the SAME
+    -- composition declared at the next intermission plays its sound again.
+    UI.ResetAssignSound()
     ensureTicker()
     UI.IntermissionShow()
     return true
@@ -835,6 +940,7 @@ function UI.IntermissionStop()
     if state ~= nil then
         ns.Intermission.reset(state)
     end
+    UI.ResetAssignSound()
     UI.IntermissionHide()
 end
 
@@ -889,6 +995,10 @@ end
 --- Player declaration: click on a COMPOSITION button (3V1R / 2V2R / 1V3R).
 --- A bare ambiguous number ("1" or "3" alone) is refused by Core with a message
 --- asking for the dominant color.
+--- The ASSIGNMENT SOUNDBOARD of the declared state is played HERE, once, the
+--- moment the declaration is accepted (real flow and rehearsal alike): nothing is
+--- played without a declaration, and Core/Sound.lua refuses a second playback of
+--- the same assignment (CORRECT re-arms it).
 function UI.IntermissionDeclare(declaration)
     local c = config()
     if not c.enabled then
@@ -908,6 +1018,7 @@ function UI.IntermissionDeclare(declaration)
             UI.Print(Locale.format("ui.declarationRefused", tostring(simErr)))
             return
         end
+        UI.PlayAssignSound(simState.declaration)
         UI.IntermissionRefresh()
         return
     end
@@ -922,6 +1033,8 @@ function UI.IntermissionDeclare(declaration)
         UI.Print(Locale.format("ui.declarationRefused", tostring(err)))
         return
     end
+    -- The soundboard of the state just declared, played ONCE (see Core/Sound.lua).
+    UI.PlayAssignSound(state.declaration)
     -- We PUBLISH the timestamped decision into the SavedVariables: the
     -- diagnostic kit (GideonDiagAddon) reads it afterwards, with no chat input
     -- during combat and no inter-addon communication.
@@ -943,6 +1056,8 @@ end
 
 --- REDO / CORRECT button: forgets the declaration and shows the three
 --- composition choices again. Usable as many times as the player wants.
+--- It also RE-ARMS the assignment soundboard: the next click plays the sound of
+--- the composition it declares, even when it is the same one (documented).
 function UI.IntermissionRedo()
     -- The state CURRENTLY shown: during a rehearsal it is the simulation state, so
     -- REDO corrects the simulated declaration and never the live one.
@@ -955,6 +1070,7 @@ function UI.IntermissionRedo()
         UI.Print(Locale.format("ui.redoFailed", tostring(err)))
         return
     end
+    UI.ResetAssignSound()
     UI.IntermissionRefresh()
 end
 
@@ -1008,6 +1124,7 @@ function UI.IntermissionStatus()
     UI.Print(Locale.format("ui.timelineLine", c.visibilitySeconds, c.durationSeconds, c.scale))
     UI.Print(Locale.format("ui.pingPolicyLine", c.pingMode, snap.policyLine))
     UI.Print(Locale.format("ui.scheduleLine", #c.scheduleSeconds, c.leadSeconds))
+    UI.Print(Locale.format("ui.soundLine", Locale.t(c.soundEnabled and "ui.wordEnabled" or "ui.wordDisabled")))
 end
 
 --- `/gr inter ping`: which ping to use and which key to press, plus the binding

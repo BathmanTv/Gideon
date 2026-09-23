@@ -54,11 +54,13 @@ Locale.STRINGS = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r\n"
             .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r\n"
             .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
             .. "  /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
@@ -141,6 +143,48 @@ Locale.STRINGS = {
     ["cmd.ping.unknown"] = {
         en = "Unknown ping policy '%s': accepted values are anchors, color, none.",
         fr = "Politique de ping inconnue '%s' : valeurs acceptees anchors, color, none.",
+    },
+
+    -- ------------------------------------------------- assignment soundboards
+    -- ONE sound per canonical state (1V3R / 2V2R / 3V1R), played ONCE when the
+    -- player declares their composition. The file names are never displayed as
+    -- paths: only the short name of the file is shown, so a player can tell the
+    -- raid lead WHICH soundboard they heard (or did not hear).
+    ["cmd.sound.status"] = {
+        en = "Assignment sound: %s - one soundboard per composition (1V3R / 2V2R / 3V1R), played once "
+            .. "when you click your composition. /gr sound on|off to change it, /gr sound test 1v3r|2v2r|3v1r "
+            .. "to hear one now.",
+        fr = "Son d'assignation : %s - un son par composition (1V3R / 2V2R / 3V1R), joue une fois quand tu "
+            .. "cliques ta composition. /gr sound on|off pour changer, /gr sound test 1v3r|2v2r|3v1r pour en "
+            .. "ecouter un maintenant.",
+    },
+    ["cmd.sound.updated"] = {
+        en = "Assignment sound = %s.",
+        fr = "Son d'assignation = %s.",
+    },
+    ["cmd.sound.unknown"] = {
+        en = "Unknown value '%s': accepted values are on, off.",
+        fr = "Valeur inconnue '%s' : valeurs acceptees on, off.",
+    },
+    ["cmd.sound.unknownState"] = {
+        en = "Unknown sound '%s': accepted values are 1v3r, 2v2r, 3v1r.",
+        fr = "Son inconnu '%s' : valeurs acceptees 1v3r, 2v2r, 3v1r.",
+    },
+    ["cmd.sound.test"] = {
+        en = "Sound test: %s (%s) should have played. If you heard nothing, check that the file was replaced "
+            .. "correctly (same name, Ogg Vorbis) and that the game volume is up.",
+        fr = "Test du son : %s (%s) devrait avoir ete joue. Si tu n'as rien entendu, verifie que le fichier a "
+            .. "bien ete remplace (meme nom, Ogg Vorbis) et que le volume du jeu est monte.",
+    },
+    ["cmd.sound.testDisabled"] = {
+        en = "Assignment sound is disabled: /gr sound on, then /gr sound test again.",
+        fr = "Le son d'assignation est desactive : /gr sound on, puis /gr sound test a nouveau.",
+    },
+    ["cmd.sound.failed"] = {
+        en = "Sound %s could not be played (file missing or PlaySoundFile unavailable): the addon stays "
+            .. "silent, nothing else is affected.",
+        fr = "Le son %s n'a pas pu etre joue (fichier manquant ou PlaySoundFile indisponible) : l'addon reste "
+            .. "silencieux, rien d'autre n'est affecte.",
     },
 
     -- -------------------------------------------------------------- ping policy
@@ -329,6 +373,10 @@ Locale.STRINGS = {
     ["ui.scheduleLine"] = {
         en = "schedule: %d intermission(s), panel opens %d s before each one",
         fr = "planning : %d intermission(s), le panneau s'ouvre %d s avant chacune",
+    },
+    ["ui.soundLine"] = {
+        en = "assignment sound: %s (one soundboard per composition, /gr sound on|off)",
+        fr = "son d'assignation : %s (un son par composition, /gr sound on|off)",
     },
 
     -- -------------------------------------------- placement mode (before pull)

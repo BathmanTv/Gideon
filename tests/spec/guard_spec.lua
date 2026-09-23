@@ -65,11 +65,15 @@ local NEVER_EVEN_IN_A_STRING = { "C_Ping", "SendMacroPing", "PingSubjectType" }
 --- Lecture de raccourci : autorisee, mais encadree (voir le test dedie).
 local BINDING_LOOKUP = "GetBindingKey"
 
+--- Lecture audio : autorisee, mais encadree (voir le test dedie). Core/ n'a
+--- JAMAIS le droit d'appeler PlaySoundFile (c'est la couche de rendu qui joue).
+local SOUND_PLAYBACK = "PlaySoundFile"
+
 describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(9, #files)
+        assert.are.equal(10, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -102,6 +106,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         -- lecture de GideonRaidDB, verifiee separement pour les modules de CALCUL.
         local pureFiles = {
             "Core/Locale.lua",
+            "Core/Sound.lua",
             "Core/Config.lua",
             "Core/Pairing.lua",
             "Core/Intermission.lua",
@@ -116,7 +121,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             assert.is_nil(code:find("UnitName", 1, true), file .. " lit une unite (interdit dans Core/)")
             assert.is_nil(code:find(BINDING_LOOKUP, 1, true), file .. " lit un raccourci (reserve a la couche de rendu)")
         end
-        for _, file in ipairs({ "Core/Pairing.lua", "Core/Intermission.lua", "Core/Simulation.lua" }) do
+        for _, file in ipairs({ "Core/Pairing.lua", "Core/Intermission.lua", "Core/Simulation.lua", "Core/Sound.lua" }) do
             local code = stripComments(readFile(file))
             assert.is_nil(code:find("GideonRaidDB", 1, true), file .. " lit les SavedVariables (interdit dans Core/)")
         end
@@ -161,5 +166,42 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
                 assert.is_nil(code:find(token, 1, true), file .. " appelle " .. token .. " (le client refuse)")
             end
         end
+    end)
+
+    it("joue un son UNIQUEMENT dans la couche de rendu et SOUS pcall", function()
+        -- PlaySoundFile est le SEUL appel audio de l'addon. Il ne doit apparaitre
+        -- ni dans Core/ (une table pure y decide QUOI jouer, jamais l'appel), ni
+        -- hors de UI/, et chaque ligne qui l'appelle doit etre protegee par
+        -- pcall (ou par le type() qui precede l'appel) : un fichier manquant ou
+        -- un client qui refuse doit laisser l'addon SILENCIEUX, sans erreur Lua.
+        for _, file in ipairs({
+            "Core/Locale.lua",
+            "Core/Sound.lua",
+            "Core/Config.lua",
+            "Core/Pairing.lua",
+            "Core/Intermission.lua",
+            "Core/Simulation.lua",
+            "Core/Layout.lua",
+        }) do
+            local code = stripStrings(stripComments(readFile(file)))
+            assert.is_nil(code:find(SOUND_PLAYBACK, 1, true), file .. " appelle " .. SOUND_PLAYBACK .. " (interdit dans Core/)")
+        end
+        local found = false
+        for _, file in ipairs(files) do
+            -- Les chaines sont retirees ici : un message qui NOMME PlaySoundFile
+            -- (Core/Locale.lua) n'est pas un appel.
+            local code = stripStrings(stripComments(readFile(file)))
+            if code:find(SOUND_PLAYBACK, 1, true) ~= nil then
+                found = true
+                assert.is_truthy(file:match("^UI/") ~= nil, file .. " joue un son hors de UI/")
+                for line in code:gmatch("[^\n]+") do
+                    if line:find(SOUND_PLAYBACK, 1, true) ~= nil then
+                        local guarded = line:find("pcall(", 1, true) ~= nil or line:find("type(", 1, true) ~= nil
+                        assert.is_true(guarded, file .. " : lecture audio NON protegee : " .. line)
+                    end
+                end
+            end
+        end
+        assert.is_true(found, "l'appel audio de l'assignation a disparu de la couche de rendu")
     end)
 end)

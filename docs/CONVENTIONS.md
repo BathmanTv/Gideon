@@ -93,12 +93,20 @@ GideonRaid/                      <- REPOSITORY ROOT = ADDON ROOT
 │                                   in the .toc (see §10)
 ├── Core/
 │   ├── Locale.lua               <- in-game strings (en/fr) + language resolution
+│   ├── Sound.lua                <- assignment soundboards (PURE): state -> .ogg
+│   │                               file, one playback per assignment, bounded
+│   │                               /gr sound preference
 │   ├── Config.lua               <- defaults + SavedVariables
 │   ├── Pairing.lua              <- pairing engine (PURE)
 │   └── Intermission.lua         <- Intermission Coach (PURE)
 ├── UI/
 │   ├── Panel.lua                <- rendering
-│   └── Intermission.lua         <- intermission panel rendering
+│   └── Intermission.lua         <- intermission panel rendering + the ONLY audio
+│                                   call of the addon (PlaySoundFile, under pcall)
+├── Sound/                       <- the three soundboards, LISTED in the .toc
+│   ├── assign-1v3r.ogg
+│   ├── assign-2v2r.ogg
+│   └── assign-3v1r.ogg
 ├── libs/                        <- embedded libraries (externals), never edited
 ├── tests/
 │   ├── spec/*_spec.lua          <- busted
@@ -288,6 +296,16 @@ A task is finished if, **and only if**:
    darkening. Same rule for the vestigial messages: **never** point the player to
    a command that does not exist (the absent out-of-game plan is reported by a
    single discreet line, or not at all).
+8. **The assignment soundboard is played by the RENDERING layer only.**
+   `PlaySoundFile` (<https://warcraft.wiki.gg/wiki/API_PlaySoundFile>) is called
+   **in `UI/` only**, **under `pcall`** and behind a `type()` guard, on the
+   `Master` channel. `Core/Sound.lua` decides **which** file and **when** (pure
+   table `state -> file`, one-playback-per-assignment gate, bounded `/gr sound`
+   preference) and **never plays anything**: a missing file or a refused call must
+   leave the addon silent, without a Lua error and without interrupting the
+   rendering. The three files are **listed in `.toc`** (the client does not load
+   an unlisted sound) and must **never** be excluded by `.pkgmeta`;
+   `tests/spec/guard_spec.lua` fails if the call leaves `UI/` or loses its guard.
 
 ---
 

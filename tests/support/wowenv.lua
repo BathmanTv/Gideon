@@ -30,6 +30,11 @@ end
 function wowenv.loadCore()
     local ns = wowenv.newNamespace()
     wowenv.load("Core/Locale.lua", ns)
+    -- Core/Sound.lua vient JUSTE APRES Locale.lua : il porte la table pure
+    -- « etat canonique -> fichier de son », la garde « un seul son par
+    -- assignation » et les resolveurs BORNES de la preference /gr sound.
+    -- Core/Config.lua le lit, il doit donc etre charge avant lui.
+    wowenv.load("Core/Sound.lua", ns)
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
     wowenv.load("Core/Intermission.lua", ns)
@@ -43,15 +48,33 @@ function wowenv.loadCore()
     return ns
 end
 
---- Liste les fichiers .lua du .toc, dans l'ordre de chargement du client.
---- Garantit que lire le .toc et charger l'addon donnent le meme resultat.
-function wowenv.tocFiles(tocPath)
+--- Liste TOUTES les entrees du .toc (fichiers .lua ET fichiers de son), dans
+--- l'ordre de chargement du client. Un son NON liste dans le .toc n'est pas
+--- charge par le client : c'est justement ce que verifie sound_spec.lua.
+function wowenv.tocEntries(tocPath)
     local path = tocPath or "GideonRaid.toc"
     local out = {}
     for line in io.lines(ROOT .. path) do
         local trimmed = line:match("^%s*(.-)%s*$")
         if trimmed ~= "" and not trimmed:match("^#") then
             out[#out + 1] = trimmed:gsub("\\", "/")
+        end
+    end
+    return out
+end
+
+--- Liste les fichiers .lua du .toc, dans l'ordre de chargement du client.
+--- Garantit que lire le .toc et charger l'addon donnent le meme resultat.
+--- Les sons (Sound/*.ogg) sont listes dans le .toc pour que le CLIENT les charge,
+--- mais lua ne les execute pas : ils sont donc filtres ici (voir tocEntries pour
+--- la liste complete).
+function wowenv.tocFiles(tocPath)
+    local out = {}
+    local entries = wowenv.tocEntries(tocPath)
+    for index = 1, #entries do
+        local rel = entries[index]
+        if rel:match("%.lua$") ~= nil then
+            out[#out + 1] = rel
         end
     end
     return out

@@ -47,22 +47,27 @@ describe("chargement de l'addon", function()
 
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(9, #files)
+        assert.are.equal(10, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
-        assert.are.equal("Core/Config.lua", files[3])
+        -- Core/Sound.lua juste apres Locale.lua et AVANT Config.lua : Config en
+        -- resout la preference bornee (/gr sound), et il porte la table pure
+        -- « etat -> fichier de son » du son d'assignation.
+        assert.are.equal("Core/Sound.lua", files[3])
+        assert.are.equal("Core/Config.lua", files[4])
         -- Core/Simulation.lua APRES Intermission.lua (il reutilise ses etats et
         -- ses libelles), Core/Layout.lua EN DERNIER des Core/ (il mesure les
         -- libelles), puis la couche de rendu (UI/) qui applique le tout.
-        assert.are.equal("Core/Simulation.lua", files[6])
-        assert.are.equal("Core/Layout.lua", files[7])
-        assert.are.equal("UI/Panel.lua", files[8])
-        assert.are.equal("UI/Intermission.lua", files[9])
+        assert.are.equal("Core/Simulation.lua", files[7])
+        assert.are.equal("Core/Layout.lua", files[8])
+        assert.are.equal("UI/Panel.lua", files[9])
+        assert.are.equal("UI/Intermission.lua", files[10])
     end)
 
     it("expose toutes les couches attendues", function()
         assert.is_table(ns.Locale)
+        assert.is_table(ns.Sound)
         assert.is_table(ns.Pairing)
         assert.is_table(ns.Config)
         assert.is_table(ns.Intermission)

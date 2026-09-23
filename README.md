@@ -95,6 +95,7 @@ possible:
 | Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
 | After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button; **the three composition buttons disappear** (REDO brings them back, empty state) | convention frozen in `Core/Intermission.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
+| Assignment sound | **one soundboard per composition**, played **once** the moment you declare yours (real flow *and* rehearsal), on the Master channel; `/gr sound on\|off` mutes it, `/gr sound test 1v3r\|2v2r\|3v1r` plays one on request | `Core/Sound.lua` (pure table) + three Ogg files in `Sound/` |
 | Close cross (`X`, top right) | closes the panel — on **both** the main panel, the intermission panel and the ping help window | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
 | SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens **RIGHT AWAY** with **its three composition buttons** (`1V3R` / `2V2R` / `3V1R`, sized on their own labels), you click your composition, get the state + role + `PING: YES/NO` + the action line, correct it with REDO and **you close it yourself** (X or Close) - ONE single cycle, nothing closes it and nothing relaunches it; **Ping help** (`/gr sim ping` = `/gr pinghelp`): a **short information window** (draggable, closable) telling you **how to bind one key per ping** (`Options > Keybindings > Ping`) and the operational reminder - **during the boss, when the panel says `PING: YES`, hover YOUR OWN character frame and press your key: you ping yourself** - plus the two limits: pings only show **while grouped** and **the addon cannot detect a ping** | pure logic in `Core/Simulation.lua` + the pure layout in `Core/Layout.lua` (+ the close cross and the main-panel buttons) |
 
@@ -212,6 +213,75 @@ make inter    # convention + action lines, out of game
 make plan     # pre-pull view from the contract fixture
 ```
 
+### 3.3 Assignment soundboards (one sound per composition)
+
+Requested by the raid lead: the moment you **declare** your orb composition — a
+click on one of the three buttons, in the real flow **as in the `/gr sim inter`
+rehearsal** — the soundboard of **that** state is played, **once**.
+
+| State | File | Client path |
+|---|---|---|
+| `1V3R` | `Sound/assign-1v3r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-1v3r.ogg` |
+| `2V2R` | `Sound/assign-2v2r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-2v2r.ogg` |
+| `3V1R` | `Sound/assign-3v1r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-3v1r.ogg` |
+
+```bash
+/gr sound                  # is the sound enabled? (and how to change it)
+/gr sound on | off         # enable/disable it (persisted; an unknown value is refused)
+/gr sound test 1v3r        # hear one soundboard now, without waiting for a fight
+/gr sound test 2v2r        # (also: 3v1r)
+```
+
+Rules, all covered out of game by `tests/spec/sound_spec.lua`:
+
+- **No sound without a declaration**: nothing is played until you click your
+  composition (a state that is not `1V3R` / `2V2R` / `3V1R` is refused, nothing is
+  guessed);
+- **Once**: a repeated declaration of the same composition, a panel tick or a
+  re-render cannot double the sound. **CORRECT** re-arms it: the next click plays
+  the sound of the composition it declares, even when it is the same one. A new
+  intermission (and a new rehearsal) re-arms it too;
+- **Silent on failure**: a missing file, a refused call or an absent
+  `PlaySoundFile` leaves the addon silent, **without a Lua error** and without
+  interrupting the panel — the declaration and the rendering carry on;
+- **`PlaySoundFile` is called from `UI/` only, under `pcall`, on the `Master`
+  channel** (your master volume applies). `tests/spec/guard_spec.lua` fails if it
+  ever appears in `Core/`, outside `UI/`, or unguarded;
+- the choice of the file per state is a **pure table in `Core/Sound.lua`**
+  (`Sound.FILES_BY_STATE`), testable without the client;
+- the preference lives in `GideonRaidDB.intermission.soundEnabled` (`true` by
+  default). It is resolved **totally**: only an exact `false` mutes the sound, so
+  an older SavedVariables (no field) or a hand-edited value falls back to the
+  default — the migration of the existing saves is a no-op.
+
+#### Replacing the three sounds (when the real recordings are ready)
+
+The three shipped files are **silent placeholders** (0.2 s of silence, Ogg
+Vorbis), so nothing is broken in the meantime. Replacing them is a **file drop,
+with no code change**:
+
+1. record/convert each soundboard as **Ogg Vorbis** (`.ogg`; a `.wav` or `.mp3`
+   file is **not** what the `.toc` lists). Speech or a short musical sting both
+   work; keep them short (a few seconds at most) — the intermission lasts about
+   20 s and the sound plays on the composition click;
+2. name them **exactly**: `assign-1v3r.ogg`, `assign-2v2r.ogg`, `assign-3v1r.ogg`
+   (lower case, no accent, no space) and drop them into the addon's `Sound/`
+   folder, **overwriting** the placeholders:
+   `World of Warcraft/_retail_/Interface/AddOns/GideonRaid/Sound/`;
+3. do **not** rename, move or delete anything else: the three names are already
+   listed in `GideonRaid.toc` and packaged by `.pkgmeta` (a test fails if a listed
+   sound is missing from the repository);
+4. in game, `/reload`, then `/gr sound test 1v3r` (then `2v2r`, `3v1r`): the chat
+   names the file it played — that is how you confirm **which** file you heard.
+   The sound is muted if the preference is off (`/gr sound off` then
+   `/gr sound test` says so): `/gr sound on` first.
+
+`ffmpeg` one-liner used for the placeholders (adaptive to any source file):
+
+```bash
+ffmpeg -i mysound.wav -c:a libvorbis -q:a 5 Sound/assign-1v3r.ogg
+```
+
 Full detail (convention, ping keybinds, `plan` contract, configuration, "to be
 confirmed in game" items):
 [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
@@ -263,6 +333,8 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │                         NEVER listed in the .toc)
 ├── Core/              <- PURE LOGIC (zero WoW API, testable)
 │   ├── Locale.lua     <- in-game strings (en/fr) + language resolution
+│   ├── Sound.lua      <- ASSIGNMENT SOUNDBOARDS: pure table state -> .ogg file,
+│   │                     one-playback-per-assignment gate, bounded /gr sound preference
 │   ├── Config.lua
 │   ├── Pairing.lua
 │   ├── Intermission.lua
@@ -271,7 +343,12 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │   └── Simulation.lua <- SIMULATION mode: rehearsal + ping help (no guided sequence)
 ├── UI/                <- RENDERING (zero computation: it APPLIES Core/Layout as is)
 │   ├── Panel.lua      <- main panel + the shared layout applier (+ the close cross)
-│   └── Intermission.lua <- intermission panel + the ping help window (close cross, banner)
+│   └── Intermission.lua <- intermission panel + the ping help window (close cross, banner,
+│                           and the ONLY audio call of the addon: PlaySoundFile, under pcall)
+├── Sound/             <- the three assignment soundboards, LISTED in the .toc
+│   ├── assign-1v3r.ogg  (1V3R)   <- silent placeholders until the raid lead
+│   ├── assign-2v2r.ogg  (2V2R)   delivers the real recordings: same names,
+│   └── assign-3v1r.ogg  (3V1R)   same folder, no code change (README §3.3)
 ├── libs/              <- embedded libraries (externals)
 ├── tests/             <- busted + fixtures (excluded from the zip)
 ├── tools/             <- CLI + .toc validator (excluded from the zip)
@@ -298,30 +375,34 @@ Reference result (after the Intermission Coach redesign, the close cross + SIMUL
 mode, the fourth in-game pass (no ping macro, minimal panel, REDO, full evening
 flow with the pre-computed schedule, panels laid out by `Core/Layout.lua`, rehearsal
 opened right away and closed by the player, ping help window instead of a guided
-sequence) and the fifth in-game pass (validated self-ping, OK button of the
+sequence), the fifth in-game pass (validated self-ping, OK button of the
 placement mode, composition buttons restored in the rehearsal, every button sized on
-its own label):
+its own label) and the assignment soundboards):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 22 files        # luacheck
+Total: 0 warnings / 0 errors in 24 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (9 files listed)
+OK GideonRaid.toc                              # check_toc (13 files listed: 10 lua + 3 sounds)
 busted
-228 successes / 0 failures / 0 errors / 0 pending : 1.198554 seconds
+260 successes / 0 failures / 0 errors / 0 pending : 1.514132 seconds
 ```
 
-The 228 tests are spread over `intermission_spec.lua` (84),
+The 260 tests are spread over `intermission_spec.lua` (84),
 `load_spec.lua` (49 — real loading, `.toc` order, evening flow, movable panels,
 close cross, simulations, button order, placement OK button, rehearsal composition
-buttons), `locale_spec.lua` (21),
+buttons), `sound_spec.lua` (31 — assignment soundboards: pure table state -> file,
+paths listed in the `.toc` and present on disk, bounded `/gr sound` preference, one
+playback per assignment, survival to a failing/absent `PlaySoundFile`),
+`locale_spec.lua` (21),
 `pingpolicy_spec.lua` (20 — ping roles and policies), `layout_spec.lua` (22 — pure
 panel geometry: no overlap, no overflow, every button sized on its label with its
 inner margin, in both languages),
 `simulation_spec.lua` (14 — pure rehearsal + ping help), `pairing_spec.lua` (11) and
-`guard_spec.lua` (7 — anti-forbidden-API guard + simulation isolation).
+`guard_spec.lua` (8 — anti-forbidden-API guard, audio call restricted to `UI/` under
+`pcall`, simulation isolation).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 

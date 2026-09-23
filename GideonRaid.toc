@@ -14,6 +14,11 @@
 # Files loaded in the order of the list. Separator = backslash, never a slash.
 # Core/Locale.lua is listed FIRST among the Core/ modules: the language layer is
 # a dependency of Config, Intermission, Panel and UI.
+# Core/Sound.lua comes right AFTER Locale.lua and BEFORE Config.lua: it owns the
+# pure table "canonical state -> soundboard file", the one-playback-per-assignment
+# gate and the BOUNDED preference resolved by Config.resolveIntermission
+# (/gr sound on|off). It depends on nothing else, so it stays out of the way of
+# the module order below.
 # Core/Simulation.lua comes AFTER Core/Intermission.lua (it reuses the canonical
 # states, the ping labels and the binding candidates) and BEFORE the UI/ files.
 # Core/Layout.lua comes LAST among the Core/ modules: it computes the DISPOSITION
@@ -23,6 +28,7 @@
 # (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
 Core\Locale.lua
+Core\Sound.lua
 Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua
@@ -30,3 +36,15 @@ Core\Simulation.lua
 Core\Layout.lua
 UI\Panel.lua
 UI\Intermission.lua
+
+# SOUNDBOARDS OF AN ASSIGNMENT (one file per canonical state, played ONCE when
+# the player declares their composition). THEY MUST BE LISTED HERE: the client
+# does NOT load a sound file that is not listed in the .toc, and an unlisted file
+# makes PlaySoundFile fail silently.
+# These three files are SILENT PLACEHOLDERS (0.2 s of silence, Ogg Vorbis) until
+# the raid lead delivers the real recordings. REPLACING THEM IS A FILE DROP:
+# same names, same folder (Sound/), same format (Ogg Vorbis), no code change -
+# see README.md, section "Replacing the three sounds".
+Sound\assign-1v3r.ogg
+Sound\assign-2v2r.ogg
+Sound\assign-3v1r.ogg
