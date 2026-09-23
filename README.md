@@ -90,13 +90,13 @@ possible:
 
 | Screen | Content | Data source |
 |---|---|---|
-| Main panel (`/gr`) | partner, role, position, pairs, and the **PLACE INTERMISSION PANEL** button — the panel is **draggable** (LOCK/UNLOCK PANEL button) and reopens where you left it | `assignment` block prepared out of game by GIDEON |
+| Main panel (`/gr`) | partner, role, position, pairs, then the buttons **in this order**: **PLACE INTERMISSION PANEL** -> **SIM: PING YOURSELF** -> **SIM: INTERMISSION GROUP** -> the LOCK/UNLOCK utility (frozen by a test: an evening flow, then a separated utility); the panel is **draggable** and reopens where you left it, and its frame is **as wide as its longest label in both languages** | `assignment` block prepared out of game by GIDEON |
 | Placement mode (before the pull) | the panel is dragged where you want it, **OK** validates and closes | the player's drag (persisted) |
 | Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
 | After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button; **the three composition buttons disappear** (REDO brings them back, empty state) | convention frozen in `Core/Intermission.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
-| Close cross (`X`, top right) | closes the panel — on **both** the main panel and the intermission panel | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
-| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens by itself after 3 s, you click your composition, correct it with REDO, it closes after ~20 s, **ONE cycle by default** (`cycles=N` for a long run); **Ping training** (`/gr sim ping`): the **ANCHOR gesture** taught step by step (`1. Hover YOUR OWN character frame`, `2. Press <key> (<Warning>) -> you ping yourself`) on the 3 native pings, with a countdown, a `PING PLACED` button and an explicit reminder that **the addon cannot detect a ping** and that pings only show **while grouped** | pure sequences in `Core/Simulation.lua` (+ the close cross and the main-panel buttons) |
+| Close cross (`X`, top right) | closes the panel — on **both** the main panel, the intermission panel and the ping help window | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
+| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens **RIGHT AWAY**, you click your composition, correct it with REDO and **you close it yourself** (X or Close) - ONE single cycle, nothing closes it and nothing relaunches it; **Ping help** (`/gr sim ping` = `/gr pinghelp`): a **short information window** (draggable, closable) telling you **how to bind one key per ping** (`Options > Keybindings > Ping`) and the operational reminder - **during the boss, when the panel says `PING: YES`, hover YOUR OWN character frame and press your key: you ping yourself** - plus the two limits: pings only show **while grouped** and **the addon cannot detect a ping** | pure logic in `Core/Simulation.lua` + the pure layout in `Core/Layout.lua` (+ the close cross and the main-panel buttons) |
 
 The panel shows the essential only (state, role, `PING: OUI/NON`, one action
 line); the explanations and the way each decision is justified live in
@@ -164,13 +164,13 @@ player is the one who places it.
 
 **The panels are movable** (third in-game test): the main panel used to be frozen
 (`lockPanel` was hard-coded to `true`). It is now **draggable by default**, and so
-is the ping training frame; each one **keeps its position** (saved in
+is the ping help window; each one **keeps its position** (saved in
 `GideonRaidDB`, restored on `/reload`). Three new commands:
 
 ```bash
 /gr lock           # freeze the panels where they are (persisted)
 /gr unlock         # let them be dragged again (also the UNLOCK PANEL button)
-/gr resetposition  # bring the main panel, the intermission panel and the ping training back to the center
+/gr resetposition  # bring the main panel, the intermission panel and the ping help window back to the center
 ```
 
 An existing `SavedVariables` file (all of them carried the old `lockPanel = true`)
@@ -187,17 +187,21 @@ and opens again at the next intermission.
 (`SIMULATION` buttons) or from the chat:
 
 ```bash
-/gr sim inter [cycles=N]  # "Intermission group": 1 accelerated intermission by default, click, REDO, auto close
-/gr sim ping              # PING TRAINING: hover your own character frame, press your native ping key -> you ping yourself
-/gr sim stop              # leave any simulation at once
+/gr sim inter   # "Intermission group": the panel opens RIGHT AWAY, click your composition,
+                # correct it with REDO, then close it YOURSELF (X or Close). One single cycle.
+/gr sim ping    # PING HELP (= /gr pinghelp): how to bind one key per ping, and how to ping yourself
+/gr sim stop    # close the rehearsal or the help window (= the Close button, = the cross)
 ```
 
 The simulation is **isolated from the real flow**: it never arms/disarms the
 `ENCOUNTER_START` timeline, publishes no decision, is refused while a real
-intermission runs and is stopped the moment a real encounter starts. It displays a
-`SIMULATION - NO BOSS, NO RAID` banner so it can never be mistaken for a fight. The
-ping training states as is that **the addon cannot detect a ping** (no API reports
-one) and that **pings only show while in a group or a raid**.
+intermission runs and is stopped the moment a real encounter starts. During a
+rehearsal the panel displays a two-line
+`SIMULATION - NO BOSS, NO RAID` / `SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF`
+banner so it can never be mistaken for a fight, and the headline replaces the combat
+countdown (there is no boss, hence no orb to read). The ping help window states as is
+that **the addon cannot detect a ping** (no API reports one), that it **never sends a
+ping**, and that **pings only show while in a group or a raid**.
 
 ```bash
 make inter    # convention + action lines, out of game
@@ -258,10 +262,12 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │   ├── Config.lua
 │   ├── Pairing.lua
 │   ├── Intermission.lua
-│   └── Simulation.lua <- SIMULATION mode: rehearse the intermissions, test the pings
-├── UI/                <- RENDERING (zero computation)
-│   ├── Panel.lua      <- main panel (+ the close cross shared by both panels)
-│   └── Intermission.lua <- intermission panel + simulation frames (close cross, banner)
+│   ├── Layout.lua     <- PURE panel GEOMETRY: blocks anchored one under the other,
+│   │                     overflow/overlap checks (the layout is computed, then applied)
+│   └── Simulation.lua <- SIMULATION mode: rehearsal + ping help (no guided sequence)
+├── UI/                <- RENDERING (zero computation: it APPLIES Core/Layout as is)
+│   ├── Panel.lua      <- main panel + the shared layout applier (+ the close cross)
+│   └── Intermission.lua <- intermission panel + the ping help window (close cross, banner)
 ├── libs/              <- embedded libraries (externals)
 ├── tests/             <- busted + fixtures (excluded from the zip)
 ├── tools/             <- CLI + .toc validator (excluded from the zip)
@@ -284,27 +290,30 @@ make plan     # pre-pull view from the assignment fixture
 make fmt      # automatic reformatting
 ```
 
-Reference result (after the Intermission Coach redesign and the close cross +
-SIMULATION mode: no ping macro, minimal panel, REDO, full evening flow with the
-pre-computed schedule, rehearsal alone):
+Reference result (after the Intermission Coach redesign, the close cross + SIMULATION
+mode, and the fourth in-game pass: no ping macro, minimal panel, REDO, full evening
+flow with the pre-computed schedule, panels laid out by `Core/Layout.lua`, rehearsal
+opened right away and closed by the player, ping help window instead of a guided
+sequence):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 20 files        # luacheck
+Total: 0 warnings / 0 errors in 22 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (8 files listed)
+OK GideonRaid.toc                              # check_toc (9 files listed)
 busted
-212 successes / 0 failures / 0 errors / 0 pending : 0.871998 seconds
+219 successes / 0 failures / 0 errors / 0 pending : 1.381614 seconds
 ```
 
-The 212 tests are spread over `intermission_spec.lua` (84),
-`load_spec.lua` (43 — real loading, `.toc` order, evening flow, movable panels,
-close cross, simulations), `simulation_spec.lua` (26 — pure simulation sequences),
-`locale_spec.lua` (21), `pingpolicy_spec.lua` (20 — ping roles and policies),
-`pairing_spec.lua` (11) and `guard_spec.lua` (7 — anti-forbidden-API guard +
-simulation isolation).
+The 219 tests are spread over `intermission_spec.lua` (84),
+`load_spec.lua` (46 — real loading, `.toc` order, evening flow, movable panels,
+close cross, simulations, button order), `locale_spec.lua` (21),
+`pingpolicy_spec.lua` (20 — ping roles and policies), `layout_spec.lua` (16 — pure
+panel geometry: no overlap, no overflow, in both languages),
+`simulation_spec.lua` (14 — pure rehearsal + ping help), `pairing_spec.lua` (11) and
+`guard_spec.lua` (7 — anti-forbidden-API guard + simulation isolation).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 

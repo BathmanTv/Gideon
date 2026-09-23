@@ -209,6 +209,10 @@ local function slashHandler(cmd)
         ns.UI.IntermissionSetEnabled(false)
     elseif cmd == "sim" then
         ns.UI.Print(ns.Locale.t("cmd.sim.help"))
+    elseif cmd == "pinghelp" then
+        -- Alias of /gr sim ping: the SHORT help window (how to bind the keys and
+        -- how to ping yourself). It simulates nothing and detects nothing.
+        ns.UI.SimulationPingStart()
     elseif simMode ~= nil then
         ns.UI.SimulationCommand(simMode)
     elseif declaration ~= nil then

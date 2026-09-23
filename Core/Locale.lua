@@ -54,21 +54,23 @@ Locale.STRINGS = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sim inter|group|groupe [cycles=N] (rehearsal, no boss) | /gr sim ping | /gr sim stop\n"
+            .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sim inter|group|groupe [cycles=N] (repetition, sans boss) | /gr sim ping | /gr sim stop\n"
+            .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
+            .. "  /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
     },
     ["cmd.sim.help"] = {
-        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = 1 accelerated "
-            .. "intermission (add cycles=N, 1-9, for a longer test); /gr sim ping = ping training on YOUR OWN "
-            .. "character frame; /gr sim stop = leave the simulation.",
-        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = 1 intermission "
-            .. "acceleree (ajoute cycles=N, 1-9, pour un test plus long) ; /gr sim ping = entrainement au ping sur "
-            .. "TON propre cadre de personnage ; /gr sim stop = quitter la simulation.",
+        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = the intermission "
+            .. "panel opens RIGHT AWAY, you click your composition and YOU close it (X or Close); /gr sim ping = "
+            .. "ping help window (how to bind a key per ping and how to ping yourself); /gr sim stop = close it.",
+        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = le panneau "
+            .. "d'intermission s'ouvre TOUT DE SUITE, tu cliques ta composition et c'est TOI qui le fermes "
+            .. "(croix ou Fermer) ; /gr sim ping = fenetre d'aide au ping (comment binder une touche par ping et "
+            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer.",
     },
     -- Panel lock: the main panel is MOVABLE by default (in-game feedback); these
     -- three commands are the lock / unlock / reset entry points.
@@ -89,40 +91,28 @@ Locale.STRINGS = {
         fr = "Simulation inconnue '%s' : valeurs acceptees inter (group, groupe), ping, stop.",
     },
     ["cmd.sim.inter"] = {
-        en = "SIMULATION (no boss, no raid): %d intermission(s), the panel opens by itself in %d s. "
-            .. "The ENCOUNTER_START timeline is NOT armed. /gr sim stop to leave.",
-        fr = "SIMULATION (sans boss, sans raid) : %d intermission(s), le panneau s'ouvre tout seul dans %d s. "
-            .. "Le planning ENCOUNTER_START n'est PAS arme. /gr sim stop pour quitter.",
+        en = "SIMULATION (no boss, no raid): the intermission panel opens RIGHT AWAY. Click your composition, "
+            .. "then close it yourself (X or Close button). The ENCOUNTER_START timeline is NOT armed.",
+        fr = "SIMULATION (sans boss, sans raid) : le panneau d'intermission s'ouvre TOUT DE SUITE. Clique ta "
+            .. "composition, puis ferme-le toi-meme (croix ou bouton Fermer). Le planning ENCOUNTER_START n'est "
+            .. "PAS arme.",
     },
-    ["cmd.sim.finished"] = {
-        en = "Simulation over: %d intermission(s) replayed, no boss, no raid.",
-        fr = "Simulation terminee : %d intermission(s) rejouee(s), sans boss, sans raid.",
-    },
-    ["cmd.sim.stopped"] = {
-        en = "Simulation stopped after %d simulated intermission(s).",
-        fr = "Simulation arretee apres %d intermission(s) simulee(s).",
+    ["cmd.sim.closed"] = {
+        en = "Simulation closed (no boss, no raid, nothing was published).",
+        fr = "Simulation fermee (sans boss, sans raid, rien n'a ete publie).",
     },
     ["cmd.sim.none"] = {
         en = "No simulation running.",
         fr = "Aucune simulation en cours.",
     },
     ["cmd.sim.pingStart"] = {
-        en = "SIMULATION (no boss, no raid): ping training, %d native pings in a row (%s). Hover YOUR OWN "
-            .. "character frame and press your ping key for real: you ping yourself. Validate with the button "
-            .. "after each ping.",
-        fr = "SIMULATION (sans boss, sans raid) : entrainement au ping, %d pings natifs a la suite (%s). Survole "
-            .. "TON propre cadre de personnage et appuie pour de vrai sur ta touche de ping : tu te pinges "
-            .. "toi-meme. Valide avec le bouton apres chaque ping.",
-    },
-    ["cmd.sim.pingFinished"] = {
-        en = "Ping training over: %d ping(s) announced. The addon detected NOTHING (no API reports a ping): "
-            .. "check your screen yourself.",
-        fr = "Entrainement au ping termine : %d ping(s) annonce(s). L'addon n'a RIEN detecte (aucune API ne rapporte "
-            .. "un ping) : verifie ton ecran toi-meme.",
-    },
-    ["cmd.sim.pingStopped"] = {
-        en = "Ping training left after %d/%d ping(s) announced.",
-        fr = "Entrainement au ping quitte apres %d/%d ping(s) annonce(s).",
+        en = "PING HELP (no simulation, no boss): bind one key per ping (Options > Keybindings > Ping, %s) and, "
+            .. "when the panel says PING: YES, ping YOURSELF (hover YOUR OWN character frame, then press the "
+            .. "key). A ping only shows in a group or a raid, and this addon detects nothing.",
+        fr = "AIDE AU PING (aucune simulation, aucun boss) : bind une touche par ping (Options > Raccourcis > "
+            .. "Ping, %s) et, quand le panneau dit PING : OUI, pinge-toi TOI-MEME (survole TON propre cadre de "
+            .. "personnage, puis appuie sur la touche). Un ping ne s'affiche qu'en groupe ou raid, et cet addon "
+            .. "ne detecte rien.",
     },
     ["cmd.lang.status"] = {
         en = "Language: client detected = %s, effective = %s, preference = %s (/gr lang auto|en|fr to change).",
@@ -179,19 +169,22 @@ Locale.STRINGS = {
         en = "|cffff5555Unreadable plan|r",
         fr = "|cffff5555Plan illisible|r",
     },
+    -- SHORT labels on purpose (fourth in-game test: the French labels ran over
+    -- the borders of the main panel). The layout module measures them and grows
+    -- the frame when needed, but a short label stays readable in a small panel.
     ["panel.placeButton"] = {
         en = "PLACE INTERMISSION PANEL",
-        fr = "PLACER LE PANNEAU INTERMISSION",
+        fr = "PLACER LE PANNEAU",
     },
     -- Two SIMULATION entries, also reachable by command (/gr sim inter, /gr sim
     -- ping): a rehearsal alone, with no boss and no raid.
     ["panel.simInterButton"] = {
-        en = "SIMULATION: INTERMISSION GROUP (no boss)",
-        fr = "SIMULATION : GROUPE INTER (sans boss)",
+        en = "SIM: INTERMISSION GROUP",
+        fr = "SIMULATION : GROUPE INTER",
     },
     ["panel.simPingButton"] = {
-        en = "SIMULATION: PING TRAINING (PING YOURSELF)",
-        fr = "SIMULATION : ENTRAINEMENT AU PING (TE PINGER)",
+        en = "SIM: PING YOURSELF",
+        fr = "SIMULATION : TE PINGER",
     },
     -- Lock / unlock of the panels. The main panel is DRAGGABLE by default (the
     -- player can move it); this button freezes the position, and the label always
@@ -221,6 +214,10 @@ Locale.STRINGS = {
     ["ui.panelTitle"] = {
         en = "GideonRaid - Intermission Coach",
         fr = "GideonRaid - Intermission Coach",
+    },
+    ["ui.mainTitle"] = {
+        en = "GideonRaid",
+        fr = "GideonRaid",
     },
     ["ui.close"] = {
         en = "Close",
@@ -659,25 +656,29 @@ Locale.STRINGS = {
         en = "SIMULATION - NO BOSS, NO RAID",
         fr = "SIMULATION - SANS BOSS, SANS RAID",
     },
-    ["sim.cycleLine"] = {
-        en = "SIMULATED INTERMISSION %d/%d",
-        fr = "INTERMISSION SIMULEE %d/%d",
+    -- The rehearsal is a SINGLE cycle and the PLAYER closes it (fourth in-game
+    -- test): the banner keeps two lines so it can never be mistaken for a fight,
+    -- and no line counts anything down any more.
+    ["sim.singleLine"] = {
+        en = "SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF",
+        fr = "REPETITION UNIQUE - TU FERMES LE PANNEAU TOI-MEME",
     },
-    ["sim.running"] = {
-        en = "simulated intermission running: %d s left in this cycle",
-        fr = "intermission simulee en cours : %d s restantes dans ce cycle",
+    -- The rehearsal REPLACES the combat headline ("LOOK AT THE ORB COLOR...: 3 s").
+    -- Without a boss there is no orb to read and no clock: the line stays useful
+    -- instead of contradicting what the player sees.
+    ["sim.rehearsal.headline"] = {
+        en = "SIMULATION: NO ORB TO READ - CLICK THE COMPOSITION YOU SEE ABOVE YOUR HEAD",
+        fr = "SIMULATION : AUCUN ORBE A LIRE - CLIQUE LA COMPOSITION AU-DESSUS DE TA TETE",
     },
-    ["sim.opens"] = {
-        en = "the simulated intermission opens in %d s",
-        fr = "l'intermission simulee s'ouvre dans %d s",
-    },
-    ["sim.finished"] = {
-        en = "SIMULATION OVER",
-        fr = "SIMULATION TERMINEE",
+    ["sim.rehearsal.note"] = {
+        en = "Rehearsal: in a real fight this line counts the seconds left to read the orb color. Here there "
+            .. "is no boss: close this panel yourself (X or Close) when you are done.",
+        fr = "Repetition : en vrai combat cette ligne compte les secondes restantes pour lire la couleur des "
+            .. "orbes. Ici il n'y a pas de boss : ferme ce panneau toi-meme (croix ou Fermer) quand tu as fini.",
     },
     ["sim.notOpen"] = {
-        en = "the simulated intermission is not open yet: it opens by itself a few seconds after the start",
-        fr = "l'intermission simulee n'est pas encore ouverte : elle s'ouvre toute seule quelques secondes apres le debut",
+        en = "the rehearsal is not open any more: start it again with /gr sim inter",
+        fr = "la repetition n'est plus ouverte : relance-la avec /gr sim inter",
     },
     ["sim.refused.live"] = {
         en = "Simulation refused: the real flow is running (intermission in progress or ENCOUNTER_START "
@@ -693,56 +694,46 @@ Locale.STRINGS = {
         en = "Encounter started: the simulation is stopped. No boss was simulated.",
         fr = "Combat commence : la simulation est arretee. Aucun boss n'a ete simule.",
     },
-    -- Ping training: the three native pings, one after the other, used to LEARN
-    -- the ANCHOR gesture (the ping lands under the MOUSE: hovering your own
-    -- character frame pings YOU). The frame says which key to press when the
-    -- player bound one; it can NOT check that the ping went out.
+    -- PING HELP: a SHORT information window (no sequence, no countdown, no
+    -- "ping placed" button). It explains how to bind the keys (Options >
+    -- Keybindings > Ping) and the operational reminder: during the boss, when the
+    -- panel says PING: YES, you ping YOURSELF by hovering your own character
+    -- frame. HONESTY: the addon never sends a ping, can NOT detect one (no game
+    -- API reports it), and a ping only shows on screen while the player is in a
+    -- group or a raid.
     ["sim.ping.title"] = {
-        en = "GideonRaid - Ping training (ping yourself)",
-        fr = "GideonRaid - Entrainement au ping (te pinger)",
+        en = "GideonRaid - Ping help (ping yourself)",
+        fr = "GideonRaid - Aide au ping (te pinger)",
     },
-    ["sim.ping.stepLine"] = {
-        en = "PING %d/%d",
-        fr = "PING %d/%d",
+    ["sim.ping.helpHeadline"] = {
+        en = "PING: YES = PING YOURSELF",
+        fr = "PING : OUI = PINGE-TOI TOI-MEME",
     },
-    -- The BIG instruction, step by step. %s = the key the player really bound
-    -- (or sim.ping.yourKey when none is known) and the label of the ping.
-    ["sim.ping.selfSteps"] = {
-        en = "1. Hover YOUR OWN character frame (the one with your health bar).\n2. Press %s (%s) -> you ping yourself",
-        fr = "1. Survole TON propre cadre de personnage (celui avec ta barre de vie).\n2. Appuie sur %s (%s) -> tu te "
-            .. "pinges toi-meme",
+    ["sim.ping.helpBind"] = {
+        en = "1. Bind one key per ping: Options > Keybindings > Ping " .. "(Ping, Warning, On My Way, Assist).",
+        fr = "1. Bind une touche par ping : Options > Raccourcis > Ping " .. "(Ping, Attaque, Avertissement, En route, Aide).",
     },
-    ["sim.ping.yourKey"] = {
-        en = "your ping key",
-        fr = "ta touche de ping",
+    ["sim.ping.helpGesture"] = {
+        en = "2. During the boss, when this panel says PING: YES, hover YOUR OWN character frame (the one with "
+            .. "your health bar) then press your key: you ping yourself, where you stand.",
+        fr = "2. Pendant le boss, quand ce panneau dit PING : OUI, survole TON propre cadre de personnage "
+            .. "(celui avec ta barre de vie) puis appuie sur ta touche : tu te pinges toi-meme, sur place.",
+    },
+    ["sim.ping.keysHeader"] = {
+        en = "Keys found for your pings:",
+        fr = "Touches trouvees pour tes pings :",
+    },
+    ["sim.ping.keyLine"] = {
+        en = "%s = %s",
+        fr = "%s = %s",
+    },
+    ["sim.ping.noKeyLine"] = {
+        en = "%s = no key bound (Options > Keybindings > Ping)",
+        fr = "%s = aucune touche bindee (Options > Raccourcis > Ping)",
     },
     ["sim.ping.anchorNote"] = {
         en = "This is exactly the ANCHOR (1V3R) gesture during the intermission: ping yourself where you stand.",
         fr = "C'est exactement le geste de l'ANCRE (1V3R) pendant l'intermission : ping-toi la ou tu te tiens.",
-    },
-    ["sim.ping.ready"] = {
-        en = "GET READY: %s",
-        fr = "TIENS-TOI PRET : %s",
-    },
-    ["sim.ping.nextIn"] = {
-        en = "next ping in %d s (the client accepts 3 pings in a row, then ~5 s of wait)",
-        fr = "prochain ping dans %d s (le client accepte 3 pings d'affilee, puis ~5 s d'attente)",
-    },
-    ["sim.ping.countdown"] = {
-        en = "time left: %d s - press your key, then validate with the button",
-        fr = "temps restant : %d s - appuie sur ta touche, puis valide avec le bouton",
-    },
-    ["sim.ping.overdue"] = {
-        en = "countdown over - validate once your ping is placed (the addon cannot check it)",
-        fr = "compte a rebours termine - valide une fois ton ping pose (l'addon ne peut pas le verifier)",
-    },
-    ["sim.ping.noKey"] = {
-        en = "no keybind found for this ping: bind one in Options > Keybindings > ping system",
-        fr = "aucun raccourci trouve pour ce ping : bind-en un dans Options > Raccourcis > systeme de ping",
-    },
-    ["sim.ping.native"] = {
-        en = "Press the NATIVE ping keybind of your client (Options > Keybindings > ping system).",
-        fr = "Appuie sur le raccourci de ping NATIF du client (Options > Raccourcis > systeme de ping).",
     },
     ["sim.ping.group"] = {
         en = "REMINDER: pings only show on screen while you are in a GROUP or a RAID. Alone, nothing appears.",
@@ -752,43 +743,18 @@ Locale.STRINGS = {
         en = "The addon CANNOT detect a ping: no game API reports one. Only you can check your screen.",
         fr = "L'addon NE PEUT PAS detecter un ping : aucune API du jeu ne le rapporte. Toi seul peux verifier ton ecran.",
     },
-    ["sim.ping.ok"] = {
-        en = "PING PLACED",
-        fr = "PING POSE",
-    },
-    ["sim.ping.quit"] = {
-        en = "QUIT TRAINING",
-        fr = "QUITTER L'ENTRAINEMENT",
-    },
-    ["sim.ping.finished"] = {
-        en = "PING TRAINING OVER",
-        fr = "ENTRAINEMENT AU PING TERMINE",
-    },
-    ["sim.ping.finishedLine"] = {
-        en = "%d/%d ping(s) announced by the addon - it detected none of them (impossible). Check your screen.",
-        fr = "%d/%d ping(s) annonces par l'addon - il n'en a detecte aucun (impossible). Verifie ton ecran.",
-    },
 
     -- --------------------------------------------------------------- errors
     ["err.invalidSimulation"] = {
         en = "invalid simulation (table expected)",
         fr = "simulation invalide (table attendue)",
     },
-    ["err.simulationOption"] = {
-        en = "invalid simulation option '%s' (a number is expected)",
-        fr = "option de simulation invalide '%s' (un nombre est attendu)",
-    },
-    ["err.pingSequenceEmpty"] = {
-        en = "empty ping sequence (at least one ping is expected)",
-        fr = "sequence de ping vide (au moins un ping est attendu)",
-    },
-    ["err.unknownPing"] = {
-        en = "unknown ping: %s (expected Warning, OnMyWay or Assist)",
-        fr = "ping inconnu : %s (attendu Warning, OnMyWay ou Assist)",
-    },
-    ["err.nothingToConfirm"] = {
-        en = "nothing to confirm: the ping training is not waiting for a ping",
-        fr = "rien a valider : l'entrainement au ping n'attend aucun ping",
+    -- The intermission rehearsal no longer takes ANY option: it opens right away
+    -- and the PLAYER closes it (fourth in-game test). A trailing token is
+    -- therefore REFUSED, never silently ignored.
+    ["err.simNoOption"] = {
+        en = "no option here: the rehearsal opens right away and YOU close it (the former cycles=N is gone)",
+        fr = "aucune option ici : la repetition s'ouvre tout de suite et c'est TOI qui la fermes (l'ancien cycles=N a disparu)",
     },
     ["err.declarationInvalid"] = {
         en = "invalid declaration (expected a composition: 3V1R, 2V2R or 1V3R)",

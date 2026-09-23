@@ -144,9 +144,13 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
         assert.matches("GET READY", panel.headline:GetText())
+        -- Fermer est toujours la ; CORRIGER n'apparait qu'apres un clic (la
+        -- disposition ne montre que ce qui est utile dans la phase en cours).
         assert.matches("Close", panel.close:GetText())
+        assert.matches("1 green %+ 3 red", panel.buttons[1]:GetText())
+        panel.buttons[1]:Click()
         assert.matches("REDO", panel.redo:GetText())
-        assert.matches("OK", panel.ok:GetText())
+        assert.matches("PING: YES", panel.pingBanner:GetText())
     end)
 
     it("sert le francais automatiquement sur un client frFR", function()
@@ -160,8 +164,10 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_truthy(string.find(panel.headline:GetText(), "TIENS-TOI PRET", 1, true))
         assert.matches("Fermer", panel.close:GetText())
-        assert.matches("CORRIGER", panel.redo:GetText())
         assert.matches("1 vert %+ 3 rouges", panel.buttons[1]:GetText())
+        panel.buttons[1]:Click()
+        assert.matches("CORRIGER", panel.redo:GetText())
+        assert.matches("PING : OUI", panel.pingBanner:GetText())
     end)
 
     it("sert l'anglais sur un client enUS et sur toute autre locale", function()

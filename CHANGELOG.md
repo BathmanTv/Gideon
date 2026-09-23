@@ -4,6 +4,73 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+Four corrections requested by the raid lead after the **fourth** in-game test:
+labels ran over the main panel frame, the intermission panel drew its big state on
+top of the `SIMULATION` banner, the ping simulation was a guided sequence nobody
+asked for, and the rehearsal closed by itself after a delay.
+
+### Added
+- **`Core/Layout.lua`** (pure logic, no WoW API, no event, no clock, no random):
+  computes the geometry of every panel as an **ordered list of blocks anchored one
+  under the other** (`top = previous.bottom - gap`), grows the frame to the widest
+  label, wraps the body, and reports **two blocks sharing a Y band, a block running
+  over the frame, a label whose longest word does not fit its button and a block
+  drawn under the close cross**. `UI.ApplyLayout` applies the blocks as is and hides
+  **and empties** every element the layout does not mention (no stale text).
+- `Layout.MAIN_PANEL_ORDER` (the frozen button order) and
+  `Layout.MAIN_PANEL_UTILITY_GAP` (the LOCK/UNLOCK utility is visually separated).
+- `Core/Simulation.newRun`/`closeRun`/`forRehearsal` (single-cycle rehearsal) and
+  `Core/Simulation.pingHelpView(bindKey)`: the **ping help** content (binding path,
+  self-ping reminder, resolved keys, group reminder, "cannot detect a ping"), the
+  binding key being injected by the rendering layer.
+- `tests/spec/layout_spec.lua` (16 tests): pure geometry, verified in **both
+  languages**.
+- `/gr pinghelp`: an alias of `/gr sim ping`, listed in the `/gr` help.
+
+### Changed
+- **Main panel**: the frame is ≈360 px wide (it was 300) and every label is short
+  (`PLACE INTERMISSION PANEL`, `SIM: PING YOURSELF`, `SIM: INTERMISSION GROUP`, `LOCK
+  PANEL` / `PLACER LE PANNEAU`, `SIMULATION : TE PINGER`, `SIMULATION : GROUPE INTER`,
+  `VERROUILLER`): **no label touches or leaves the frame in either language**, the
+  body wraps and the frame grows with it instead of overflowing.
+- **Main panel button order** (top to bottom, both languages): PLACE INTERMISSION
+  PANEL, SIM: PING YOURSELF, SIM: INTERMISSION GROUP, then the LOCK/UNLOCK utility,
+  separated by a bigger gap. This order is a `Core/` constant asserted by a test, so
+  a future change cannot silently reorder the evening flow.
+- **Intermission panel**: the big state, the `SIMULATION` banner, the headline, the
+  `PING` line, the role line and the action line are now anchored in **one single
+  stack**: nothing overlaps any more (a test asserts that the state is always drawn
+  **below** the banner) in English **and** in French; the composition row is not part
+  of the layout any more after a click (the three buttons are hidden and emptied, so
+  they can never be drawn on top of the banner).
+- **`/gr sim inter` (rehearsal)**: the panel opens **IMMEDIATELY** (no more 3 s
+  delay), there is **one single cycle** and it is the **player** who closes it (close
+  cross or Close button) - no automatic closing, no relaunch, no ticker at all. The
+  chat reports the closing honestly and `/gr sim stop` still works.
+- **`/gr sim ping`**: the guided sequence is gone (countdown, `PING PLACED` button,
+  Avertissement → En route → Aide progression, announced-ping counter). It now opens
+  a **short information window** - draggable, position persisted, closable - that
+  explains **how to bind one key per ping** (`Options > Keybindings > Ping`) and the
+  operational rule: **during the boss, when the panel says `PING: YES`, hover YOUR OWN
+  character frame and press your key - you ping yourself**. It still states that a
+  ping only shows **in a group or a raid** and that **the addon cannot detect a
+  ping**.
+- The rehearsal banner carries **two lines** (`SIMULATION - NO BOSS, NO RAID` +
+  `SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF`) so it can never be mistaken for
+  a fight, and the combat countdown line is replaced by a rehearsal headline (without
+  a boss there is no orb to read and no clock).
+- `docs/INTERMISSION-COACH.md` (new §2.4 and §2.6), `docs/TESTPLAN.md` (new steps 1d
+  and 1e, refreshed loading protocol and §3.5b points 19/20) and `README.md` updated
+  in English; `busted` goes from 212 to **219 tests**.
+
+### Removed
+- `cycles=N` on `/gr sim inter`: a trailing option is now **refused** with a message
+  (one single rehearsal, closed by the player).
+- The guided ping-training sequence and its frame (`PING PLACED`, `QUIT TRAINING`, the
+  countdown and the announced-ping counter).
+
 ## [0.7.0] - 2026-09-22
 
 Four corrections requested by the raid lead after the **third** in-game test: the

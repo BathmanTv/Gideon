@@ -14,9 +14,12 @@
     The data displayed here comes EXCLUSIVELY from GideonRaidDB (written out of
     game by GIDEON) or from the player's manual input.
 
-    The main panel is the pre-pull screen: it displays the prepared plan and
-    offers the "PLACE INTERMISSION PANEL" button (placement mode of the
-    intermission panel, step a of the evening flow).
+    The main panel is the pre-pull screen: it displays the prepared plan and its
+    four buttons, IN THE ORDER computed by Core/Layout.lua
+    (Layout.MAIN_PANEL_ORDER: place the intermission panel, the ping help window,
+    the rehearsal, then the LOCK/UNLOCK utility, set apart). The geometry (frame
+    size, every offset, every label) comes from that PURE module too: this file
+    applies it as-is through UI.ApplyLayout and computes NOTHING.
 ----------------------------------------------------------------------------]]
 --
 local _, ns = ...
@@ -67,12 +70,83 @@ function UI.AttachCloseCross(frame, onClick)
     return cross
 end
 
+--- The elements of the main panel, in the ORDER of Core/Layout.MAIN_PANEL_ORDER:
+--- this list only tells the shared applier (UI.ApplyLayout) which frame carries
+--- which block id. The geometry, the labels and the ORDER come from Core/.
+--- @return table array of { id = string, frame = Frame|FontString }
+--- Applies ONE block of a PURE layout (Core/Layout.lua) to its element: the
+--- rendering layer copies the geometry and the text, it computes NOTHING.
+--- @param frame Frame|FontString|nil
+--- @param block table
+local function applyBlock(frame, block)
+    if frame == nil then
+        return nil
+    end
+    frame:ClearAllPoints()
+    frame:SetPoint(block.point, block.x, block.top)
+    if block.kind == "button" then
+        frame:SetSize(block.width, block.height)
+    else
+        -- A FontString has no SetSize: only its width is constrained (the height
+        -- follows the text).
+        frame:SetWidth(block.width)
+    end
+    frame:SetText(block.text)
+    frame:Show()
+    return frame
+end
+
+--- Applies a whole layout to a set of elements.
+--- EVERY element handed in is hidden first: only the blocks the Core computed
+--- are shown, so an element that is not part of the current layout (the three
+--- composition buttons once a click hides them) can NEVER be drawn on top of
+--- another one.
+--- @param target Frame the panel
+--- @param layout table computed by Core/Layout.lua
+--- @param elements table array of { id = string, frame = Frame|FontString }
+--- @return table the layout
+function UI.ApplyLayout(target, layout, elements)
+    local byId = {}
+    for index = 1, #elements do
+        local entry = elements[index]
+        byId[entry.id] = entry.frame
+        entry.frame:Hide()
+        -- ... and it keeps NO stale text: the layout is the ONLY source of what
+        -- is written on screen (a hidden "1V3R" must not survive a CORRIGER).
+        entry.frame:SetText("")
+    end
+    target:SetSize(layout.width, layout.height)
+    for index = 1, #layout.blocks do
+        local block = layout.blocks[index]
+        if block.kind == "row" then
+            for item = 1, #block.items do
+                applyBlock(byId[block.items[item].id], block.items[item])
+            end
+        else
+            applyBlock(byId[block.id], block)
+        end
+    end
+    return layout
+end
+
+local function panelElements(p)
+    return {
+        { id = "title", frame = p.title },
+        { id = "body", frame = p.body },
+        { id = "place", frame = p.place },
+        { id = "simPing", frame = p.simPing },
+        { id = "simInter", frame = p.simInter },
+        { id = "lock", frame = p.lock },
+    }
+end
+
 local function ensurePanel()
     if panel then
         return panel
     end
     panel = CreateFrame("Frame", "GideonRaidPanel", UIParent, "BackdropTemplate")
-    panel:SetSize(300, 340)
+    -- The size is NOT set here: Core/Layout.mainPanel() measures the content
+    -- (labels included, in the active language) and UI.ApplyLayout applies it.
     panel:SetPoint("CENTER")
     panel:SetMovable(true)
     panel:EnableMouse(true)
@@ -102,13 +176,14 @@ local function ensurePanel()
         insets = { left = 8, right = 8, top = 8, bottom = 8 },
     })
 
+    -- NO fixed position anywhere: every element is anchored by the applier, one
+    -- block BELOW the previous one (Core/Layout.lua), so no label can ever run
+    -- over another one or over the borders, in English as in French.
     panel.title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    panel.title:SetPoint("TOP", 0, -16)
-    panel.title:SetText("GideonRaid")
+    panel.title:SetJustifyH("CENTER")
+    panel.title:SetText("")
 
     panel.body = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    panel.body:SetPoint("TOPLEFT", 16, -44)
-    panel.body:SetPoint("BOTTOMRIGHT", -16, 116)
     panel.body:SetJustifyH("LEFT")
     panel.body:SetJustifyV("TOP")
     panel.body:SetText("")
@@ -123,8 +198,6 @@ local function ensurePanel()
     -- performs (LOCK PANEL when the panel is movable, UNLOCK PANEL when it is
     -- frozen). Same mechanism as /gr lock and /gr unlock.
     panel.lock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    panel.lock:SetSize(180, 20)
-    panel.lock:SetPoint("BOTTOM", 0, 88)
     panel.lock:SetScript("OnClick", function()
         UI.SetPanelLocked(not UI.IsPanelLocked())
     end)
@@ -133,9 +206,6 @@ local function ensurePanel()
     -- where it will appear during the fight, checks how to bind the ping, then
     -- validates with OK (step a and b of the evening flow).
     panel.place = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    panel.place:SetSize(268, 24)
-    panel.place:SetPoint("BOTTOM", 0, 14)
-    panel.place:SetText(Locale.t("panel.placeButton"))
     panel.place:SetScript("OnClick", function()
         UI.IntermissionSetup()
     end)
@@ -144,17 +214,11 @@ local function ensurePanel()
     -- /gr sim ping): rehearse ALONE, with no boss and no raid. The core logic
     -- lives in Core/Simulation.lua; this layer only calls it.
     panel.simInter = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    panel.simInter:SetSize(268, 22)
-    panel.simInter:SetPoint("BOTTOM", 0, 40)
-    panel.simInter:SetText(Locale.t("panel.simInterButton"))
     panel.simInter:SetScript("OnClick", function()
         UI.SimulationInterStart()
     end)
 
     panel.simPing = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    panel.simPing:SetSize(268, 22)
-    panel.simPing:SetPoint("BOTTOM", 0, 64)
-    panel.simPing:SetText(Locale.t("panel.simPingButton"))
     panel.simPing:SetScript("OnClick", function()
         UI.SimulationPingStart()
     end)
@@ -276,6 +340,17 @@ local function resolveBindingKey(bindNames)
     return nil
 end
 
+--- Lays the main panel out: the WHOLE disposition (frame size, every offset,
+--- every label and the button ORDER) comes from Core/Layout.lua, so it is proven
+--- out of game in both languages (tests/spec/layout_spec.lua).
+--- @param lines table body lines already computed by Core
+--- @return table the applied layout
+local function applyMainLayout(lines)
+    local p = ensurePanel()
+    local layout = ns.Layout.mainPanel({ bodyLines = lines, locked = UI.IsPanelLocked() })
+    return UI.ApplyLayout(p, layout, panelElements(p))
+end
+
 --- Rebuilds the display from non-secret data only.
 --- The content (partner, roles, positions, pairs) is computed by
 --- Core/Intermission.buildPlan: this layer only renders lines.
@@ -311,18 +386,16 @@ function UI.Refresh()
         end
     end
 
-    p.body:SetText(table.concat(lines, "\n"))
+    -- The DISPOSITION is computed by Core/Layout.lua from these real lines and
+    -- applied as-is: the body is measured, wrapped and stacked under the title,
+    -- and the frame grows to fit (no literal offset can collide).
+    return applyMainLayout(lines)
 end
 
---- Re-applies the language-dependent labels of THIS panel.
+--- Re-applies the language-dependent labels of THIS panel (the labels come from
+--- Core/Layout.mainPanel, so a language change is a simple refresh).
 function UI.ApplyStaticText()
     local p = ensurePanel()
-    p.place:SetText(Locale.t("panel.placeButton"))
-    p.simInter:SetText(Locale.t("panel.simInterButton"))
-    p.simPing:SetText(Locale.t("panel.simPingButton"))
-    -- The lock button always names the ACTION: "LOCK PANEL" while the panel can
-    -- be dragged, "UNLOCK PANEL" once it is frozen.
-    p.lock:SetText(Locale.t(UI.IsPanelLocked() and "panel.unlockButton" or "panel.lockButton"))
     p.closeCross:SetText(Locale.t("ui.closeCross"))
     UI.Refresh()
 end
@@ -337,9 +410,10 @@ function UI.PrintStatus()
 end
 
 function UI.Initialize()
-    local p = ensurePanel()
+    ensurePanel()
     -- The persisted position is applied as soon as the panel exists: the player
     -- finds their panel where they left it, at the first /gr of the session.
     UI.ApplyPanelPosition()
-    p.lock:SetText(Locale.t(UI.IsPanelLocked() and "panel.unlockButton" or "panel.lockButton"))
+    -- Labels + disposition come from Core/Layout.lua (nothing is hard-coded here).
+    UI.ApplyStaticText()
 end

@@ -47,7 +47,10 @@ function stub.install()
             fn(self, event, ...)
         end
     end
-    function Frame:SetSize() end
+    function Frame:SetSize(width, height)
+        self.__width = width
+        self.__height = height
+    end
     --- Tous les arguments sont conserves (point, relativeTo, relativePoint, x, y) :
     --- les positions PERSISTEES (panneau principal, panneau intermission, fenetre
     --- de simulation) sont ainsi verifiables hors jeu.
@@ -81,7 +84,25 @@ function stub.install()
     end
     function Frame:CreateFontString()
         local fs = {}
-        function fs:SetPoint() end
+        -- Les points sont ENREGISTRES (comme pour les cadres) : un test peut
+        -- verifier que UI/ applique bien la disposition calculee par Core/Layout.
+        function fs:SetPoint(...)
+            fs.__point = { ... }
+        end
+        --- SetPoint(point, x, y) : le cadre est ancre au PARENT au meme point,
+        --- avec les decalages demandes (c'est exactement ce que fait l'applier).
+        function fs:GetPoint()
+            local p = fs.__point
+            if not p or not p[1] then
+                return "CENTER", _G.UIParent, "CENTER", 0, 0
+            end
+            return p[1], _G.UIParent, p[1], p[2] or 0, p[3] or 0
+        end
+        function fs:ClearAllPoints()
+            fs.__point = nil
+        end
+        function fs:SetSize() end
+        function fs:SetHeight() end
         function fs:SetText(t)
             fs.__text = t
         end
@@ -91,7 +112,9 @@ function stub.install()
         function fs:SetJustifyH() end
         function fs:SetJustifyV() end
         function fs:SetFontObject() end
-        function fs:SetWidth() end
+        function fs:SetWidth(width)
+            fs.__width = width
+        end
         function fs:SetShown(shown)
             fs.__shown = shown and true or false
         end

@@ -3,7 +3,17 @@
 
     RENDERING LAYER ONLY ("Intermission Coach"). This file may call the WoW API
     (frames, fonts, C_Timer, GetBindingKey). It contains NO business computation:
-    everything comes from ns.Intermission (snapshot / setupView / run machine).
+    everything comes from ns.Intermission (snapshot / setupView / run machine),
+    from ns.Simulation (rehearsal view, ping help view) and from ns.Layout (the
+    DISPOSITION of the panel: frame size, every offset, every label).
+
+    THE DISPOSITION IS PURE (Core/Layout.lua). History: the fourth in-game test
+    showed the big state ("2V2R") drawn ON TOP of the SIMULATION banner, because
+    every element was placed with a FIXED Y offset. Here, no element carries a
+    literal offset any more: UI.IntermissionRefresh() builds a spec (the current
+    texts), Core measures and STACKS the blocks, and UI.ApplyLayout applies the
+    result as-is. Two blocks can therefore never share a Y, in English as in
+    French (tests/spec/layout_spec.lua locks it down for both languages).
 
     12.x prohibitions (see docs/CONVENTIONS.md):
       - no read of aura / health / resource (possible SECRET value);
@@ -12,17 +22,9 @@
 
     PING: THE PLAYER PINGS, WITH THE NATIVE BLIZZARD PING KEYBIND. Measured in
     game by the raid lead: an addon CANNOT ping at all - neither from a macro nor
-    from a binding - the ping API is restricted to Blizzard's own UI ("action
-    usable only by the Blizzard UI"). This file therefore:
-      - READS the key the player bound (GetBindingKey, under pcall) to tell them
-        which key to press;
-      - NEVER pings and NEVER prepares a macro: no ping call exists here;
-      - shows "set a keybind in Options > Keybindings" as long as no key is bound
-        (the exact binding names are still TO BE CONFIRMED IN GAME: the candidate
-        list comes from Core/Intermission.lua, PING_BINDINGS).
-    MEASURED IN GAME TOO: the ping lands WHERE THE MOUSE IS, so hovering YOUR OWN
-    character frame pings YOURSELF - the exact ANCHOR (1V3R) gesture. The ping
-    training teaches that gesture; nothing here detects a ping (no API does).
+    from a binding ("action usable only by the Blizzard UI"). This file therefore
+    READS the key the player bound (GetBindingKey, under pcall) only to DISPLAY
+    it, and never pings, never prepares a macro.
 
     FLOW OF A RAID EVENING (no argument of any combat event is ever read):
       a. before the pull, /gr -> "PLACE INTERMISSION PANEL": the frame is shown
@@ -34,19 +36,24 @@
       d. the player clicks the composition they see (REDO corrects a mistake);
       e. at the end of the intermission the panel closes BY ITSELF;
       f. the next intermission follows the same cycle, automatically.
+    THIS REAL FLOW IS UNCHANGED by the simulation mode below.
 
     CLOSE CROSS ("X", top right) on BOTH panels (the main one, UI/Panel.lua, and
     this one). During the placement it CANCELS the placement (same effect as the
-    existing Close button); during the real flow it only HIDES the panel: the
-    intermission clock keeps running, the panel still closes by itself at the end
-    and opens again at the next intermission (nothing is disarmed).
+    existing Close button); during a REHEARSAL it CLOSES the rehearsal (the
+    player is the one who closes it); during the real flow it only HIDES the
+    panel: the intermission clock keeps running, the panel still closes by itself
+    at the end and opens again at the next intermission (nothing is disarmed).
 
     SIMULATION MODE (two entries, reachable from the main panel AND from the
-    chat): see the dedicated block below and Core/Simulation.lua. It never arms,
-    disarms or advances the ENCOUNTER_START timeline, never touches the live
-    intermission state, never publishes a decision into the SavedVariables and
-    never reads a combat event.
+    chat): see the dedicated block below. It never arms, disarms or advances the
+    ENCOUNTER_START timeline, never touches the live intermission state, never
+    publishes a decision into the SavedVariables and never reads a combat event.
+    Fourth in-game test: the rehearsal OPENS IMMEDIATELY and is closed by the
+    player (no delay, no automatic close, one single cycle), and the ping entry
+    is a plain HELP WINDOW (no guided sequence).
 ----------------------------------------------------------------------------]]
+--
 --
 --
 local _, ns = ...
@@ -70,8 +77,9 @@ local TICK_SECONDS = 0.1
 local panel, ticker, state, run, setupMode
 
 --- SIMULATION MODE owns its OWN run and state (see the block further down): the
---- rehearsal can therefore never arm, disarm or move the real flow.
-local simRun, simState, pingRun, pingPanel
+--- rehearsal can therefore never arm, disarm or move the real flow. The ping
+--- entry owns no state at all any more: it is a plain INFORMATION window.
+local simRun, simState, pingPanel
 
 --- API ref 12.x: https://warcraft.wiki.gg/wiki/Secret_Values
 --- Constraint: this panel only displays strings written by the player (a click
@@ -114,9 +122,6 @@ end
 --- intermission itself.
 local function engineActive()
     if simRun ~= nil then
-        return true
-    end
-    if Simulation.pingTestActive(pingRun) then
         return true
     end
     if run ~= nil then
@@ -180,8 +185,12 @@ local function ensurePanel()
         insets = { left = 8, right = 8, top = 8, bottom = 8 },
     })
 
+    -- NO fixed offset anywhere: the size, the position and the label of every
+    -- element below come from Core/Layout.intermissionPanel(), applied as-is by
+    -- UI.ApplyLayout. See the header: the "big state on top of the banner" bug
+    -- came from literal Y offsets.
     p.title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    p.title:SetPoint("TOP", 0, -14)
+    p.title:SetJustifyH("CENTER")
     p.title:SetText(Locale.t("ui.panelTitle"))
 
     -- CLOSE CROSS ("X", top right). Label and tooltip come from Core/Locale.lua
@@ -191,10 +200,10 @@ local function ensurePanel()
     end)
 
     -- The SIMULATION banner: displayed ONLY while a rehearsal drives the panel.
-    -- It is the guarantee that a player never mistakes a simulation for a real
-    -- fight ("SIMULATION - NO BOSS, NO RAID", see Core/Simulation.lua).
+    -- Two lines (banner + "you close the panel yourself"), computed by Core and
+    -- STACKED under the title: it can never overlap the state any more.
     p.simBanner = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.simBanner:SetPoint("TOP", 0, -30)
+    p.simBanner:SetJustifyH("CENTER")
     p.simBanner:SetText("")
     p.simBanner:SetTextColor(1.0, 0.82, 0.0)
     p.simBanner:Hide()
@@ -202,26 +211,25 @@ local function ensurePanel()
     -- The STATE, in very large type: the only thing to read first in combat
     -- ("3V1R"). It stays empty until the player declares.
     p.state = p:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    p.state:SetPoint("TOP", 0, -50)
+    p.state:SetJustifyH("CENTER")
     p.state:SetText("")
 
-    -- The phase line: "GET READY: 2 s", "LOOK AT THE ORB COLOR...: 3 s",
-    -- "ROOM DARKENED...", or the placement headline before the pull.
+    -- The headline: "GET READY: 2 s", "LOOK AT THE ORB COLOR...: 3 s", or the
+    -- placement headline before the pull. During a REHEARSAL Core replaces it by
+    -- the rehearsal line (no boss, no orb to read, no countdown).
     p.headline = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.headline:SetPoint("TOP", 0, -90)
+    p.headline:SetJustifyH("CENTER")
     p.headline:SetText("")
 
     -- The ping banner: the SECOND thing to read ("PING: YES/NO"), colored with
     -- the ping color of the state. Text and color come from Core.
     p.pingBanner = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.pingBanner:SetPoint("TOPLEFT", 24, -126)
+    p.pingBanner:SetJustifyH("LEFT")
     p.pingBanner:SetText("")
     p.pingBanner:Hide()
 
     -- The essential, at most three short lines (role, ping/key, action).
     p.body = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.body:SetPoint("TOPLEFT", 24, -156)
-    p.body:SetWidth(512)
     p.body:SetJustifyH("LEFT")
     p.body:SetJustifyV("TOP")
     p.body:SetText("")
@@ -233,16 +241,12 @@ local function ensurePanel()
     -- The number is only a HINT: 1 and 3 are AMBIGUOUS about the color, only 2
     -- is unambiguous (2 verts + 2 rouges).
     -- ONCE THE CHOICE IS CLICKED the three buttons DISAPPEAR (Core decides:
-    -- snapshot.showButtons): the panel then shows the result (state / role /
-    -- PING / action) and the CORRECT button alone, so a second click by accident
-    -- is impossible. CORRECT brings the three choices back.
+    -- snapshot.showButtons): the layout no longer contains them, so they are
+    -- HIDDEN and can never be drawn on top of the SIMULATION banner. CORRECT
+    -- brings the three choices back.
     for index = 1, #ns.Intermission.STATES do
         local key = ns.Intermission.STATES[index]
-        local rec = ns.Intermission.getDeclaration(key)
         local button = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-        button:SetSize(168, 64)
-        button:SetPoint("TOPLEFT", 20 + ((index - 1) * 176), -230)
-        button:SetText(rec ~= nil and rec.buttonLabel or key)
         button:SetScript("OnClick", function()
             UI.IntermissionDeclare(key)
         end)
@@ -252,9 +256,6 @@ local function ensurePanel()
     -- REDO / CORRECT: forgets the declaration and brings the three choices back.
     -- Usable as many times as needed (the state machine stays untouched).
     p.redo = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.redo:SetSize(130, 22)
-    p.redo:SetPoint("BOTTOMLEFT", 16, 14)
-    p.redo:SetText(Locale.t("ui.redo"))
     p.redo:SetScript("OnClick", function()
         UI.IntermissionRedo()
     end)
@@ -262,25 +263,42 @@ local function ensurePanel()
 
     -- OK: validates the placement (step b of the flow) and closes the panel.
     p.ok = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.ok:SetSize(90, 22)
-    p.ok:SetPoint("BOTTOMRIGHT", -114, 14)
-    p.ok:SetText(Locale.t("ui.ok"))
     p.ok:SetScript("OnClick", function()
         UI.IntermissionConfirmSetup()
     end)
     p.ok:Hide()
 
+    -- Close: in the real flow it hides the panel (the clock keeps running); in
+    -- placement mode it cancels the placement; during a REHEARSAL it CLOSES the
+    -- rehearsal (the player owns it).
     p.close = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.close:SetSize(90, 22)
-    p.close:SetPoint("BOTTOMRIGHT", -16, 14)
-    p.close:SetText(Locale.t("ui.close"))
     p.close:SetScript("OnClick", function()
-        UI.IntermissionHide()
+        UI.IntermissionClosePanel()
     end)
 
     p:Hide()
     panel = p
     return panel
+end
+
+--- The elements of the intermission panel, by block id (Core/Layout.lua names
+--- every block). The rendering layer only maps an id to its frame.
+--- @return table array of { id = string, frame = Frame|FontString }
+local function panelElements(p)
+    return {
+        { id = "title", frame = p.title },
+        { id = "simBanner", frame = p.simBanner },
+        { id = "state", frame = p.state },
+        { id = "headline", frame = p.headline },
+        { id = "pingBanner", frame = p.pingBanner },
+        { id = "body", frame = p.body },
+        { id = "choice1", frame = p.buttons[1] },
+        { id = "choice2", frame = p.buttons[2] },
+        { id = "choice3", frame = p.buttons[3] },
+        { id = "redo", frame = p.redo },
+        { id = "ok", frame = p.ok },
+        { id = "close", frame = p.close },
+    }
 end
 
 --- Applies the configured scale + position (no business computation).
@@ -352,78 +370,58 @@ local function preparedPairs()
     return 0
 end
 
---- Rebuilds the display from what Core/ computed. The panel NEVER shows more
---- than the essential during a fight (state, role, PING: YES/NO, ONE action
---- line): the long explanations live in docs/, not on screen.
+--- Rebuilds the display from what Core/ computed AND applies the PURE layout.
+--- The panel NEVER shows more than the essential during a fight (state, role,
+--- PING: YES/NO, ONE action line): the long explanations live in docs/, not on
+--- screen.
 --- ONCE A COMPOSITION IS CLICKED Core hides the three choice buttons
---- (snapshot.showButtons = false) and shows CORRECT: the panel then shows the
---- result only, so the choice cannot be clicked twice by accident.
+--- (snapshot.showButtons = false) and shows CORRECT: the layout then simply does
+--- not contain them, so the applier HIDES them (they can never be drawn on top
+--- of the banner) and only the result stays.
+--- UI APPLIES, CORE DECIDES: every block of the layout - its order, its size,
+--- its offsets, its label - is computed by ns.Layout.intermissionPanel.
+--- @return table the snapshot currently displayed
 function UI.IntermissionRefresh()
     local p = ensurePanel()
     local c = config()
+    local spec = {}
 
     if setupMode then
         -- Placement mode (before the pull): drag + ping keybind reminder + OK.
         -- Never a simulation (the two modes never overlap).
         local view = ns.Intermission.setupView({ leadSeconds = c.leadSeconds, pairs = preparedPairs() })
-        p.state:SetText("")
-        p.headline:SetText(view.headline)
-        p.body:SetText(table.concat(view.lines, "\n"))
-        p.pingBanner:Hide()
-        p.simBanner:Hide()
-        for _, button in ipairs(p.buttons) do
-            button:Hide()
-        end
-        p.redo:Hide()
-        p.ok:SetText(view.okLabel)
-        p.ok:Show()
-        return view
+        spec.headline = view.headline
+        spec.bodyLines = view.lines
+        spec.showOk = true
+        return UI.ApplyLayout(p, ns.Layout.intermissionPanel(spec), panelElements(p))
     end
 
     -- The ping policy is INJECTED into Core (Core never reads the SavedVariables)
     -- and decides the role order, the "PING: YES/NO" banner and the ping line.
     -- The binding resolver is injected too: Core stays free of any API call.
-    -- During a rehearsal the panel shows the SIMULATION state: the live
+    -- During a rehearsal the panel shows the SIMULATION view: the live
     -- intermission (`state`) is left untouched (see displayedState()).
     local snap = ns.Intermission.snapshot(displayedState(), c.pingMode, resolveBindingKey)
-    p.state:SetText(snap.stateText)
-    p.headline:SetText(snap.headline)
-    p.body:SetText(table.concat(snap.lines, "\n"))
-    -- The three choices are hidden as soon as a composition is clicked
-    -- (snap.showButtons); CORRECT is then the only button (snap.showRedo).
-    for _, button in ipairs(p.buttons) do
-        button:SetShown(snap.showButtons)
+    if simRun ~= nil then
+        -- Rehearsal: the SIMULATION banner AND a headline adapted to "no boss,
+        -- no orb to read, no countdown" (Core/Simulation.forRehearsal).
+        snap = Simulation.forRehearsal(snap, simRun)
+        spec.bannerLines = snap.simBannerLines
     end
-    if snap.pingBanner ~= nil then
-        p.pingBanner:SetText(snap.pingBanner)
-        p.pingBanner:SetTextColor(parseColor(snap.pingColorHex))
-        p.pingBanner:Show()
-    else
-        p.pingBanner:Hide()
-    end
-    p.redo:SetShown(snap.showRedo)
-    p.ok:Hide()
-    UI.IntermissionRefreshSimBanner()
-    return snap
-end
+    spec.stateText = snap.stateText
+    spec.headline = snap.headline
+    spec.pingBanner = snap.pingBanner
+    spec.bodyLines = snap.lines
+    spec.showChoices = snap.showButtons
+    spec.showRedo = snap.showRedo
 
---- Shows/hides the SIMULATION banner of the panel. It is displayed as long as a
---- rehearsal drives the panel: it is the guarantee that the player never mistakes
---- a simulation for a real fight.
-function UI.IntermissionRefreshSimBanner()
-    local p = ensurePanel()
-    if simRun == nil then
-        p.simBanner:Hide()
-        return nil
+    local layout = ns.Layout.intermissionPanel(spec)
+    UI.ApplyLayout(p, layout, panelElements(p))
+    -- The ping banner carries the ping color of the state (Core gives the code).
+    if snap.pingBanner ~= nil then
+        p.pingBanner:SetTextColor(parseColor(snap.pingColorHex))
     end
-    local simSnap = Simulation.snapshot(simRun)
-    if simSnap == nil then
-        p.simBanner:Hide()
-        return nil
-    end
-    p.simBanner:SetText(simSnap.banner .. "\n" .. simSnap.cycleLine)
-    p.simBanner:Show()
-    return simSnap
+    return snap
 end
 
 function UI.IntermissionShow()
@@ -438,33 +436,39 @@ function UI.IntermissionHide()
     local p = ensurePanel()
     setupMode = false
     p:Hide()
+    if simRun ~= nil then
+        -- Hiding the panel ENDS a rehearsal: a rehearsal that is no longer on
+        -- screen must not stay "running" (the next /gr sim inter would be refused
+        -- and the player would be stuck with a hidden simulation).
+        simRun = nil
+        simState = nil
+    end
 end
 
 --[[ SIMULATION MODE (rehearsal alone, with no boss and no raid) ----------------
 
      Two entries, reachable from the MAIN panel (two buttons) and from the chat
-     (/gr sim inter [cycles=N] | group | groupe, /gr sim ping, /gr sim stop):
+     (/gr sim inter | group | groupe, /gr sim ping, /gr sim stop):
 
-       1. "INTERMISSION GROUP": the intermission panel opens by itself after 3 s,
-          the player clicks their composition, corrects it (REDO), the panel
-          closes by itself after ~20 s. ONE cycle by default (in-game feedback:
-          one test intermission is enough); a longer rehearsal is available with
-          `/gr sim inter cycles=N` (1..9). No boss, no raid, no ENCOUNTER_START,
-          no combat event ever read;
-       2. "PING TRAINING": the ANCHOR gesture, taught step by step - hover YOUR
-          OWN character frame, then press the native ping key (the ping lands
-          under the mouse, so you ping yourself). The three native pings
-          (Warning -> En route -> Aide) are announced one after the other, with
-          the key the player really bound (read HERE, under pcall, and injected
-          into Core) and a visible countdown. The player presses the key for real
-          and validates with a button. The addon can NOT detect a ping and never
-          says it did.
+       1. "INTERMISSION GROUP": the intermission panel opens RIGHT AWAY (fourth
+          in-game test: the former 3 s delay is gone), the player clicks their
+          composition, corrects it (CORRECT) and CLOSES THE PANEL THEMSELVES
+          (close cross or Close button). ONE single cycle: nothing closes it
+          automatically and nothing relaunches it. No boss, no raid, no
+          ENCOUNTER_START, no combat event ever read;
+       2. "PING HELP": a SHORT information window: how to bind one key per ping
+          (Options > Keybindings > Ping) and what to do during the boss ("when
+          the panel says PING: YES, hover YOUR OWN character frame and press
+          your key: you ping yourself"). The former GUIDED SEQUENCE (countdown,
+          three announced pings, "ping placed" button) is REMOVED: measured in
+          game, the addon can neither send nor detect a ping, so there was
+          nothing to sequence.
 
-     ISOLATION: the simulations own their own run (`simRun`) and state
-     (`simState`), never touch `run` (the pre-computed ENCOUNTER_START timeline)
-     nor `state` (the live intermission), never arm/disarm the timeline and never
-     publish a decision into the SavedVariables (a rehearsal must never be read by
-     the diagnostic kit as a real choice).
+     ISOLATION: the rehearsal owns its own run (`simRun`) and state (`simState`),
+     never touches `run` (the pre-computed ENCOUNTER_START timeline) nor `state`
+     (the live intermission), never arms/disarms the timeline and never publishes
+     a decision into the SavedVariables (a rehearsal must never be read by the
+     diagnostic kit as a real choice).
 ]]
 --
 
@@ -482,16 +486,16 @@ local function realFlowBusy()
     return phase == ns.Intermission.PHASE.PENDING or phase == ns.Intermission.PHASE.VISIBLE or phase == ns.Intermission.PHASE.DARK
 end
 
---- True while ANY simulation is running (rehearsal or ping test).
+--- True while the INTERMISSION REHEARSAL is running. The ping help window is NOT
+--- a simulation: it owns no state, times nothing and never blocks anything.
 local function simulationRunning()
-    return simRun ~= nil or Simulation.pingTestActive(pingRun)
+    return simRun ~= nil
 end
 
 --- Forgets every simulation (SILENT) and hides what they own. Idempotent.
 local function clearSimulation()
     simRun = nil
     simState = nil
-    pingRun = nil
     if pingPanel ~= nil then
         pingPanel:Hide()
     end
@@ -503,16 +507,15 @@ local function clearSimulation()
     end
 end
 
---- The frame of the guided PING TRAINING. Deliberately separate from the
---- intermission panel: a ping training is not an intermission and the two must
---- never overlap on screen. Like the main panel it is DRAGGABLE and its position
---- is persisted (GideonRaidDB.pingPanelPosition).
+--- The PING HELP window (an information frame, not an intermission: the two can
+--- never overlap on screen conceptually, and the intermission panel always
+--- wins). Like the main panel it is DRAGGABLE and its position is persisted
+--- (GideonRaidDB.pingPanelPosition).
 local function ensurePingPanel()
     if pingPanel then
         return pingPanel
     end
-    local p = CreateFrame("Frame", "GideonRaidPingTestPanel", UIParent, "BackdropTemplate")
-    p:SetSize(540, 340)
+    local p = CreateFrame("Frame", "GideonRaidPingHelpPanel", UIParent, "BackdropTemplate")
     p:SetMovable(true)
     p:EnableMouse(true)
     p:RegisterForDrag("LeftButton")
@@ -537,57 +540,37 @@ local function ensurePingPanel()
         insets = { left = 8, right = 8, top = 8, bottom = 8 },
     })
 
+    -- No fixed offset: Core/Layout.pingHelpPanel() lays the window out.
     p.title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    p.title:SetPoint("TOP", 0, -14)
-    p.title:SetText(Locale.t("sim.ping.title"))
+    p.title:SetJustifyH("CENTER")
+    p.title:SetText("")
 
     p.closeCross = UI.AttachCloseCross(p, function()
-        UI.SimulationStop()
+        UI.PingHelpHide()
     end)
 
-    -- The SIMULATION banner: never a doubt about what is being tested.
-    p.simBanner = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.simBanner:SetPoint("TOP", 0, -32)
-    p.simBanner:SetText(Locale.t("sim.banner"))
-    p.simBanner:SetTextColor(1.0, 0.82, 0.0)
-
-    p.step = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.step:SetPoint("TOP", 0, -58)
-    p.step:SetText("")
-
-    -- The BIG instruction, step by step: "1. Hover YOUR OWN character frame.
-    -- 2. Press <key> (<ping>) -> you ping yourself". Three lines at most (the
-    -- WAIT phase shows "GET READY: <ping>").
-    p.press = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    p.press:SetPoint("TOP", 0, -82)
-    p.press:SetWidth(512)
-    p.press:SetJustifyH("CENTER")
-    p.press:SetText("")
+    -- The BIG reminder, in large type: what to do, not a countdown.
+    p.headline = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    p.headline:SetJustifyH("CENTER")
+    p.headline:SetText("")
 
     p.body = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    p.body:SetPoint("TOPLEFT", 24, -158)
-    p.body:SetWidth(492)
     p.body:SetJustifyH("LEFT")
     p.body:SetJustifyV("TOP")
     p.body:SetText("")
 
-    -- "PING PLACED": the player validates the step THEMSELVES. The addon detects
-    -- nothing (no API reports a ping) and says so on the panel.
-    p.ok = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.ok:SetSize(150, 24)
-    p.ok:SetPoint("BOTTOMRIGHT", -180, 16)
-    p.ok:SetText(Locale.t("sim.ping.ok"))
-    p.ok:SetScript("OnClick", function()
-        UI.SimulationPingConfirm()
-    end)
+    -- The keys the player really bound, when they are known (read by the
+    -- rendering layer under pcall and injected into Core).
+    p.keys = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    p.keys:SetJustifyH("LEFT")
+    p.keys:SetJustifyV("TOP")
+    p.keys:SetText("")
 
-    -- Leave the test at any moment.
-    p.quit = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    p.quit:SetSize(160, 24)
-    p.quit:SetPoint("BOTTOMRIGHT", -16, 16)
-    p.quit:SetText(Locale.t("sim.ping.quit"))
-    p.quit:SetScript("OnClick", function()
-        UI.SimulationStop()
+    -- Leaving the window: nothing is simulated and nothing is timed, so this
+    -- button only closes an information frame.
+    p.close = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+    p.close:SetScript("OnClick", function()
+        UI.PingHelpHide()
     end)
 
     p:Hide()
@@ -595,70 +578,47 @@ local function ensurePingPanel()
     return pingPanel
 end
 
---- Rebuilds the ping-test display from what Core/Simulation computed (the key to
---- press is read here and injected: Core/ never calls GetBindingKey).
-local function pingPanelRefresh()
+--- The elements of the ping help window, by block id (Core/Layout names them).
+--- @return table array of { id = string, frame = Frame|FontString }
+local function pingHelpElements(p)
+    return {
+        { id = "title", frame = p.title },
+        { id = "headline", frame = p.headline },
+        { id = "body", frame = p.body },
+        { id = "keys", frame = p.keys },
+        { id = "close", frame = p.close },
+    }
+end
+
+--- Rebuilds the ping help window from the PURE view computed by Core (the key of
+--- each ping is INJECTED: Core never calls an API).
+--- @return table the applied layout
+function UI.PingHelpRefresh()
     local p = ensurePingPanel()
-    local snap = Simulation.pingTestSnapshot(pingRun, resolveBindingKey)
-    if snap == nil then
-        -- No run (already left): never an error on screen, just an empty frame.
-        p.press:SetText("")
-        p.body:SetText("")
-        p.ok:Hide()
-        return nil
-    end
-    p.simBanner:SetText(snap.banner)
-    p.step:SetText(snap.stepLine)
-    p.press:SetText(snap.headline)
-    p.body:SetText(table.concat(snap.lines, "\n"))
-    p.ok:SetText(snap.stepLabel)
-    p.ok:SetShown(not snap.done)
-    p.quit:SetText(snap.quitLabel)
-    return snap
+    local view = Simulation.pingHelpView(resolveBindingKey)
+    local layout = ns.Layout.pingHelpPanel({ lines = view.lines, keyLines = view.keyLines })
+    return UI.ApplyLayout(p, layout, pingHelpElements(p))
 end
 
---- Advances the guided ping test by one tick: ONLY the countdown between two
---- pings is timed by the engine (the step itself waits for the player's OK).
-local function pingTestTick(dt)
-    if pingRun == nil then
-        return
-    end
-    Simulation.advancePingTest(pingRun, dt)
-    pingPanelRefresh()
+--- Shows the ping help window (`/gr sim ping`, the main-panel button), where the
+--- player left it (persisted position).
+function UI.PingHelpShow()
+    local p = ensurePingPanel()
+    UI.PingPanelApplyPosition()
+    p:Show()
+    UI.PingHelpRefresh()
 end
 
---- Advances the INTERMISSION REHEARSAL by one tick. SEPARATE from the real flow:
---- `run` (ENCOUNTER_START timeline) and `state` (live intermission) are never
---- touched here.
-local function simulationInterTick(dt)
-    if simRun == nil then
-        return
-    end
-    local _, event = Simulation.advance(simRun, dt)
-    if event == Simulation.EVENT.OPEN then
-        if simState == nil then
-            simState = ns.Intermission.newState()
-        end
-        ns.Intermission.start(simState, Simulation.cycleTimeline(simRun))
-        UI.IntermissionShow()
-    elseif event == Simulation.EVENT.CLOSE then
-        simState = nil
-        UI.IntermissionHide()
-        if Simulation.runFinished(simRun) then
-            local replayed = simRun.closed or 0
-            clearSimulation()
-            UI.Print(Locale.format("cmd.sim.finished", replayed))
-            return
-        end
-    end
-    if simState ~= nil then
-        ns.Intermission.tick(simState, dt)
+--- Hides the ping help window. Nothing to disarm: this frame simulates nothing.
+function UI.PingHelpHide()
+    if pingPanel ~= nil then
+        pingPanel:Hide()
     end
 end
 
 --- `/gr sim` with no argument and the main-panel SIMULATION buttons land here.
---- The whole argument is parsed by Core (mode + optional `cycles=N`); an unknown
---- sub-command or a malformed option is REFUSED with a message, nothing is
+--- The whole argument is parsed by Core (mode + no option any more); an unknown
+--- sub-command or a trailing option is REFUSED with a message, nothing is
 --- guessed and nothing is launched.
 function UI.SimulationCommand(raw)
     local mode, options, err = Simulation.parseCommand(raw)
@@ -680,10 +640,10 @@ function UI.SimulationCommand(raw)
 end
 
 --- Starts the "INTERMISSION GROUP" rehearsal (`/gr sim inter`, aliases group and
---- groupe, plus the main-panel button): ONE accelerated intermission by default
---- (in-game feedback), no boss. A longer rehearsal is available through
---- `/gr sim inter cycles=N` (bounded 1..9 by Core).
---- @param options table|nil { cycles = number|nil }
+--- groupe, plus the main-panel button): the panel opens IMMEDIATELY and the
+--- PLAYER closes it (fourth in-game test). ONE cycle, no automatic close, no
+--- relaunch, no boss, and the ENCOUNTER_START timeline is left alone.
+--- @param options table|nil any option is REFUSED by Core
 function UI.SimulationInterStart(options)
     local c = config()
     if not c.enabled then
@@ -698,29 +658,34 @@ function UI.SimulationInterStart(options)
         UI.Print(Locale.t("sim.refused.running"))
         return
     end
-    local opts = {
-        openDelaySeconds = Simulation.DEFAULT_OPEN_DELAY_SECONDS,
-        visibilitySeconds = c.visibilitySeconds,
-        durationSeconds = c.durationSeconds,
-    }
-    if type(options) == "table" and options.cycles ~= nil then
-        opts.cycles = options.cycles
-    end
-    local newRun, err = Simulation.newRun(opts)
+    local newRun, err = Simulation.newRun(options)
     if newRun == nil then
         UI.Print(Locale.format("ui.intermissionError", tostring(err)))
         return
     end
     clearSimulation()
     simRun = newRun
-    simState = nil
-    ensureTicker()
-    UI.Print(Locale.format("cmd.sim.inter", simRun.cycles, simRun.openDelay))
+    simState = ns.Intermission.newState()
+    -- NO lead time: the simulated intermission starts VISIBLE at once, and it is
+    -- never ticked: without a boss there is no clock, the player closes it.
+    local started, startErr = ns.Intermission.start(simState, {
+        leadSeconds = 0,
+        visibilitySeconds = c.visibilitySeconds,
+        durationSeconds = c.durationSeconds,
+    })
+    if not started then
+        simRun = nil
+        simState = nil
+        UI.Print(Locale.format("ui.intermissionError", tostring(startErr)))
+        return
+    end
+    UI.IntermissionShow()
+    UI.Print(Locale.t("cmd.sim.inter"))
 end
 
---- Starts the guided PING TRAINING (`/gr sim ping`, main-panel button): the
---- ANCHOR gesture (hover your own character frame, press the key) rehearsed on
---- the three native pings, with the key the player really bound when it is known.
+--- Starts... rather, SHOWS the PING HELP window (`/gr sim ping`, main-panel
+--- button): how to bind the keys and the operational reminder. The addon never
+--- pings and detects nothing.
 function UI.SimulationPingStart()
     local c = config()
     if not c.enabled then
@@ -731,60 +696,25 @@ function UI.SimulationPingStart()
         UI.Print(Locale.t("sim.refused.live"))
         return
     end
-    if simulationRunning() then
-        UI.Print(Locale.t("sim.refused.running"))
-        return
-    end
-    local newTest, err = Simulation.newPingTest({})
-    if newTest == nil then
-        UI.Print(Locale.format("ui.intermissionError", tostring(err)))
-        return
-    end
-    clearSimulation()
-    pingRun = newTest
-    local p = ensurePingPanel()
-    -- The frame reopens where the player left it (persisted position).
-    UI.PingPanelApplyPosition()
-    p:Show()
-    pingPanelRefresh()
-    ensureTicker()
-    UI.Print(Locale.format("cmd.sim.pingStart", Simulation.pingTestTotal(pingRun), Simulation.pingSequenceLine()))
+    UI.PingHelpShow()
+    UI.Print(Locale.format("cmd.sim.pingStart", Simulation.pingSequenceLine()))
 end
 
---- "PING PLACED" button of the ping test: the player validates the step
---- THEMSELVES. The addon records no ping: it only announces them (no API reports
---- a ping, so pretending otherwise would be a lie).
-function UI.SimulationPingConfirm()
-    if pingRun == nil then
-        return
-    end
-    local _, err = Simulation.confirmPingTest(pingRun)
-    if err ~= nil then
-        UI.Print(tostring(err))
-        return
-    end
-    if not Simulation.pingTestActive(pingRun) then
-        UI.Print(Locale.format("cmd.sim.pingFinished", Simulation.pingTestTotal(pingRun)))
-    end
-    pingPanelRefresh()
-end
-
---- Stops every simulation (`/gr sim stop`, QUIT TEST, the close crosses).
+--- Stops the REHEARSAL (`/gr sim stop`, the close cross, the Close button) and
+--- hides the ping help window. Idempotent: with nothing running it says so.
 function UI.SimulationStop()
     local stopped = false
     if simRun ~= nil then
-        local snap = Simulation.snapshot(simRun)
-        UI.Print(Locale.format("cmd.sim.stopped", snap ~= nil and snap.closed or 0))
+        Simulation.closeRun(simRun)
         stopped = true
     end
-    if pingRun ~= nil then
-        local snap = Simulation.pingTestSnapshot(pingRun, nil)
-        UI.Print(Locale.format("cmd.sim.pingStopped", snap ~= nil and snap.confirmed or 0, snap ~= nil and snap.total or 0))
-        Simulation.cancelPingTest(pingRun)
+    if pingPanel ~= nil and pingPanel:IsShown() then
         stopped = true
     end
     clearSimulation()
-    if not stopped then
+    if stopped then
+        UI.Print(Locale.t("cmd.sim.closed"))
+    else
         UI.Print(Locale.t("cmd.sim.none"))
     end
 end
@@ -792,7 +722,7 @@ end
 --- Close cross of the INTERMISSION panel:
 ---   - in PLACEMENT mode it CANCELS the placement (same effect as the existing
 ---     Close button: the mode is left, the panel is hidden);
----   - during a SIMULATION it leaves the rehearsal;
+---   - during a REHEARSAL it CLOSES the rehearsal (the player owns it);
 ---   - during the REAL flow it only hides the panel: the intermission clock keeps
 ---     running, the panel still closes by itself at the end of the intermission
 ---     and opens again at the next one (nothing is disarmed).
@@ -801,6 +731,13 @@ function UI.IntermissionCloseCross()
         UI.IntermissionHide()
         return
     end
+    UI.IntermissionClosePanel()
+end
+
+--- Close button AND close cross of the intermission panel: ONE behaviour for
+--- both. A rehearsal is CLOSED BY THE PLAYER (nothing else ends it); the real
+--- flow is only hidden (its clock keeps running).
+function UI.IntermissionClosePanel()
     if simRun ~= nil then
         UI.SimulationStop()
         return
@@ -918,12 +855,9 @@ end
 ---   2. the intermission clock counts the lead time, the visibility window, the
 ---      darkened room, then DONE -> the panel CLOSES BY ITSELF.
 function UI.IntermissionTick(dt)
-    if simRun ~= nil then
-        simulationInterTick(dt)
-    end
-    if pingRun ~= nil then
-        pingTestTick(dt)
-    end
+    -- The SIMULATION owns NO clock of its own any more: the panel opens right
+    -- away and the player closes it (fourth in-game test), so nothing is ticked
+    -- here. The two clocks below are the REAL flow's, untouched by a rehearsal.
     if run ~= nil then
         local _, opened = ns.Intermission.advanceRun(run, dt)
         if opened ~= nil then
@@ -942,10 +876,9 @@ function UI.IntermissionTick(dt)
             end
         end
     end
-    -- Rendering: the ping-test frame first (it is the surface of its own test).
-    if pingPanel ~= nil and pingPanel:IsShown() and pingRun ~= nil then
-        pingPanelRefresh()
-    elseif panel ~= nil and panel:IsShown() then
+    -- Rendering: only the intermission panel is redrawn (the ping help window is
+    -- static: it shows the same text until it is closed).
+    if panel ~= nil and panel:IsShown() then
         UI.IntermissionRefresh()
     end
     if not engineActive() then
@@ -1033,7 +966,7 @@ function UI.IntermissionOnEncounterStart()
     -- A rehearsal must NEVER compete with a real fight: it is stopped the moment
     -- the encounter starts. This arms/disarms nothing by itself: the timeline
     -- below is armed exactly as before.
-    if simRun ~= nil or pingRun ~= nil then
+    if simRun ~= nil or (pingPanel ~= nil and pingPanel:IsShown()) then
         clearSimulation()
         UI.Print(Locale.t("sim.stoppedByEncounter"))
     end
@@ -1118,30 +1051,18 @@ end
 --- the strings come from Core, so the UI only copies them.
 function UI.IntermissionApplyStaticText()
     local p = ensurePanel()
-    p.title:SetText(Locale.t("ui.panelTitle"))
-    p.close:SetText(Locale.t("ui.close"))
-    p.ok:SetText(Locale.t("ui.ok"))
-    p.redo:SetText(Locale.t("ui.redo"))
+    -- The close cross is NOT part of a layout (it is chrome shared by the two
+    -- panels): its label is refreshed here.
     p.closeCross:SetText(Locale.t("ui.closeCross"))
-    for index = 1, #ns.Intermission.STATES do
-        local key = ns.Intermission.STATES[index]
-        local rec = ns.Intermission.getDeclaration(key)
-        local button = p.buttons[index]
-        if button ~= nil then
-            button:SetText(rec ~= nil and rec.buttonLabel or key)
-        end
-    end
-    -- The ping-test frame is built lazily: only refresh its labels when it exists.
+    -- The ping help window is built lazily: only refresh it when it exists.
     if pingPanel ~= nil then
-        pingPanel.title:SetText(Locale.t("sim.ping.title"))
-        pingPanel.simBanner:SetText(Locale.t("sim.banner"))
-        pingPanel.ok:SetText(Locale.t("sim.ping.ok"))
-        pingPanel.quit:SetText(Locale.t("sim.ping.quit"))
         pingPanel.closeCross:SetText(Locale.t("ui.closeCross"))
-        if pingRun ~= nil then
-            pingPanelRefresh()
+        if pingPanel:IsShown() then
+            UI.PingHelpRefresh()
         end
     end
+    -- Everything else (title, buttons, disposition) is rebuilt from Core by a
+    -- plain refresh: the labels live in Core/Layout.lua, in both languages.
     UI.IntermissionRefresh()
 end
 

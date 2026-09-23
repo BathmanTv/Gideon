@@ -69,7 +69,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(8, #files)
+        assert.are.equal(9, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -106,6 +106,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             "Core/Pairing.lua",
             "Core/Intermission.lua",
             "Core/Simulation.lua",
+            "Core/Layout.lua",
         }
         for _, file in ipairs(pureFiles) do
             local code = stripComments(readFile(file))

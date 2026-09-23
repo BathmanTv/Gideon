@@ -162,37 +162,52 @@ pure and time is **injected**: `Intermission.tick(state, dt)` and
 
 The raid lead must be able to rehearse the intermission **without a boss and
 without a raid** (to learn the flow, to check the panel, to test the ping keys).
-Two guided sequences, both reachable **from the main panel (two buttons) and from
-the chat**, driven by the pure module `Core/Simulation.lua`:
+Two entries, both reachable **from the main panel (the two SIMULATION buttons) and
+from the chat**, driven by the pure module `Core/Simulation.lua`:
 
 | Entry | Command (aliases) | What happens |
 |---|---|---|
-| **Intermission group** | `/gr sim inter` (`sim group`, `sim groupe`, optional `cycles=N`) | the intermission panel **opens by itself after 3 s**, the player clicks their composition, sees the state / role / `PING: YES/NO` / the action line, corrects it with **REDO**, the panel **closes by itself after ~20 s**. **ONE cycle by default** (in-game feedback: "just keep it on 1 test intermission"); a longer rehearsal stays available with `/gr sim inter cycles=N` (bounded 1–9), and the chat announces the end |
-| **Ping training** | `/gr sim ping` | a dedicated frame teaches the **ANCHOR gesture** on the three native pings, announced **one after the other** with a **visible countdown**, a `PING PLACED` button to move on, a `QUIT TRAINING` button and the close cross. The frame is **draggable** and its position is persisted |
-| Leave | `/gr sim stop` (or `QUIT TRAINING`, or the cross) | stops whatever simulation is running and gives an honest report |
+| **Intermission group** | `/gr sim inter` (`sim group`, `sim groupe`) | the intermission panel **opens RIGHT AWAY** (fourth in-game feedback: the former 3 s delay is gone), the player clicks the composition they see, reads the state / role / `PING: YES/NO` / the action line, corrects it with **REDO**, and **closes the panel themselves** (close cross or Close button). **ONE single cycle**: nothing closes it automatically, nothing relaunches it, and the chat reports it when it closes; `/gr sim stop` does the same |
+| **Ping help** | `/gr sim ping` (= `/gr pinghelp`) | a **short information window** (draggable, position persisted, closable with its Close button or the cross) that explains **how to bind one key per ping** (`Options > Keybindings > Ping`) and the **operational reminder** - `PING: YES = PING YOURSELF`: hover YOUR OWN character frame, press your key, and you ping yourself. There is **no guided sequence any more** (fourth in-game feedback): no countdown, no `PING PLACED` button, no `Avertissement -> En route -> Aide` progression, no announced-ping counter |
+| Leave | `/gr sim stop`, the **Close** button or the close cross | closes the rehearsal or the help window and gives an honest report |
 
-**What the banners say.** Every simulation surface displays
-`SIMULATION - NO BOSS, NO RAID` (plus the cycle counter on the intermission
-panel): a rehearsal can never be mistaken for a real fight.
-
-**The ping training teaches the SELF-PING gesture.** Measured in game by the raid
-lead: the ping lands **where the mouse is**, so hovering **your own character
-frame** pings **you**. The frame therefore displays the gesture **step by step, in
-large type** (`sim.ping.selfSteps`):
+**What the rehearsal banner says.** A rehearsal is a **single cycle the player
+closes**, so the panel carries a **two-line** banner:
 
 ```
-1. Hover YOUR OWN character frame (the one with your health bar).
-2. Press <key> (<Warning>) -> you ping yourself
+SIMULATION - NO BOSS, NO RAID
+SINGLE REHEARSAL - YOU CLOSE THE PANEL YOURSELF
 ```
 
-`<key>` is the **key the player really bound** (read with `GetBindingKey`, under
-`pcall`, by the rendering layer and injected into `Core/`); when no key is known
-the line says `your ping key` and asks for a keybind — never an invented shortcut.
-The three pings stay as they were (**Warning → OnMyWay → Assist**) so the player
-also **checks that their keybinds actually answer**.
+The banner therefore announces exactly what the rehearsal does, and it can never be
+mistaken for a real fight. The **combat headline is replaced** during a rehearsal
+(`SIMULATION: NO ORB TO READ - CLICK THE COMPOSITION YOU SEE ABOVE YOUR HEAD`):
+without a boss there is **no orb to read and no clock**, so the countdown
+(`LOOK AT THE ORB COLOR ABOVE THE HEADS: 0 s`) is gone instead of contradicting
+what the player sees - the note below it explains that in a real fight this line
+counts the seconds.
 
-**What the ping training does NOT claim.** The addon **cannot detect a ping** — no
-game API reports one (see §4). The frame therefore says, in both languages:
+**The ping help teaches the SELF-PING gesture and how to bind the keys.** Measured
+in game by the raid lead: the ping lands **where the mouse is**, so hovering **your
+own character frame** pings **you**. The window therefore states, in both
+languages:
+
+- `1. Bind one key per ping: Options > Keybindings > Ping (Ping, Warning, On My
+  Way, Assist)` - the **real client path**, in the player's own language
+  (`Options > Raccourcis > Ping` in French);
+- `2. During the boss, when this panel says PING: YES, hover YOUR OWN character
+  frame (the one with your health bar) then press your key: you ping yourself,
+  where you stand.`
+- the headline `PING: YES = PING YOURSELF` (`PING : OUI = PINGE-TOI TOI-MEME`), so
+  the rule is readable at a glance;
+- `Keys found for your pings:` followed by one line per ping
+  (`Warning = Q` / `On My Way = no key bound (Options > Keybindings > Ping)`): the
+  key the player **really bound**, read with `GetBindingKey` under `pcall` by the
+  rendering layer and injected into `Core/` - a ping with no key says so honestly,
+  never an invented shortcut.
+
+**What the ping help does NOT claim.** The addon **cannot detect a ping** - no game
+API reports one (see §4) - and it **never sends one**. The window states it as is:
 
 - `This is exactly the ANCHOR (1V3R) gesture during the intermission: ping
   yourself where you stand.`
@@ -201,11 +216,8 @@ game API reports one (see §4). The frame therefore says, in both languages:
 - `The addon CANNOT detect a ping: no game API reports one. Only you can check
   your screen.`
 
-The player presses their key for real and validates the step themselves: the
-addon only counts how many pings it **announced**. It never writes that a ping
-went out. The default wait between two pings is **5 s** — the client accepts 3
-pings in a row, then ~5 s of wait (§2.1), so the rehearsal stays inside the
-budget.
+Only the player can check their own screen: the window **counts nothing** and
+**times nothing** (it owns no state and starts no clock).
 
 **Isolation (enforced by `tests/spec/guard_spec.lua`).** A simulation owns its own
 run and state and:
@@ -217,19 +229,23 @@ run and state and:
   read a rehearsal as a real choice;
 - is **refused while the real flow is running** (intermission in progress or
   timeline armed), and **stopped the moment a real encounter starts**;
-- only works with **bounded** inputs (cycles 1–9, opening delay 0–30 s, cycle
-  duration = visibility+1–120 s, ping step 1–120 s, gap 0–30 s), and **refuses**
-  unknown values: a non-numeric option, an unknown ping, an empty ping sequence or
-  an unknown sub-command (`/gr sim bidon`) are rejected with a message, never
-  guessed.
+- takes **no option at all** (the former `cycles=N` is gone: one single cycle, the
+  player closes it) and refuses anything else: a trailing token
+  (`/gr sim inter cycles=3`), an unknown sub-command (`/gr sim bidon`) or a
+  non-table argument are **rejected with a message**, never guessed;
+- the rehearsal **arms no clock at all**: it owns no ticker, so nothing in it can
+  advance, close or relaunch the panel on its own.
 
 **The close cross ("X").** Both panels (main and intermission) have a close cross
 in the top right corner (label and tooltip from `Core/Locale.lua`:
 `ui.closeCross` = `X`, `ui.closeTooltip` = `Close` / `Fermer`). On the intermission
 panel it **cancels the placement** during placement mode (same effect as the Close
-button), **leaves the rehearsal** during a simulation, and otherwise **only hides
-the panel**: the intermission clock keeps running, the panel still closes by itself
-at the end of the intermission and **opens again at the next one**.
+button), **closes the rehearsal** during a simulation (same as the Close button),
+closes the ping help window, and otherwise **only hides the panel**: the
+intermission clock keeps running, the panel still closes by itself at the end of
+the intermission and **opens again at the next one**. The cross is a **real button
+in the layout** (`Core/Layout.lua` reserves its corner): no line may be drawn under
+it in either language.
 
 ### 2.5 Movable panels (persisted position + Lock/Unlock)
 
@@ -242,7 +258,7 @@ remembers where the player left it:
 |---|---|---|
 | main panel (`/gr`) | `GideonRaidDB.panelPosition` | at `ADDON_LOADED` and every time the panel is shown |
 | intermission panel | `GideonRaidDB.intermission.position` | on placement, opening and `/gr show` |
-| ping training frame | `GideonRaidDB.pingPanelPosition` | before each opening |
+| ping help window | `GideonRaidDB.pingPanelPosition` | before each opening |
 
 Each position is a `{ point, relativePoint, x, y }` block, saved on **drag stop**
 (no confirmation needed) and read back through the **pure, total**
@@ -265,6 +281,48 @@ choice (`/gr lock`) is respected, and a **non-boolean** value (hand-edited file)
 counts as "not locked": the resolver is total, it never raises and never locks the
 player out.
 
+### 2.6 Readable panels - the layout is COMPUTED in `Core/` and applied as is
+
+The fourth in-game test showed two layout bugs: **the main panel text ran over the
+frame** (French labels are longer than English ones) and **the intermission panel
+drew its big state on top of the SIMULATION banner** (fixed pixel offsets that could
+collide). The fix is structural: the geometry of every panel is now **computed by a
+pure module** (`Core/Layout.lua`) and simply **copied** by the rendering layer.
+
+```
+Core/Layout.lua   -> an ORDERED list of blocks, anchored one under the other
+UI/Panel.lua      -> UI.ApplyLayout(target, layout, elements): clears everything,
+                     then copies point/size/label block by block
+```
+
+Rules enforced by `tests/spec/layout_spec.lua` (16 tests) **in both languages**:
+
+- **stacking**: every block is anchored **below** the previous one
+  (`top = previous.bottom - gap`), never at an absolute offset that could collide -
+  the exact bug of the fourth test (the state drawn over the banner);
+- **alignment**: the buttons of the main panel are all the **same width** (the widest
+  label of the current language) and regularly spaced; the three flow buttons come
+  first, the LOCK/UNLOCK utility is **separated by a bigger gap**;
+- **order**: the main panel builds its buttons from the constant
+  `Layout.MAIN_PANEL_ORDER = { "place", "simPing", "simInter", "lock" }`, and a test
+  asserts that order, so a future change cannot silently reorder the evening flow;
+- **no overflow**: a block never runs over the frame, and a label never runs over its
+  button (the other cause of the text leaving the frame are labels whose **longest
+  word** does not fit the button);
+- **no stale text**: an element that is not part of the current layout is hidden
+  **and emptied**, so a CORRECT cannot leave the previous `1V3R` on screen;
+- **the close cross** reserves its own top-right corner: no line may be drawn under
+  it;
+- **the frame follows the content**: the width is the widest of the blocks (the main
+  panel is ≈360 px so the French labels fit, the intermission panel ≈560 px), the
+  height is computed from the stacked blocks, and the wrapped body grows the frame
+  instead of overflowing it.
+
+`UI/` therefore computes **nothing**: it iterates the blocks, copies the point
+(`TOPLEFT` + offsets, computed in `Core/`), the size and the label. The pure geometry
+is what makes "no overlap in either language" testable **out of game**, with a
+stubbed API, on every commit.
+
 ## 3. What the addon does / can NOT do (to be told to the players as is)
 
 **It can:**
@@ -273,7 +331,7 @@ player out.
 - **place** the intermission panel where the player wants it (position persisted),
   **drag the main panel** (movable by default, position persisted, `/gr lock` to
   freeze it, `/gr resetposition` to recenter everything) and do the same with the
-  ping training frame;
+  ping help window;
 - display the **three composition buttons** named after the **visible
   composition** — `1 green + 3 red`, `2 green + 2 red`, `3 green + 1 red` — with
   the **number as a hint** ("1 or 3", "2"); once a composition is clicked the three
@@ -445,7 +503,7 @@ preference** and the **panel preferences** (positions + lock):
 | `lockPanel` | `false` | `true` freezes every panel (`/gr lock`), `false` lets the player drag them (`/gr unlock`, the UNLOCK PANEL button). Only a real boolean can lock: anything else counts as "not locked" |
 | `panelSchema` | `1` | schema marker of the panel preferences: an older SavedVariables (no marker) is **unlocked once** and stamped — see §2.5 |
 | `panelPosition` | `{ CENTER, CENTER, 0, 0 }` | **main panel** position, saved on every drag stop, restored at `ADDON_LOADED` |
-| `pingPanelPosition` | `{ CENTER, CENTER, 0, 0 }` | **ping training frame** position, saved on every drag stop, restored at the next opening |
+| `pingPanelPosition` | `{ CENTER, CENTER, 0, 0 }` | **ping help window** position, saved on every drag stop, restored at the next opening |
 
 ## 7. Commands and keybinding
 
@@ -466,12 +524,13 @@ preference** and the **panel preferences** (positions + lock):
 /gr inter on | off        enables/disables the module
 /gr inter status          module state + timeline + schedule
 /gr sim                   simulation help (what it does, how to leave)
-/gr sim inter [cycles=N]  SIMULATION: 1 accelerated intermission, no boss (aliases: group, groupe)
-/gr sim ping              SIMULATION: ping training — hover your own frame, use your native ping
-/gr sim stop              leaves any simulation at once
+/gr sim inter             SIMULATION: the panel opens RIGHT AWAY, no boss (aliases: group, groupe)
+                          -> ONE rehearsal, YOU close it (X or Close)
+/gr sim ping              PING HELP (= /gr pinghelp): bind one key per ping, then ping YOURSELF
+/gr sim stop              closes the rehearsal or the ping help window
 /gr lock                  freezes the panels where they are (persisted)
 /gr unlock                lets them be dragged again (persisted, also a panel button)
-/gr resetposition         brings the main panel, the intermission panel and the ping training back to the center
+/gr resetposition         brings the main panel, the intermission panel and the ping help window to the center
 ```
 
 `/gr inter 1` or `/gr inter 3` are **refused** with a message asking for the
@@ -486,10 +545,12 @@ the panel; the ping keybinds are the client's own (ping system).
 ## 8. Out-of-game tests
 
 ```bash
-busted                                    # 212 tests: 84 for this module, 43 for the real loading
-                                          # (panels, close cross, simulations), 26 for the simulation
-                                          # sequences (pure), 21 for the language, 20 for the ping
-                                          # policy, 11 for the pairing, 7 for the anti-API guard
+busted                                    # 219 tests: 84 for this module, 46 for the real loading
+                                          # (panels, close cross, simulations, button order),
+                                          # 21 for the language, 20 for the ping policy,
+                                          # 16 for the pure panel geometry (EN + FR),
+                                          # 14 for the rehearsal + ping help (pure),
+                                          # 11 for the pairing, 7 for the anti-API guard
 lua5.1 tools/intermission_cli.lua all     # the 3 states + action lines
 lua5.1 tools/intermission_cli.lua roles   # the 3 states under the 3 ping policies
 lua5.1 tools/intermission_cli.lua 3V1R    # one state
@@ -557,7 +618,7 @@ resolved to `anchors`, the refusal to name a ping for a role that must not ping,
 the persistence of `/gr ping`, the refusal of an unknown value, and the fact
 that **the policy is no longer displayed permanently** on the panel.
 
-Covered by `tests/spec/load_spec.lua` (43 tests, real loading, `.toc` order)
+Covered by `tests/spec/load_spec.lua` (46 tests, real loading, `.toc` order)
 — plus the close cross and the two simulations, detailed after the guard below:
 `ADDON_LOADED` creates the SavedVariables (schedule and lead included),
 `PLAYER_LOGIN` renders the plan, the main panel shows the discreet
@@ -570,20 +631,34 @@ when `GetBindingKey` raises), the panel **closes by itself** at the end,
 **reopens** at the next intermission, `ENCOUNTER_END` disarms everything,
 disabling is honoured and the panel never displays a dynamic value.
 
-Covered by `tests/spec/simulation_spec.lua` (26 tests, **pure logic**, no client):
+Covered by `tests/spec/simulation_spec.lua` (14 tests, **pure logic**, no client):
 `Core/Simulation.lua` must not reference `ENCOUNTER_START`, `Intermission.newRun`,
-`advanceRun`, `resetRun` or `RegisterEvent`; the **rehearsal** sequence opens after
-its delay, closes at the end of its single default cycle and chains the cycles
-(1 to 9, **default 1**, `/gr sim inter cycles=N`), one transition per call even
-with a huge `dt`, refuses a non-numeric option, a malformed `cycles=` option or an
-unknown composition, and never writes anything to the
-SavedVariables; the **ping training** announces `Warning → OnMyWay → Assist` in that
-explicit order, displays the self-ping gesture step by step (`1. Hover YOUR OWN
-character frame`, `2. Press <key> (<ping>) -> you ping yourself`), carries the
-bound key when the injected resolver knows it and `your ping key` otherwise, counts
-the announced pings (never a "detected" one), leaves cleanly on demand, and refuses
-an unknown ping, a non-numeric step or an empty sequence; all the simulation locale
-keys are present in **both** languages.
+`advanceRun`, `resetRun` or `RegisterEvent`; the **rehearsal** is a **single cycle**
+(`newRun` takes no option at all), never writes anything to the SavedVariables, and
+`forRehearsal` replaces the combat countdown by a useful line (the headline contains
+no `%` and no ` s`), appends the explanatory note, keeps the state / the ping banner
+/ the composition buttons and **does not modify** the snapshot it is given; the
+**ping help view** lists the four pings to bind, carries the gesture (`hover YOUR
+OWN character frame`), the group reminder and the explicit "**CANNOT detect a
+ping**" line, carries the bound key when the injected resolver knows it and `no key
+bound` otherwise, and stays sane when the resolver is missing, raises or returns
+nonsense; the `/gr sim` argument parser accepts `inter` with its aliases (`group`,
+`groupe`), `ping` and `stop`, and **refuses any trailing option** (the former
+`/gr sim inter cycles=N`); all the simulation locale keys are present in **both**
+languages.
+
+Covered by `tests/spec/layout_spec.lua` (16 tests, pure geometry, no client): the
+engine stacks every block **one under the other** (never two blocks sharing a Y
+band, an extra `gapBefore` only where a utility button is meant to be separated),
+reports a real overlap, a real overflow and an unbreakable word wider than its
+block, measures text and wraps it, and grows the frame to the longest label; the
+**main panel** keeps its button order **PLACE -> SIM: PING -> SIM: INTER -> LOCK**
+(the order is a constant asserted by a test, the lock separated by a bigger gap, all
+four buttons the same width), and the **intermission panel** is checked in **both
+languages** in every phase (rehearsal with the two-line banner, dark room with the
+big state, placement mode): the big state is always **below** the banner, the
+headline below that, then the ping banner, the body and the action row, and nothing
+ever runs over the frame or under the close cross.
 
 Covered by `tests/spec/guard_spec.lua` (7 tests, anti-forbidden-API guard): no
 file listed in the `.toc` contains `COMBAT_LOG_EVENT`, `UnitAura`, `UnitBuff`,
@@ -594,21 +669,25 @@ of `GetTime`, `math.random`, `CreateFrame`, `UnitName`, `GideonRaidDB` **and of
 the binding lookup**; a simulation stays free of the real timeline; and the binding
 lookup, when present, is **only in `UI/` and only under `pcall`**.
 
-Covered by `tests/spec/load_spec.lua` (43 tests): the real loading in `.toc` order
-(8 files), the evening flow (arming, automatic opening, closing, reopening,
+Covered by `tests/spec/load_spec.lua` (46 tests): the real loading in `.toc` order
+(9 files), the evening flow (arming, automatic opening, closing, reopening,
 `ENCOUNTER_END`, placement mode and its saved position), the **main panel made
 movable by default** (the drag is really allowed, the position is persisted on drag
 stop, restored when the panel is shown again, `/gr lock` freezes it, `/gr unlock`
 frees it, `/gr resetposition` recenters the three panels, the LOCK/UNLOCK button
-does the same as the command), the fact that **the three composition buttons
-disappear once one is clicked** (CORRECT brings them back, in a real intermission
-and in a rehearsal), the **close cross on both panels** (label, short tooltip,
-translated tooltip, closing the main panel, hiding the intermission panel without
-touching the clock, cancelling the placement) and the **two simulations end to end,
-tick by tick** (opening after 3 s, click, REDO, automatic closing after the single
-default cycle, the `SIMULATION` banner, the ping training teaching the self-ping
-gesture and carrying the bound key, its draggable persisted frame, the refusals
-including a malformed `cycles=`, the honest "no detection" wording and the
+does the same as the command), the **button order of the main panel** (PLACE, SIM:
+PING, SIM: INTER, then the LOCK utility), the fact that **the three composition
+buttons disappear once one is clicked** (CORRECT brings them back, in a real
+intermission and in a rehearsal, and the composition row is not even part of the
+applied layout any more), the **close cross on all three surfaces** (label, short
+tooltip, translated tooltip, closing the main panel, hiding the intermission panel
+without touching the clock, cancelling the placement) and the **two simulations**
+(the rehearsal **opens right away** with no ticker at all, the two-line banner, the
+click, REDO, **the player closes it** - nothing closes or relaunches it by itself -
+the layout that keeps the big state below the banner in **both languages**, the ping
+help window with its bound-key lines and its honest "no detection" wording, opened
+by `/gr sim ping` **and** `/gr pinghelp`, closed by its button, its cross or
+`/gr sim stop`, the **refusals** (a trailing option, an unknown sub-command) and the
 `ENCOUNTER_START` isolation).
 
 Covered by `tests/spec/locale_spec.lua` (21 tests): default English, every key
@@ -664,18 +743,19 @@ exception.
     the intermission panel **cancels** the placement mode and **does not** stop
     the automatic reopening at the next intermission.
 11. **SIMULATION mode in the client** (`/gr sim inter`, `/gr sim ping`): the
-    out-of-game tests drive both sequences tick by tick with a stubbed API, so
-    what remains to be seen in game is only the *real* timer cadence. Check that
-    the panel opens ~3 s after the command, closes ~20 s later, **stops after ONE
-    cycle by default** (`/gr sim inter cycles=N` for a longer run), that the
+    out-of-game tests drive both with a stubbed API, so what remains to be seen in
+    game is the *real* rendering. Check that the panel opens **immediately** after
+    the command (no more 3 s delay), that it **stays open until YOU close it** (X or
+    Close) and that nothing relaunches it, that the two-line
     `SIMULATION - NO BOSS, NO RAID` banner is impossible to confuse with a real
-    fight, and that a boss pull during a rehearsal **stops** it (the encounter
-    then arms the normal schedule exactly once).
-12. **The `<key>` shown during the ping training** depends on the same binding
-    names as item 1: as long as the real command names are unknown, the frame
-    correctly falls back to `your ping key` and asks for a keybind. Verify the
-    ping really shows on screen **while grouped** (alone, nothing appears — that
-    is expected and stated by the addon).
+    fight, that the big state is drawn **below** the banner (and not on top of it),
+    and that a boss pull during a rehearsal **stops** it (the encounter then arms
+    the normal schedule exactly once).
+12. **The keys listed in the ping help window** (`/gr sim ping` or `/gr pinghelp`)
+    depend on the binding names of item 1: as long as the real command names are
+    unknown, a line honestly reads `no key bound`. Verify the ping really shows on
+    screen **while grouped** (alone, nothing appears — that is expected and stated
+    by the window).
 13. **THE SELF-PING GESTURE — the open question of the third in-game test.**
     Measured by the raid lead: the ping goes **where the mouse is**, and pinging
     his **own character frame** pings **himself**. What is still to be confirmed
@@ -690,5 +770,14 @@ exception.
     and the LOCK/UNLOCK button are covered out of game with a stubbed frame; what
     remains to be seen is the *real* feeling: the main panel really moves with the
     left button, the position survives a `/reload`, `/gr lock` freezes it,
-    `/gr resetposition` recenters the three panels, and the ping training frame
+    `/gr resetposition` recenters the three panels, and the ping help window
     reopens where it was dragged.
+15. **The NEW layout in the client, in French AND in English** (`/gr lang fr`, then
+    `/gr lang en`): no label touches or leaves the frame on the main panel (the
+    frame is ≈360 px wide) and the ping help window fits as well; on the
+    intermission panel the big state, the SIMULATION banner, the `PING: OUI/NON`
+    line, the ROLE line and the action line are **all separated** (the fourth test
+    showed `2V2R` drawn on the banner). Out of game this is proven block by block;
+    what is checked here is the **font metrics of the real client** (the widths are
+    measured with an approximation of the client's fonts, so a small visual margin
+    must remain on screen).

@@ -16,6 +16,9 @@
 # a dependency of Config, Intermission, Panel and UI.
 # Core/Simulation.lua comes AFTER Core/Intermission.lua (it reuses the canonical
 # states, the ping labels and the binding candidates) and BEFORE the UI/ files.
+# Core/Layout.lua comes LAST among the Core/ modules: it computes the DISPOSITION
+# of the panels (pure geometry, measured from Core/Locale strings) and the UI/
+# files apply it as-is.
 # Bindings.xml is NOT listed here: the client loads it automatically
 # (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
@@ -24,5 +27,6 @@ Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua
 Core\Simulation.lua
+Core\Layout.lua
 UI\Panel.lua
 UI\Intermission.lua
