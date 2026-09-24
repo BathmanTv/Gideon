@@ -297,6 +297,8 @@ local CONVENTION = {
         actionNoPing = "state.actionNoPing.1V3R",
         complement = "3V1R",
         buttonLabel = "state.buttonLabel.1V3R",
+        -- THE ONE WORD shown after the click (raid-lead wording): "Ping".
+        word = "state.word.1V3R",
     },
     ["2V2R"] = {
         key = "2V2R",
@@ -319,6 +321,8 @@ local CONVENTION = {
         actionNoPing = "state.actionNoPing.2V2R",
         complement = "2V2R",
         buttonLabel = "state.buttonLabel.2V2R",
+        -- THE ONE WORD shown after the click (raid-lead wording): "BOSS".
+        word = "state.word.2V2R",
     },
     ["3V1R"] = {
         key = "3V1R",
@@ -341,6 +345,8 @@ local CONVENTION = {
         actionNoPing = "state.actionNoPing.3V1R",
         complement = "1V3R",
         buttonLabel = "state.buttonLabel.3V1R",
+        -- THE ONE WORD shown after the click (raid-lead wording): "Chasseur".
+        word = "state.word.3V1R",
     },
 }
 
@@ -498,6 +504,10 @@ local function copyRecord(rec, mode)
         ),
         complement = rec.complement,
         buttonLabel = Locale.t(rec.buttonLabel),
+        -- THE ONE WORD the panel writes after the click ("Ping" / "BOSS" /
+        -- "Chasseur"): resolved HERE like every other displayed string, so
+        -- /gr lang applies immediately and the rendering layer writes no literal.
+        word = Locale.t(rec.word),
     }
 end
 
@@ -912,6 +922,159 @@ function Intermission.remainingLead(state)
     return round(left)
 end
 
+--[[ BOUNDED AUTO-CLOSE (the safety net of the panel) --------------------------
+
+     The panel closes BY ITSELF at the end of the intermission: the state machine
+     reaches DONE (after `visibilitySeconds` of visibility, then the darkened
+     room, `durationSeconds` in total) and the wiring hides the panel.
+
+     That path ALONE is not enough. If the clock stops ticking before DONE - a
+     state that never advances any more, a panel shown with no intermission
+     running, a ticker stopped by another module - the panel stays on screen
+     indefinitely, over the raid, and nothing brings it back. In-game report of
+     the raid lead: the frame must DISAPPEAR when the intermission is over.
+
+     The guard below is that safety net. It is PURE (no clock of its own: the
+     wiring feeds it the same constant dt as the state machine) and obeys three
+     rules:
+       - it is ARMED when the panel opens and RE-ARMED at every new intermission
+         (a fresh delay, a fresh elapsed);
+       - its delay is BOUNDED and CONFIGURABLE (Config.autoCloseSeconds) and can
+         NEVER be shorter than the WHOLE legitimate window of an intermission
+         (lead + visibility + duration + margin): the guard can therefore never
+         cut a real intermission short - it only catches the cases where the
+         panel should already be gone;
+       - once expired it reports `true` ONCE (it disarms itself), so the wiring
+         hides the panel exactly once and the next intermission re-arms it.
+]]
+
+--- Margin added to the legitimate window of an intermission before the safety
+--- net fires: the panel must close at the end of the intermission, and the net
+--- only exists for the cases where that close never happened.
+Intermission.AUTO_CLOSE_MARGIN_SECONDS = 5
+
+--- Default safety delay (seconds), MEASURED on the real timings of the target
+--- boss: lead 2 s + visibility 3 s + duration 20 s = a 25 s window, plus the 5 s
+--- margin above. `/gr ` never needs to touch it; Config clamps any persisted
+--- value.
+Intermission.DEFAULT_AUTO_CLOSE_SECONDS = 30
+
+--- Bounds of the CONFIGURED delay (Config.autoCloseSeconds). Below the minimum
+--- the panel could vanish in the middle of a real intermission; above the
+--- maximum a hand-edited SavedVariables could park it on screen for minutes.
+Intermission.MIN_AUTO_CLOSE_SECONDS = 5
+Intermission.MAX_AUTO_CLOSE_SECONDS = 300
+
+--- The whole legitimate on-screen window of an intermission, in seconds: the
+--- lead time (the panel is open before the intermission starts) plus the
+--- intermission itself. The timeline goes through the pure resolver first, so an
+--- absurd persisted value can not make the window huge.
+--- @param timeline table|nil resolved timeline (nil = the module defaults)
+--- @return number seconds
+function Intermission.windowSeconds(timeline)
+    local resolved = Intermission.validateTimeline(timeline)
+    return resolved.leadSeconds + resolved.visibilitySeconds + resolved.durationSeconds
+end
+
+--- The BOUNDED auto-close delay of a panel session: the configured safety delay,
+--- or the whole legitimate window plus a margin when that is LONGER. Always
+--- finite, always >= the real intermission: it can never cut one short.
+--- `configuredSeconds` is the RESOLVED preference, injected by the wiring
+--- (Core/ never reads the SavedVariables): nil falls back to the default.
+--- @param timeline table|nil timeline of the session (nil = no intermission running)
+--- @param configuredSeconds number|nil resolved config (Config.autoCloseSeconds)
+--- @return number seconds (> 0)
+function Intermission.closeDelay(timeline, configuredSeconds)
+    local configured = tonumber(configuredSeconds) or Intermission.DEFAULT_AUTO_CLOSE_SECONDS
+    if configured < Intermission.MIN_AUTO_CLOSE_SECONDS then
+        configured = Intermission.MIN_AUTO_CLOSE_SECONDS
+    end
+    if configured > Intermission.MAX_AUTO_CLOSE_SECONDS then
+        configured = Intermission.MAX_AUTO_CLOSE_SECONDS
+    end
+    if timeline == nil then
+        -- No intermission running (a panel shown by hand, or a state that was
+        -- lost): the configured delay is the only bound.
+        return configured
+    end
+    local window = Intermission.windowSeconds(timeline) + Intermission.AUTO_CLOSE_MARGIN_SECONDS
+    if window > configured then
+        return window
+    end
+    return configured
+end
+
+--- Creates the guard (`{ armed = false }`): plain data, no API, no clock.
+--- @return table guard
+function Intermission.newCloseGuard()
+    return { armed = false, delay = 0, elapsed = 0 }
+end
+
+--- True while the guard is counting.
+--- @param guard table|nil
+--- @return boolean
+function Intermission.closeGuardArmed(guard)
+    return type(guard) == "table" and guard.armed == true
+end
+
+--- ARMS (or RE-ARMS) the guard with a fresh delay: called when the panel opens
+--- and at every new intermission. A delay that is not a positive number arms
+--- nothing (a caller that forgot the value can not park the panel for ever).
+--- @param guard table|nil
+--- @param delay number|nil seconds
+--- @return table|nil the guard
+function Intermission.armCloseGuard(guard, delay)
+    if type(guard) ~= "table" then
+        return nil
+    end
+    local seconds = tonumber(delay)
+    if seconds == nil or seconds <= 0 then
+        guard.armed = false
+        guard.elapsed = 0
+        guard.delay = 0
+        return guard
+    end
+    guard.armed = true
+    guard.delay = seconds
+    guard.elapsed = 0
+    return guard
+end
+
+--- Disarms the guard (the panel was closed by the player, or the intermission
+--- ended through the normal path).
+--- @param guard table|nil
+--- @return table|nil
+function Intermission.disarmCloseGuard(guard)
+    if type(guard) ~= "table" then
+        return nil
+    end
+    guard.armed = false
+    guard.elapsed = 0
+    return guard
+end
+
+--- Advances the guard by dt and reports whether the panel MUST be hidden now.
+--- Returns `true` at most once per arming (the guard disarms itself), so a
+--- caller that hides the panel can not hide it twice by accident.
+--- @param guard table|nil
+--- @param dt number|nil injected time step (seconds)
+--- @return boolean expired
+function Intermission.tickCloseGuard(guard, dt)
+    if type(guard) ~= "table" or guard.armed ~= true then
+        return false
+    end
+    local step = tonumber(dt)
+    if step == nil or step < 0 then
+        return false
+    end
+    guard.elapsed = (guard.elapsed or 0) + step
+    if guard.elapsed >= guard.delay then
+        guard.armed = false
+        return true
+    end
+    return false
+end
+
 --- Displayable state, fully computed here: the UI layer only renders.
 --- The panel shows the ESSENTIAL only (state, role, PING: YES/NO, ONE action
 --- line) because it is read during combat.
@@ -944,6 +1107,13 @@ function Intermission.snapshot(state, pingMode, bindingResolver)
         declaration = declaration,
         stateText = declaration or "",
         stateLong = nil,
+        -- THE ONE WORD of the panel (raid-lead request: after the click the
+        -- panel shows ONE word and nothing else): nil until a composition is
+        -- declared. `wordKey` is the canonical state the word belongs to, so the
+        -- rendering layer can pick the size and the color WITHOUT parsing the
+        -- word itself.
+        word = nil,
+        wordKey = nil,
         headline = "",
         countdownText = "0",
         lines = {},
@@ -992,6 +1162,12 @@ function Intermission.snapshot(state, pingMode, bindingResolver)
         snap.pingBanner = Locale.format("ui.pingBanner", shown.pingDecision)
         snap.pingColorHex = shown.shouldPing and shown.pingColorHex or nil
         snap.actionLine = shown.actionLine
+        -- The ONE word of the panel ("Ping" / "BOSS" / "Chasseur") and the state
+        -- it belongs to: everything else the old panel used to write (state,
+        -- role, ping banner, action line) is still computed above for the chat
+        -- commands, but the PANEL displays the word only.
+        snap.word = shown.word
+        snap.wordKey = shown.key
         -- CORRECT is available as long as the intermission session is open: it
         -- forgets the declaration and brings the three choices back.
         snap.showRedo = phase == PHASE_PENDING or phase == PHASE_VISIBLE or phase == PHASE_DARK

@@ -52,9 +52,16 @@ function wowenv.loadCore()
     -- Core/Simulation.lua vient APRES Intermission.lua (il reutilise ses etats,
     -- ses libelles de ping et ses candidats de raccourci) et AVANT les UI/.
     wowenv.load("Core/Simulation.lua", ns)
-    -- Core/Layout.lua vient APRES Simulation.lua : il mesure les libelles de
-    -- Locale et la convention d'Intermission pour construire la DISPOSITION des
-    -- panneaux (listes ordonnees de blocs ancres les uns sous les autres).
+    -- Core/Textures.lua vient APRES Simulation.lua et AVANT Layout.lua : il porte
+    -- la table pure « etat canonique -> texture TGA » des trois boutons d'image du
+    -- panneau d'intermission, et la taille REELLE de chaque fichier (Core/ ne peut
+    -- pas ouvrir un fichier : la taille est une DONNEE, verifiee sur disque par
+    -- tests/spec/texture_spec.lua).
+    wowenv.load("Core/Textures.lua", ns)
+    -- Core/Layout.lua vient APRES Simulation.lua et Textures.lua : il mesure les
+    -- libelles de Locale, la convention d'Intermission et les images de Textures
+    -- pour construire la DISPOSITION des panneaux (listes ordonnees de blocs
+    -- ancres les uns sous les autres).
     wowenv.load("Core/Layout.lua", ns)
     return ns
 end

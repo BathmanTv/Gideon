@@ -427,6 +427,8 @@ describe("Sound : preference persistee et commandes /gr sound", function()
 end)
 
 describe("Sound : le son part au clic, une seule fois", function()
+    local ns
+
     before_each(function()
         _G.GideonRaid = nil
         _G.GideonRaidDB = nil
@@ -437,7 +439,7 @@ describe("Sound : le son part au clic, une seule fois", function()
         _G.SlashCmdList = nil
         _G.GetBindingKey = nil
         stub.install()
-        wowenv.loadAddon()
+        ns = wowenv.loadAddon()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
     end)
 
@@ -445,18 +447,61 @@ describe("Sound : le son part au clic, une seule fois", function()
         return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
     end
 
+    --- Le bouton d'IMAGE d'une composition : l'ordre VERTICAL est fige par Core
+    --- (3V1R en haut, 2V2R au milieu, 1V3R en bas). Un test ne passe JAMAIS par un
+    --- index en dur : c'est ce qui garantit que le clic declara bien ce que le
+    --- joueur voit sous son doigt.
+    local function buttonFor(panel, stateKey)
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            if ns.Layout.INTERMISSION_CHOICE_ORDER[index] == stateKey then
+                return panel.buttons[index]
+            end
+        end
+        return nil
+    end
+
+    --- Le mot affiche par le panneau (l'une des deux FontStrings du mot).
+    local function shownWord(panel)
+        if panel.wordBig:IsShown() then
+            return panel.wordBig:GetText()
+        end
+        return panel.word:GetText()
+    end
+
+    it("AUCUN son ne part tout seul : ouverture, re-rendu et fermeture sont silencieux", function()
+        -- Regle en jeu (raid lead) : « le son ne doit s'activer seulement quand on
+        -- clique sur un des boutons ». Le son de debut d'intermission reste dans le
+        -- paquet (et /gr sound test start le joue a la demande) mais PLUS AUCUNE
+        -- lecture automatique n'existe.
+        pullTargetBoss()
+        stub.fireTickers(450) -- ouverture automatique avant la 1re intermission
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        assert.are.equal(0, #stub.sounds, "l'ouverture automatique doit etre silencieuse")
+        assert.are.equal(0, #startSounds(), "le son de debut ne part plus a l'ouverture")
+        -- Un re-rendu (changement de langue, tick) ne joue rien non plus.
+        _G.SlashCmdList["GIDEONRAID"]("lang fr")
+        stub.fireTickers(30)
+        assert.are.equal(0, #stub.sounds)
+        -- La fermeture (croix) est silencieuse.
+        panel.closeCross:Click()
+        assert.is_false(panel:IsShown())
+        assert.are.equal(0, #stub.sounds, "la fermeture doit etre silencieuse")
+        assert.are.equal(0, #startSounds())
+    end)
+
     it("flux reel : aucun son d'assignation avant la declaration, puis UNE fois le bon fichier", function()
         pullTargetBoss()
         stub.fireTickers(450) -- le panneau s'ouvre avant la 1re intermission
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.are.equal(0, #assignSounds(), "aucun son d'assignation tant qu'aucune composition n'est declaree")
+        assert.are.equal(0, #assignSounds(), "aucun son tant qu'aucune composition n'est declaree")
 
-        panel.buttons[1]:Click() -- 1V3R
+        buttonFor(panel, "1V3R"):Click()
         assert.are.equal(1, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", assignSounds()[1].path)
         assert.are.equal("Master", assignSounds()[1].channel)
-        assert.are.equal("1V3R", panel.state:GetText())
+        assert.are.equal("Ping", shownWord(panel))
 
         -- Ni les ticks du panneau, ni un re-rendu ne rejouent quoi que ce soit.
         stub.fireTickers(30)
@@ -470,21 +515,22 @@ describe("Sound : le son part au clic, une seule fois", function()
         _G.SlashCmdList["GIDEONRAID"]("inter 3V1R")
         assert.are.equal(2, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", assignSounds()[2].path)
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), shownWord(panel))
     end)
 
     it("CORRIGER puis recliquer rejoue le son de la nouvelle composition", function()
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
+        buttonFor(panel, "1V3R"):Click()
         assert.are.equal(1, #assignSounds())
         panel.redo:Click() -- CORRIGER
         assert.are.equal(1, #assignSounds(), "CORRIGER ne joue aucun son")
-        panel.buttons[2]:Click() -- 2V2R
+        buttonFor(panel, "2V2R"):Click()
         assert.are.equal(2, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", assignSounds()[2].path)
         -- La MEME composition apres CORRIGER est un nouveau choix : elle rejoue.
         panel.redo:Click()
-        panel.buttons[2]:Click()
+        buttonFor(panel, "2V2R"):Click()
         assert.are.equal(3, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", assignSounds()[3].path)
     end)
@@ -493,50 +539,58 @@ describe("Sound : le son part au clic, une seule fois", function()
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[3]:Click() -- 3V1R, 1re intermission
+        buttonFor(panel, "3V1R"):Click() -- 1re intermission
         assert.are.equal(1, #assignSounds())
         stub.fireTickers(260) -- fin de l'intermission : fermeture automatique
         assert.is_false(panel:IsShown())
         stub.fireTickers(760) -- 2e intermission : reouverture
         assert.is_true(panel:IsShown())
-        panel.buttons[3]:Click() -- la MEME composition, nouvelle intermission
+        buttonFor(panel, "3V1R"):Click() -- la MEME composition, nouvelle intermission
         assert.are.equal(2, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", assignSounds()[2].path)
-        -- Et le son de DEBUT a bien accompagne les DEUX intermissions (une fois
-        -- chacune, jamais deux pour la meme).
-        assert.are.equal(2, #startSounds())
+        -- ... et AUCUN son de debut n'a accompagne les deux intermissions : plus
+        -- aucune lecture automatique (regle en jeu du raid lead).
+        assert.are.equal(0, #startSounds())
     end)
 
-    it("repetition /gr sim inter : meme son, une fois, sans rien publier", function()
+    it("repetition /gr sim inter : silencieuse, puis le son du bouton clique", function()
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
         assert.are.equal(0, #assignSounds(), "la repetition ne joue rien avant le clic")
-        assert.are.equal(1, #startSounds(), "le son de debut part a l'ouverture de la repetition")
-        panel.buttons[1]:Click()
+        assert.are.equal(0, #startSounds(), "plus de son de debut a l'ouverture d'une repetition")
+        assert.are.equal(0, #stub.sounds)
+        buttonFor(panel, "1V3R"):Click()
         assert.are.equal(1, #assignSounds())
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", assignSounds()[1].path)
         assert.is_nil(_G.GideonRaidDB.intermission.lastDecision, "une repetition ne publie rien")
-        panel.buttons[1]:Click() -- les trois choix sont masques, mais un clic force ne double pas
+        assert.are.equal("Ping", shownWord(panel))
+        -- Les trois choix sont masques apres le clic : un clic force sur un bouton
+        -- cache ne double pas la lecture (la garde d'assignation tient).
+        buttonFor(panel, "1V3R"):Click()
         assert.are.equal(1, #assignSounds())
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
-        -- Une NOUVELLE repetition rearme la garde (et rejoue le son de debut : la
-        -- repetition est une nouvelle intermission).
+        -- Une NOUVELLE repetition rearme la garde : le meme clic rejoue son son,
+        -- toujours SANS aucune lecture automatique.
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
-        _G.GideonRaidIntermissionPanel.buttons[1]:Click()
+        buttonFor(_G.GideonRaidIntermissionPanel, "1V3R"):Click()
         assert.are.equal(2, #assignSounds())
-        assert.are.equal(2, #startSounds())
+        assert.are.equal(0, #startSounds())
     end)
 
     it("preference off : le clic ne joue plus rien, le rendu reste complet", function()
         _G.SlashCmdList["GIDEONRAID"]("sound off")
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
+        buttonFor(panel, "1V3R"):Click()
         assert.are.equal(0, #stub.sounds, "son coupe = silence")
-        assert.are.equal("1V3R", panel.state:GetText())
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.is_true(contains(panel.body:GetText(), "ROLE: ANCHOR"))
+        -- Le rendu reste COMPLET : un seul mot, celui de la composition cliquee.
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), shownWord(panel))
+        assert.is_true(panel.word:IsShown())
+        assert.is_true(panel.redo:IsShown())
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            assert.is_false(panel.buttons[index]:IsShown(), "les images disparaissent apres le clic")
+        end
         -- /gr inter status rapporte l'etat du reglage.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("inter status")
@@ -549,22 +603,22 @@ describe("Sound : le son part au clic, une seule fois", function()
         end
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[2]:Click() -- 2V2R
-        assert.are.equal("2V2R", panel.state:GetText())
-        assert.is_true(contains(panel.body:GetText(), "ROLE: MIDDLE"))
+        buttonFor(panel, "2V2R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.2V2R"), shownWord(panel))
+        assert.is_true(panel.wordBig:IsShown())
         assert.is_false(panel.buttons[1]:IsShown())
         -- ... et le flux continue : CORRIGER, puis un autre choix.
         panel.redo:Click()
-        panel.buttons[3]:Click()
-        assert.are.equal("3V1R", panel.state:GetText())
+        buttonFor(panel, "3V1R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), shownWord(panel))
     end)
 
     it("survit a un PlaySoundFile absent (harnais hors client)", function()
         _G.PlaySoundFile = nil
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[3]:Click()
-        assert.are.equal("3V1R", panel.state:GetText())
-        assert.is_true(contains(panel.body:GetText(), "ROLE: CHASER"))
+        buttonFor(panel, "3V1R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), shownWord(panel))
+        assert.is_true(panel.word:IsShown())
     end)
 end)

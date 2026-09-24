@@ -12,6 +12,13 @@ package-as: GideonRaid
 # are ADDON assets and MUST be packaged: they are listed in GideonRaid.toc, the
 # client refuses to load an unlisted sound, and a test
 # (tests/spec/sound_spec.lua) fails if this ignore list ever covers Sound/.
+#
+# NOTE: Texture/ is NOT listed here either, and for the SAME reason: it holds the
+# three TGA of the image buttons of the intermission panel (the raid lead's
+# screenshots of the orbs). The client refuses to load an unlisted texture, the
+# files are listed in GideonRaid.toc, and tests/spec/texture_spec.lua fails if
+# this ignore list ever covers Texture/. The PNG sources and the documentation
+# images stay in assets/, which IS ignored here on purpose.
 ignore:
   - .busted
   - .github

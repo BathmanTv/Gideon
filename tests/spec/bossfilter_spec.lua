@@ -757,7 +757,8 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         -- Le placement manuel fonctionne toujours, et le panneau de combat aussi.
         slash("inter place")
         assert.is_true(panel():IsShown())
-        panel().close:Click()
+        -- La croix ferme (le bouton texte "Fermer" a disparu du panneau).
+        panel().closeCross:Click()
         assert.is_false(panel():IsShown())
     end)
 end)

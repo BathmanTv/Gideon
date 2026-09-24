@@ -4,6 +4,52 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.0] - 2026-09-24
+
+**The intermission panel is now three pictures and one word.** Every line of text
+was removed — the raid lead asked for the simplest possible panel — and the addon
+no longer plays **any** sound by itself: the soundboards fire on the click only.
+
+### Changed
+
+- **The panel content is three pictures.** It used to show a headline, a state, a
+  role and an action line; it now shows **three vertically stacked image buttons**
+  (fixed order: 3 green + 1 red, 2 green + 2 red, 1 green + 3 red), and **nothing
+  else** before the click. The close cross and the dragging (saved position) stay.
+- **One single word after the click** (`Core/Locale.lua`, FR / EN): `1V3R` →
+  **PING** (green), `2V2R` → **BOSS** (largest font of the window), `3V1R` →
+  **CHASER** (green). The colour and the font come from the shared theme
+  (`Core/Layout.lua`) instead of scattered literals. **CORRECT** stays, discreet.
+- **Sounds fire on the click only.** The soundboard of the declared composition is
+  played **once per click** and nowhere else; nothing plays at the auto-open, in
+  `/gr sim inter`, on a re-render or on closing.
+- **The panel always closes.** A bounded close guard (`Core/Intermission.newCloseGuard`
+  / `arm` / `tick` / `disarm`, pure, no clock) plus `Config.autoCloseSeconds`
+  (default 30 s = the real 2 + 3 + 20 s window + 5 s margin, bounded 5..300) makes
+  the window disappear at the end of the intermission even if the state machine
+  stalls.
+
+### Added
+
+- **`Texture/`** (new): the raid lead's three in-game screenshots converted to
+  **uncompressed 32-bit TGA** (alpha kept, 256 px box, aspect preserved), listed in
+  `GideonRaid.toc` and kept **outside** `assets/` (which the packager excludes).
+- **`Core/Textures.lua`** (pure): the single mapping from a state to its texture
+  file, its size and its client path; **`tools/make_textures.py`** makes the
+  conversion reproducible.
+- **`tests/spec/texture_spec.lua`**: TGA header read byte by byte, declared
+  dimensions, transparent background, `.toc` listing, state → screenshot mapping.
+- Tests for the new panel: pinned vertical order, no leftover text before the
+  click, exact word + colour + size per composition in FR **and** EN, one click =
+  one sound and **no sound otherwise** (auto-open, simulation, re-render, closing),
+  and the bounded close filet (`Core` + `UI`).
+
+### Removed
+
+- **The automatic intermission start sound.** `Sound/intermission-start.ogg` stays
+  in the package and can still be heard on demand (`/gr sound test start`), but it
+  is never triggered by the addon any more.
+
 ## [0.12.0] - 2026-09-24
 
 **The target boss is now DELIVERED with the addon** — no player has to type a
@@ -706,6 +752,7 @@ was too verbose, and a wrong click could not be corrected.
   (`Core/Pairing.lua`) shared with the GIDEON Discord bot.
 - CI and release workflows (BigWigs packager), offline test suite with busted.
 
+[0.13.0]: https://github.com/BathmanTv/Gideon/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/BathmanTv/Gideon/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/BathmanTv/Gideon/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/BathmanTv/Gideon/compare/v0.9.0...v0.10.0

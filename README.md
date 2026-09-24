@@ -171,13 +171,18 @@ player is the one who places it.
    only to compare the encounter id (and the optional name): they drive nothing
    else, and a value that cannot be read (a *secret* value in 12.x) is never a
    match;
-4. **1–2 s before each intermission the panel opens by itself** with the three
-   choices — and the **intermission start sound** is played **once** (§3.3);
-5. click your composition: state, role, `PING: OUI/NON` and one action line — the
-   **three buttons disappear** (so no accidental second click) and **REDO** brings
-   them back as many times as needed;
-6. at the end of the intermission the panel **closes by itself**; the next one
-   reopens it automatically.
+4. **1–2 s before each intermission the panel opens by itself** with **three
+   stacked vertical image buttons** — one picture per orb composition instead of
+   words (§3.5). **Nothing is written and nothing is played** at that moment: the
+   window is silent;
+5. click the picture that matches the four orbs above your head: the three buttons
+   disappear (so no accidental second click) and the panel shows **one single word**
+   — `PING` in green (1 green + 3 red, the anchor), `BOSS` in the largest font
+   (2 green + 2 red, the middle) or `CHASER` in green (3 green + 1 red, the chaser)
+   — plus **CORRECT**, which brings the three pictures back as many times as needed;
+6. at the end of the intermission the panel **closes by itself** (bounded delay,
+   `Config.autoCloseSeconds`, 30 s by default); the next one reopens it
+   automatically.
 
 To test the whole flow **now**, on any boss, `/gr inter on` is the **manual
 override**: it arms the panel for the **next** encounter whatever the boss
@@ -242,15 +247,19 @@ rehearsal** — the soundboard of **that** state is played, **once**.
 | `2V2R` | `Sound/assign-2v2r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-2v2r.ogg` |
 | `3V1R` | `Sound/assign-3v1r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-3v1r.ogg` |
 
-#### Intermission start sound (`Sound/intermission-start.ogg`)
+#### No automatic sound: the intermission start file is manual only
 
-The raid lead's own recording (Ogg Vorbis, stereo 44.1 kHz, 3.22 s) is played
-**once at the very beginning of every intermission** — that is the moment the
-panel opens by itself, 2 s before the intermission — and **once per `/gr sim
-inter` rehearsal**. It is **never played twice for the same intermission** (the
-next intermission, and the next rehearsal, re-arm it). Like the soundboards it is
-`Master` channel, behind the `/gr sound on|off` preference, and a missing file or
-a refused call leaves the addon **silent, without a Lua error**.
+**The addon never plays a sound by itself.** The raid lead's own recording (Ogg
+Vorbis, stereo 44.1 kHz, 3.22 s, `Sound/intermission-start.ogg`) used to be played
+at the very beginning of every intermission. It is **no longer triggered
+automatically** — not at the auto-open, not in `/gr sim inter`, not when the panel
+closes. **The only sound trigger left is a click on one of the three composition
+pictures.** The file stays in the package so the decision can be reversed later,
+and it can still be heard on demand:
+
+```bash
+/gr sound test start       # hear the (now manual-only) intermission start sound
+```
 
 ```bash
 /gr sound                  # is the sound enabled? (and how to change it)
@@ -437,6 +446,65 @@ confirmed in game" items):
 [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md).
 
 ---
+
+### 3.5 The intermission panel: three pictures, one word
+
+Requested by the raid lead: *"remove all the text, keep only the three simplest
+possible buttons, put the pictures of the three possibilities in the buttons"*.
+
+**Before the click** the panel contains nothing but:
+
+- **three vertically stacked image buttons** (fixed order, top to bottom:
+  3 green + 1 red, 2 green + 2 red, 1 green + 3 red — pinned by
+  `Layout.INTERMISSION_CHOICE_ORDER` and checked by a test);
+- the **close cross**, and the fact that the panel **can be dragged** (position
+  saved).
+
+No title, no state line, no role line, no action line, no ping key reminder:
+**every word was removed**, so the panel is read in one glance while Vashnik hides
+the raid.
+
+**After the click**, one single word:
+
+| Composition | Word (FR / EN) | Aspect | Meaning |
+|---|---|---|---|
+| `1V3R` (1 green + 3 red) | `Ping` | **green** | the anchor: ping yourself and stay put |
+| `2V2R` (2 green + 2 red) | `BOSS` / `Boss` | **largest font of the window** | the middle: go under the boss |
+| `3V1R` (3 green + 1 red) | `Chasseur` / `Chaser` | **green** | the chaser: run to a ping |
+
+The green and the font come from the shared theme (`Core/Layout.lua`:
+`THEME.GREEN`, `wordStyle`), never from literals scattered in the UI. `CORRECT`
+stays available, discreet, and brings the three pictures back.
+
+The window **always closes at the end of the intermission**: besides the cross and
+the toggle, a bounded close guard (`Core/Intermission.newCloseGuard`, pure) driven
+by `Config.autoCloseSeconds` (default 30 s = the real 2 + 3 + 20 s window + 5 s
+margin, bounded 5..300) makes it disappear even if the state machine stalls.
+
+#### The pictures are the raid lead's own screenshots
+
+The three in-game screenshots are shipped as **uncompressed 32-bit TGA**
+(`imageType = 2`, 8 alpha bits, 256 px box, aspect ratio kept, transparent
+background):
+
+| State | File | Client path |
+|---|---|---|
+| `1V3R` | `Texture/1v3r.tga` | `Interface\AddOns\GideonRaid\Texture\1v3r.tga` |
+| `2V2R` | `Texture/2v2r.tga` | `Interface\AddOns\GideonRaid\Texture\2v2r.tga` |
+| `3V1R` | `Texture/3v1r.tga` | `Interface\AddOns\GideonRaid\Texture\3v1r.tga` |
+
+Retail does **not** load PNG for addon textures, hence the conversion; it is
+reproducible with `tools/make_textures.py` (Pillow, premultiplied-alpha resize),
+and `Core/Textures.lua` (pure) is the single place mapping a state to its file, its
+size and its client path. The textures live in `Texture/`, **not** in `assets/` —
+which the packager excludes.
+
+A test (`tests/spec/texture_spec.lua`) reads the TGA header byte by byte, checks
+the declared dimensions, the transparent background, the `.toc` listing and the
+state → screenshot mapping.
+
+**A new texture file needs a client RESTART** (a `/reload` does not load files
+added after the client started) — exactly like a new sound file.
 
 ## 4. In-game language — English by default, French on a frFR client
 

@@ -37,6 +37,11 @@
 # panel: the difficulty is deliberately NOT part of the filter.
 # Core/Simulation.lua comes AFTER Core/Intermission.lua (it reuses the canonical
 # states, the ping labels and the binding candidates) and BEFORE the UI/ files.
+# Core/Textures.lua comes right AFTER Core/Simulation.lua and BEFORE
+# Core/Layout.lua: it owns the pure table "canonical state -> texture file (TGA)"
+# of the three image buttons of the intermission panel (the raid lead's
+# screenshots of the orbs), and the fitted size of each file - the layout needs
+# both to size and to fill the buttons.
 # Core/Layout.lua comes LAST among the Core/ modules: it computes the DISPOSITION
 # of the panels (pure geometry, measured from Core/Locale strings) and the UI/
 # files apply it as-is.
@@ -51,6 +56,7 @@ Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua
 Core\Simulation.lua
+Core\Textures.lua
 Core\Layout.lua
 UI\Panel.lua
 UI\Intermission.lua
@@ -72,3 +78,20 @@ Sound\assign-1v3r.ogg
 Sound\assign-2v2r.ogg
 Sound\assign-3v1r.ogg
 Sound\intermission-start.ogg
+
+# TEXTURES OF THE THREE IMAGE BUTTONS (the raid lead's screenshots of the orbs).
+# THEY MUST BE LISTED HERE, exactly like the sounds: a texture loaded by PATH
+# ("Interface\AddOns\GideonRaid\Texture\3v1r.tga") and NOT listed in the .toc is
+# not loaded by the client, and the button then draws nothing at all.
+# THEY ARE NOT IN assets/: that folder is EXCLUDED from the packaged zip
+# (.pkgmeta, `ignore: assets`) and is only there for the project documentation.
+# The files are produced by tools/make_textures.py (RGBA PNG -> 32-bit
+# uncompressed TGA, aspect ratio and alpha preserved, fitted in a 256 px box):
+# REPLACING THEM IS A FILE DROP - same names, same folder (Texture/), same
+# format (uncompressed 32-bit TGA), no code change. A new size has to be
+# reported in Core/Textures.lua (Textures.SIZES_BY_STATE): the tool prints the
+# exact block, and tests/spec/texture_spec.lua compares it with the real header
+# of every file.
+Texture\1v3r.tga
+Texture\2v2r.tga
+Texture\3v1r.tga

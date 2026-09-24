@@ -286,7 +286,7 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
         local out = {}
         for index = 1, #layout.blocks do
             local block = layout.blocks[index]
-            if block.kind == "button" then
+            if block.kind == "button" or block.kind == "image" then
                 out[#out + 1] = block
             elseif block.kind == "row" then
                 for item = 1, #block.items do
@@ -299,10 +299,15 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
 
     --- Le libelle d'un bouton tient dans le bouton, AVEC la marge interieure du
     --- module : ni trop large, ni trop haut (c'est le retour en jeu « le texte
-    --- sort du bouton »).
+    --- sort du bouton »). Un bouton d'IMAGE n'a aucun libelle : c'est l'image qui
+    --- est mesuree (voir le test de l'ordre fige du panneau d'intermission).
     local function assertLabelFits(block, label)
         assert.is_number(block.width, label .. " : largeur manquante")
         assert.is_number(block.height, label .. " : hauteur manquante")
+        if block.kind == "image" then
+            assert.is_true(block.width > 0 and block.height > 0, label .. " : image de taille nulle")
+            return
+        end
         local paddingX = block.paddingX or L.BUTTON_PADDING_X
         local paddingY = block.paddingY or L.BUTTON_PADDING_Y
         local drawn = L.textWidth(block.text, block.style)
@@ -318,23 +323,19 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
         local rehearsal = S.forRehearsal(I.snapshot(I.start(I.newState(), { leadSeconds = 0 }), "anchors"), run)
         return {
             { id = "panneau-principal", layout = L.mainPanel({ bodyLines = { "plan" } }) },
-            { id = "placement", layout = L.intermissionPanel({ headline = "h", bodyLines = { "b" }, showOk = true }) },
+            { id = "placement", layout = L.intermissionPanel({ showChoices = true, showOk = true }) },
             {
                 id = "repetition",
                 layout = L.intermissionPanel({
                     bannerLines = rehearsal.simBannerLines,
-                    headline = rehearsal.headline,
-                    bodyLines = rehearsal.lines,
                     showChoices = true,
                 }),
             },
             {
                 id = "apres-clic",
                 layout = L.intermissionPanel({
-                    stateText = "1V3R",
-                    headline = "h",
-                    pingBanner = "PING: YES",
-                    bodyLines = { "b" },
+                    wordText = ns.Locale.t("state.word.1V3R"),
+                    wordState = "1V3R",
                     showRedo = true,
                 }),
             },
@@ -361,7 +362,7 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
     it("le bouton OK du mode placement est mesure, ancre et present", function()
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
-            local layout = L.intermissionPanel({ headline = "h", bodyLines = { "b" }, showOk = true })
+            local layout = L.intermissionPanel({ showChoices = true, showOk = true })
             local ok = rowItemOf(layout, "actions", "ok")
             assert.is_truthy(ok, "le bouton OK manque en " .. lang)
             assert.are.equal(ns.Locale.t("ui.ok"), ok.text)
@@ -369,10 +370,13 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
             assert.is_true(ok.width >= L.BUTTON_MIN_WIDTH)
             assert.is_true(ok.height >= L.BUTTON_MIN_HEIGHT)
             assertLabelFits(ok, "ok/" .. lang)
-            -- Close est toujours la, et les deux ne se recouvrent pas.
-            local close = rowItemOf(layout, "actions", "close")
-            assert.is_truthy(close)
-            assert.is_true(ok.x + ok.width <= close.x)
+            -- Le bouton "Fermer" a disparu du panneau d'intermission : la croix
+            -- ferme (raid lead : le panneau ne doit plus porter de texte).
+            assert.is_nil(rowItemOf(layout, "actions", "close"))
+            assert.is_true(ok.x + ok.width <= layout.width)
+            -- OK est SOUS les trois images.
+            local last = blockOf(layout, "choice" .. #L.INTERMISSION_CHOICE_ORDER)
+            assert.is_true(blockOf(layout, "actions").top < last.bottom)
         end
     end)
 
@@ -484,9 +488,9 @@ describe("Layout : panneau principal /gr (ordre, bords, deux langues)", function
     end)
 end)
 
-describe("Layout : panneau d'intermission (chevauchements, deux langues)", function()
+describe("Layout : panneau d'intermission (images, ordre fige, deux langues)", function()
     local ns = wowenv.loadCore()
-    local L, I, S = ns.Layout, ns.Intermission, ns.Simulation
+    local L, I, S, T = ns.Layout, ns.Intermission, ns.Simulation, ns.Textures
 
     before_each(function()
         ns.Locale.setActive("en")
@@ -497,85 +501,163 @@ describe("Layout : panneau d'intermission (chevauchements, deux langues)", funct
         return L.intermissionPanel(opts)
     end
 
-    it("le grand etat n'est JAMAIS dessine sur le bandeau SIMULATION", function()
-        local run = S.newRun()
-        for _, lang in ipairs({ "en", "fr" }) do
-            ns.Locale.setActive(lang)
-            local view = S.forRehearsal(I.snapshot(I.start(I.newState(), { leadSeconds = 0 }), "anchors"), run)
-            local layout = planFor({
-                bannerLines = view.simBannerLines,
-                stateText = "2V2R",
-                headline = view.headline,
-                bodyLines = view.lines,
-                showRedo = true,
-            })
-            assert.are.equal("", problemsOf(L, layout), lang)
-            -- Le grand etat est SOUS les deux lignes du bandeau (bug du 4e test).
-            assertStacked(layout, "simBanner", "state", lang)
-            local state = blockOf(layout, "state")
-            assert.is_true(state.bottom > -layout.height, lang)
-        end
-    end)
-
-    it("phase SOMBRE : bandeau, ping, role et action ne se recouvrent pas", function()
-        for _, lang in ipairs({ "en", "fr" }) do
-            ns.Locale.setActive(lang)
-            local state = I.newState()
-            I.start(state, { leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
-            I.tick(state, 10) -- salle obscurcie
-            I.declare(state, "3V1R")
-            local snap = I.snapshot(state, "color")
-            local layout = planFor({
-                stateText = snap.stateText,
-                headline = snap.headline,
-                pingBanner = snap.pingBanner,
-                bodyLines = snap.lines,
-                showRedo = snap.showRedo,
-            })
-            assert.are.equal("", problemsOf(L, layout), lang)
-            assertStacked(layout, "headline", "pingBanner", lang)
-            assertStacked(layout, "pingBanner", "body", lang)
-            assertStacked(layout, "body", "actions", lang)
-            -- Une ligne par bande : aucune adresse Y partagee.
-            local seen = {}
-            for index = 1, #layout.blocks do
-                local block = layout.blocks[index]
-                assert.is_nil(seen[block.top], "deux blocs au meme Y dans " .. lang)
-                seen[block.top] = block.id
+    --- Les blocs de TEXTE d'un plan (le panneau n'en doit contenir qu'un seul,
+    --- apres le clic, et aucun avant).
+    local function textBlocks(layout)
+        local found = {}
+        for index = 1, #layout.blocks do
+            if layout.blocks[index].kind == "text" then
+                found[#found + 1] = layout.blocks[index]
             end
         end
-    end)
+        return found
+    end
 
-    it("les trois boutons de composition disparaissent apres le clic", function()
+    it("empile les trois IMAGES, VERTICALEMENT, dans l'ordre fige", function()
+        -- L'ordre est une DONNEE DE CORE (raid lead : « 3 verts + 1 rouge, puis
+        -- 2 verts + 2 rouges, puis 1 vert + 3 rouges ») : la couche de rendu
+        -- l'applique telle quelle, ce test le fige.
+        assert.are.same({ "3V1R", "2V2R", "1V3R" }, L.INTERMISSION_CHOICE_ORDER)
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
-            local withChoices = planFor({ headline = "GET READY: 2 s", bodyLines = { "un indice" }, showChoices = true })
-            assert.are.equal("", problemsOf(L, withChoices), lang)
-            assert.is_truthy(blockOf(withChoices, "choices"))
-            -- Les trois libelles tiennent dans leur bouton et ne se touchent pas.
-            local row = blockOf(withChoices, "choices")
-            for index = 1, #row.items do
-                local item = row.items[index]
-                assert.is_true(L.wordWidth(item.text, item.style) <= item.width)
-                if index > 1 then
-                    assert.is_true(row.items[index - 1].x + row.items[index - 1].width <= item.x)
+            local layout = planFor({ showChoices = true })
+            assert.are.equal("", problemsOf(L, layout), lang)
+            local previous = nil
+            for index = 1, #L.INTERMISSION_CHOICE_ORDER do
+                local key = L.INTERMISSION_CHOICE_ORDER[index]
+                local block = blockOf(layout, "choice" .. index)
+                assert.is_truthy(block, ("choice%d manquant en %s"):format(index, lang))
+                assert.are.equal("image", block.kind, lang)
+                assert.are.equal(key, block.state, lang)
+                -- Le bouton PORTE l'image de sa composition : le chemin vient de
+                -- Core/Textures.lua, personne ne le recopie.
+                assert.are.equal(T.pathFor(key), block.texture, lang)
+                -- L'image garde le ratio de son fichier : aucun orbe ecrase.
+                local width, height = T.sizeFor(key)
+                assert.is_true(math.abs(block.width / block.height - width / height) < 0.03, lang .. " / " .. key)
+                -- EMPILES : chaque bouton est SOUS le precedent, sans trou beant.
+                if previous ~= nil then
+                    assert.is_true(block.top < previous.bottom, lang .. " / " .. key .. " recouvre le bouton du dessus")
+                    assert.are.equal(L.GAP, previous.bottom - block.top, lang)
+                end
+                previous = block
+            end
+            -- Le dernier bouton reste DANS le cadre, avec la marge basse.
+            assert.is_true(previous.bottom >= -layout.height, lang)
+        end
+    end)
+
+    it("n'affiche AUCUN texte avant le clic (deux langues)", function()
+        -- Consigne du raid lead : « enleve tout le blabla ». Le panneau ne montre
+        -- plus ni titre, ni etat, ni role, ni action, ni rappel de touche.
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            local layout = planFor({ showChoices = true })
+            assert.are.equal("", problemsOf(L, layout), lang)
+            assert.are.equal(0, #textBlocks(layout), lang .. " : un texte est affiche avant le clic")
+            for _, id in ipairs({ "title", "state", "headline", "pingBanner", "body" }) do
+                assert.is_nil(blockOf(layout, id), lang .. " : le bloc " .. id .. " existe encore")
+            end
+            -- Le bouton texte "Fermer" a disparu lui aussi : la croix ferme.
+            assert.is_nil(rowItemOf(layout, "actions", "close"), lang)
+            -- Le panneau ne contient QUE les trois images : aucun bloc d'action (le
+            -- bouton "Fermer" a disparu) et aucun texte. La croix et le
+            -- deplacement du panneau ne sont pas des blocs du plan.
+            assert.are.equal(3, #layout.blocks, lang)
+        end
+    end)
+
+    it("apres le clic : UN SEUL mot, taille et couleur du theme", function()
+        -- Consigne du raid lead : « apres le clic, un seul mot ». Le mot exact
+        -- vient de Core/Locale (EN officiel + FR du raid lead), sa TAILLE et sa
+        -- COULEUR du theme de Core/Layout ; le bouton CORRIGER reste.
+        local cases = {
+            { state = "1V3R", en = "Ping", fr = "Ping", color = "GREEN" },
+            { state = "2V2R", en = "Boss", fr = "BOSS", color = "BOSS" },
+            { state = "3V1R", en = "Chaser", fr = "Chasseur", color = "GREEN" },
+        }
+        for _, case in ipairs(cases) do
+            for _, lang in ipairs({ "en", "fr" }) do
+                ns.Locale.setActive(lang)
+                local state = I.newState()
+                I.start(state, { leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
+                I.declare(state, case.state)
+                local snap = I.snapshot(state, "color")
+                -- Le clic a bien masque les trois images cote Core...
+                assert.is_false(snap.showButtons, lang .. " / " .. case.state)
+                -- ... et Core fournit le mot ET l'etat qui le colore.
+                assert.are.equal(case[lang], snap.word, lang .. " / " .. case.state)
+                assert.are.equal(case.state, snap.wordKey, lang .. " / " .. case.state)
+                local layout = planFor({ wordText = snap.word, wordState = snap.wordKey, showRedo = snap.showRedo })
+                assert.are.equal("", problemsOf(L, layout), lang .. " / " .. case.state)
+                -- UN SEUL bloc texte dans tout le panneau : le mot.
+                local texts = textBlocks(layout)
+                assert.are.equal(1, #texts, lang .. " / " .. case.state .. " : le panneau affiche un texte de trop")
+                local word = texts[1]
+                assert.are.equal(case[lang], word.text, lang)
+                assert.are.equal(L.wordBlockId(case.state), word.id, lang)
+                -- CORRIGER est la, seul, et ne porte pas de texte parasite.
+                local redo = rowItemOf(layout, "actions", "redo")
+                assert.is_truthy(redo, lang)
+                assert.are.equal(ns.Locale.t("ui.redo"), redo.text, lang)
+                assert.is_nil(rowItemOf(layout, "actions", "ok"), lang)
+                assert.is_nil(rowItemOf(layout, "actions", "close"), lang)
+                assertStacked(layout, word.id, "actions", lang)
+                -- La COULEUR vient du theme : le VERT pour les deux mots de survie
+                -- (« Ping » et « Chasseur »), la couleur du mot BOSS pour la
+                -- composition du milieu. Aucune valeur en dur dans UI/.
+                assert.are.same(L.THEME[case.color], L.wordColor(case.state), lang .. " / " .. case.state)
+                if case.color ~= "GREEN" then
+                    assert.is_not.same(L.THEME.GREEN, L.wordColor(case.state), lang .. " / " .. case.state)
                 end
             end
-            -- Apres le clic : Core ne fournit plus la ligne de choix, donc aucun
-            -- bloc : UI.ApplyLayout masque alors les trois boutons.
-            local afterClick = planFor({ stateText = "1V3R", headline = "ROOM DARKENED", bodyLines = { "ROLE : ANCRE" }, showRedo = true })
-            assert.is_nil(blockOf(afterClick, "choices"))
-            assert.are.equal("", problemsOf(L, afterClick), lang)
-            assert.is_truthy(rowItemOf(afterClick, "actions", "redo"))
         end
     end)
 
-    it("la REPETITION affiche les trois boutons de composition (5e test en jeu)", function()
+    it("le vert du theme est VERT, et le mot BOSS est le plus gros element", function()
+        -- Une couleur en dur dispersee dans UI/ est ce qui a casse la lisibilite
+        -- en jeu : elle vit ici, une seule fois, et ce test la verrouille.
+        local green = L.THEME.GREEN
+        assert.is_true(green.g > green.r, "le vert doit dominer le rouge")
+        assert.is_true(green.g > green.b, "le vert doit dominer le bleu")
+        assert.is_true(green.g >= 0.75, "le vert doit etre franc, pas pastel")
+        assert.are.equal(green.r, green.b, "vert pur : autant de rouge que de bleu")
+        -- "huge" est la PLUS GRANDE police du catalogue de Core/ : le mot BOSS est
+        -- donc le plus gros element TEXTUEL que la fenetre puisse afficher.
+        for name, font in pairs(L.FONTS) do
+            assert.is_true(font.height <= L.FONTS[L.WORD_STYLE_BIG].height, name .. " depasse la police du mot BOSS")
+        end
+        local big = L.intermissionPanel({ wordText = "BOSS", wordState = "2V2R", showRedo = true })
+        local small = L.intermissionPanel({ wordText = "Ping", wordState = "1V3R", showRedo = true })
+        local bigWord = blockOf(big, L.wordBlockId("2V2R"))
+        local smallWord = blockOf(small, L.wordBlockId("1V3R"))
+        assert.are.equal(L.WORD_STYLE_BIG, bigWord.style)
+        assert.are.equal(L.WORD_STYLE, smallWord.style)
+        assert.is_true(bigWord.height > smallWord.height, "le mot BOSS doit etre plus grand")
+        -- Plus grand que TOUT autre element TEXTUEL du panneau reel (CORRIGER).
+        local redo = rowItemOf(big, "actions", "redo")
+        assert.is_true(bigWord.height > redo.height, "le mot BOSS doit dominer CORRIGER")
+        -- Le bandeau SIMULATION (deux lignes) n'existe QUE pendant une repetition :
+        -- le mot BOSS reste le plus gros element textuel du panneau de combat, et
+        -- le bandeau ne le recouvre jamais (verifie par problemsOf ci-dessus).
+        local run = S.newRun()
+        local view = S.forRehearsal(I.snapshot(I.newState(), "anchors"), run)
+        local rehearsal = L.intermissionPanel({
+            bannerLines = view.simBannerLines,
+            wordText = "BOSS",
+            wordState = "2V2R",
+            showRedo = true,
+        })
+        assert.is_truthy(blockOf(rehearsal, "simBanner"), "le bandeau de repetition manque")
+        assert.are.equal("", problemsOf(L, rehearsal))
+        assertStacked(rehearsal, "simBanner", L.wordBlockId("2V2R"), "repetition")
+    end)
+
+    it("la REPETITION garde son bandeau SIMULATION et ses trois images", function()
         -- Retour en jeu : « le panneau de repetition n'affiche plus les 3 boutons,
-        -- c'est tout son interet ». Le plan de la repetition est construit ici
-        -- EXACTEMENT comme UI.IntermissionRefresh le fait (meme snapshot, meme
-        -- spec) : tant qu'aucune composition n'est declaree, la ligne de choix
-        -- est la, avec les libelles de Core et une taille mesuree.
+        -- c'est tout son interet ». Le plan est construit ici EXACTEMENT comme
+        -- UI.IntermissionRefresh le fait (meme snapshot, meme spec) : tant qu'aucune
+        -- composition n'est declaree, les trois IMAGES sont la, sous le bandeau.
         local run = S.newRun()
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
@@ -585,73 +667,64 @@ describe("Layout : panneau d'intermission (chevauchements, deux langues)", funct
             assert.is_true(snap.showButtons, lang .. " : les choix doivent etre affiches")
             local layout = planFor({
                 bannerLines = snap.simBannerLines,
-                stateText = snap.stateText,
-                headline = snap.headline,
-                pingBanner = snap.pingBanner,
-                bodyLines = snap.lines,
                 showChoices = snap.showButtons,
                 showRedo = snap.showRedo,
             })
-            local row = blockOf(layout, "choices")
-            assert.is_truthy(row, lang .. " : la ligne des trois compositions manque")
-            assert.are.equal(#I.STATES, #row.items)
-            assertStacked(layout, "body", "choices", lang)
-            for index = 1, #row.items do
-                local item = row.items[index]
-                local key = I.STATES[index]
-                local rec = I.getDeclaration(key)
-                assert.are.equal("choice" .. index, item.id)
-                assert.are.equal(rec.buttonLabel, item.text)
-                assert.is_true(contains(item.text, key), item.text)
-                assert.is_true(item.width >= L.CHOICE_MIN_WIDTH, "bouton trop etroit en " .. lang)
-                assert.is_true(item.height >= L.CHOICE_MIN_HEIGHT, "bouton trop court en " .. lang)
-                assert.are.equal("TOPLEFT", item.point)
-            end
-            -- Une fois la composition cliquee, Core ne fournit plus les choix :
-            -- le panneau ne garde que le resultat et CORRIGER.
-            I.declare(state, "1V3R")
-            local afterSnap = S.forRehearsal(I.snapshot(state, "anchors"), run)
-            assert.is_false(afterSnap.showButtons)
-            local after = planFor({
-                bannerLines = afterSnap.simBannerLines,
-                stateText = afterSnap.stateText,
-                headline = afterSnap.headline,
-                pingBanner = afterSnap.pingBanner,
-                bodyLines = afterSnap.lines,
-                showChoices = afterSnap.showButtons,
-                showRedo = afterSnap.showRedo,
-            })
-            assert.is_nil(blockOf(after, "choices"))
-            assert.is_truthy(rowItemOf(after, "actions", "redo"))
-            assert.is_truthy(rowItemOf(after, "actions", "close"))
-            assert.are.equal("", problemsOf(L, after), lang)
             assert.are.equal("", problemsOf(L, layout), lang)
-        end
-    end)
-
-    it("mode placement : OK et Fermer ne se recouvrent pas, dans les deux langues", function()
-        for _, lang in ipairs({ "en", "fr" }) do
-            ns.Locale.setActive(lang)
-            local view = I.setupView({ leadSeconds = 2, pairs = 8 })
-            local layout = planFor({ headline = view.headline, bodyLines = view.lines, showOk = true })
-            assert.are.equal("", problemsOf(L, layout), lang)
-            local ok, close = rowItemOf(layout, "actions", "ok"), rowItemOf(layout, "actions", "close")
-            assert.is_truthy(ok)
-            assert.is_truthy(close)
-            assert.is_true(close.x + close.width <= layout.width)
-            assert.is_true(ok.x + ok.width <= close.x)
-            assert.is_nil(rowItemOf(layout, "actions", "redo"))
-        end
-    end)
-
-    it("le titre ne passe jamais sous la croix de fermeture", function()
-        for _, lang in ipairs({ "en", "fr" }) do
-            ns.Locale.setActive(lang)
-            local layout = planFor({ headline = "GET READY", bodyLines = { "x" } })
-            assert.are.equal("", problemsOf(L, layout), lang)
-            local title = blockOf(layout, "title")
-            local _, right = L.bounds(title, layout)
+            -- Le bandeau est le SEUL texte d'une repetition, et il est AU-DESSUS
+            -- des trois images (bug du 4e test en jeu : le texte recouvrait le plan).
+            local banner = blockOf(layout, "simBanner")
+            assert.is_truthy(banner, lang)
+            assert.are.equal("text", banner.kind, lang)
+            assertStacked(layout, "simBanner", "choice1", lang)
+            assert.are.equal(1, #textBlocks(layout), lang .. " : un texte de trop en repetition")
+            -- Le bandeau ne passe pas sous la croix de fermeture.
+            local _, right = L.bounds(banner, layout)
             assert.is_true(right <= layout.width - L.CROSS_OFFSET - L.CROSS_SIZE, lang)
+            for index = 1, #L.INTERMISSION_CHOICE_ORDER do
+                local block = blockOf(layout, "choice" .. index)
+                assert.is_truthy(block, lang .. " : image " .. index .. " manquante")
+                assert.are.equal(L.INTERMISSION_CHOICE_ORDER[index], block.state, lang)
+            end
+            -- Une fois la composition cliquee, les images disparaissent : il ne
+            -- reste que le mot et CORRIGER.
+            I.declare(state, "2V2R")
+            local after = S.forRehearsal(I.snapshot(state, "anchors"), run)
+            assert.is_false(after.showButtons, lang)
+            local afterLayout = planFor({
+                bannerLines = after.simBannerLines,
+                wordText = after.word,
+                wordState = after.wordKey,
+                showRedo = after.showRedo,
+            })
+            assert.are.equal("", problemsOf(L, afterLayout), lang)
+            assert.is_nil(blockOf(afterLayout, "choice1"), lang)
+            assert.are.equal(ns.Locale.t("state.word.2V2R"), blockOf(afterLayout, "wordBig").text, lang)
+            assert.is_truthy(rowItemOf(afterLayout, "actions", "redo"), lang)
+            assert.is_nil(rowItemOf(afterLayout, "actions", "close"), lang)
+        end
+    end)
+
+    it("mode placement : les trois images et OK, aucun texte, rien sous la croix", function()
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            local layout = planFor({ showChoices = true, showOk = true })
+            assert.are.equal("", problemsOf(L, layout), lang)
+            -- Aucun texte : le mode placement explique en chat/README, pas a l'ecran.
+            assert.are.equal(0, #textBlocks(layout), lang)
+            local ok = rowItemOf(layout, "actions", "ok")
+            assert.is_truthy(ok, lang)
+            assert.is_true(ok.x + ok.width <= layout.width, lang)
+            -- Plus de bouton "Fermer" : la croix annule le placement.
+            assert.is_nil(rowItemOf(layout, "actions", "close"), lang)
+            assert.is_nil(rowItemOf(layout, "actions", "redo"), lang)
+            -- Rien ne deborde (le passage sous la croix est deja couvert par
+            -- problemsOf -> Layout.violations, appele plus haut).
+            for index = 1, #layout.blocks do
+                local block = layout.blocks[index]
+                local left, blockRight = L.bounds(block, layout)
+                assert.is_true(left >= 0 and blockRight <= layout.width, lang .. " / " .. block.id)
+            end
         end
     end)
 end)

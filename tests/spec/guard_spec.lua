@@ -73,7 +73,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(12, #files)
+        assert.are.equal(13, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -113,6 +113,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             "Core/Pairing.lua",
             "Core/Intermission.lua",
             "Core/Simulation.lua",
+            "Core/Textures.lua",
             "Core/Layout.lua",
         }
         for _, file in ipairs(pureFiles) do
@@ -163,15 +164,27 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         assert.is_truthy(ui:find("pcall(BossFilter", 1, true) ~= nil, "la decision doit etre appelee sous pcall dans UI/")
     end)
 
-    it("garde la lecture du SON de debut d'intermission dans UI/, sous pcall", function()
-        -- Comme les sondes d'assignation : la table pure et la regle « une seule
-        -- lecture par intermission » sont dans Core/Sound.lua, l'appel audio dans
-        -- UI/Intermission.lua, sous pcall (voir le controle PlaySoundFile plus bas).
+    it("garde le SON d'intermission EXPLICITE dans UI/, sous pcall, et AUCUN son automatique", function()
+        -- REGLE EN JEU (decision du raid lead) : plus AUCUN son ne part tout seul.
+        -- Le son de debut d'intermission n'est plus joue a l'ouverture du panneau :
+        -- la table pure et la regle « une seule lecture » restent dans
+        -- Core/Sound.lua (elles servent la commande explicite /gr sound test start),
+        -- mais UI/Intermission.lua ne doit plus APPELER la lecture automatique.
         local core = stripComments(readFile("Core/Sound.lua"))
         assert.is_truthy(core:find("takeIntermissionStart", 1, true) ~= nil, "Core/Sound.lua doit porter la regle du son de debut")
         assert.is_truthy(core:find("START_FILE", 1, true) ~= nil, "Core/Sound.lua doit nommer le fichier de debut")
         local guard = stripComments(readFile("UI/Intermission.lua"))
-        assert.is_truthy(guard:find("playStartSound", 1, true) ~= nil, "UI/Intermission.lua doit jouer le son de debut")
+        assert.is_nil(
+            guard:find("takeIntermissionStart", 1, true),
+            "UI/Intermission.lua ne doit plus APPELER la lecture automatique du son de debut"
+        )
+        -- Le SEUL chemin audio restant est le clic sur un bouton de composition,
+        -- sous pcall (voir tests/spec/sound_spec.lua, qui le prouve en jouant).
+        assert.is_truthy(
+            guard:find("takeAssignSound", 1, true) ~= nil,
+            "UI/Intermission.lua doit jouer le son d'assignation du bouton clique"
+        )
+        assert.is_truthy(guard:find("pcall", 1, true) ~= nil, "tout appel audio de UI/ doit etre sous pcall")
     end)
 
     it("garde /gr diag : le controle audio passe par la PORTE DU SILENCE de Core/", function()
@@ -238,6 +251,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             "Core/Pairing.lua",
             "Core/Intermission.lua",
             "Core/Simulation.lua",
+            "Core/Textures.lua",
             "Core/Layout.lua",
         }) do
             local code = stripStrings(stripComments(readFile(file)))

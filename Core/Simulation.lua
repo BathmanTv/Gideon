@@ -239,6 +239,11 @@ function Simulation.forRehearsal(snap, run)
         declaration = snap.declaration,
         stateText = snap.stateText,
         stateLong = snap.stateLong,
+        -- THE ONE WORD of the panel and the state that sizes/colors it: copied
+        -- like every other displayed field, so a rehearsal shows the very same
+        -- word as the real flow ("Ping" / "BOSS" / "Chasseur").
+        word = snap.word,
+        wordKey = snap.wordKey,
         headline = view.headline,
         countdownText = snap.countdownText,
         lines = {},

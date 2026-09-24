@@ -94,8 +94,12 @@ function stub.install()
     function Frame:SetShown(shown)
         self.__shown = shown and true or false
     end
-    function Frame:CreateFontString()
+    function Frame:CreateFontString(_, _, font)
         local fs = {}
+        -- La police demandee a la creation est ENREGISTREE (comme le client) : un
+        -- test peut verifier que le mot BOSS utilise la plus grande police et les
+        -- mots de survie la police courante.
+        fs.__font = font
         -- Les points sont ENREGISTRES (comme pour les cadres) : un test peut
         -- verifier que UI/ applique bien la disposition calculee par Core/Layout.
         -- Comme le client, le stub REFUSE une ancre nulle (1er argument).
@@ -128,7 +132,13 @@ function stub.install()
         end
         function fs:SetJustifyH() end
         function fs:SetJustifyV() end
-        function fs:SetFontObject() end
+        function fs:SetFontObject(fontObject)
+            fs.__font = fontObject
+            return fs.__font
+        end
+        function fs:GetFontObject()
+            return fs.__font
+        end
         function fs:SetWidth(width)
             fs.__width = width
         end
@@ -163,6 +173,42 @@ function stub.install()
     end
     function Frame:StartMoving() end
     function Frame:StopMovingOrSizing() end
+    function Frame:SetNormalTexture(texture)
+        self.__normalTexture = texture
+        return self:GetNormalTexture()
+    end
+    --- Le CLIENT renvoie un objet Texture : le stub en renvoie un miniature, dont
+    --- GetTexture() rend le chemin DEMANDE - c'est ce qu'une spec verifie pour
+    --- prouver que le bouton affiche bien l'image de sa composition.
+    function Frame:GetNormalTexture()
+        local path = self.__normalTexture
+        return {
+            __path = path,
+            GetTexture = function()
+                return path
+            end,
+            SetTexture = function() end,
+            SetTexCoord = function() end,
+            SetAllPoints = function() end,
+        }
+    end
+    function Frame:SetPushedTexture(texture)
+        self.__pushedTexture = texture
+        return self.__normalTexture or texture
+    end
+    function Frame:GetPushedTexture()
+        return { GetTexture = function() end }
+    end
+    function Frame:SetHighlightTexture(texture)
+        self.__highlightTexture = texture
+        return { GetTexture = function() end }
+    end
+    function Frame:SetDisabledTexture(texture)
+        self.__disabledTexture = texture
+        return { GetTexture = function() end }
+    end
+    function Frame:SetTexCoord() end
+    function Frame:SetAllPoints() end
     -- Boutons (boutons 1/2/3, bouton fermer).
     function Frame:SetText(t)
         self.__text = t

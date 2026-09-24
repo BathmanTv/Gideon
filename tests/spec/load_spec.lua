@@ -64,9 +64,22 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ENCOUNTER_START", BOSS_ID, BOSS_NAME, 16, 20)
     end
 
+    --- LE bouton d'image d'une composition. L'ordre VERTICAL des trois boutons est
+    --- fige par Core/Layout.INTERMISSION_CHOICE_ORDER (3V1R en haut, puis 2V2R,
+    --- puis 1V3R) : les tests passent donc par la composition, jamais par un index
+    --- en dur (c'est ce qui garantit qu'un clic declara bien ce que le joueur voit).
+    local function buttonFor(panel, stateKey)
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            if ns.Layout.INTERMISSION_CHOICE_ORDER[index] == stateKey then
+                return panel.buttons[index]
+            end
+        end
+        return nil
+    end
+
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(12, #files)
+        assert.are.equal(13, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
@@ -84,13 +97,15 @@ describe("chargement de l'addon", function()
         -- reponses de PlaySoundFile.
         assert.are.equal("Core/Diag.lua", files[5])
         assert.are.equal("Core/Config.lua", files[6])
-        -- Core/Simulation.lua APRES Intermission.lua (il reutilise ses etats et
-        -- ses libelles), Core/Layout.lua EN DERNIER des Core/ (il mesure les
-        -- libelles), puis la couche de rendu (UI/) qui applique le tout.
+        -- Core/Textures.lua APRES Intermission.lua (elle miroite ses etats) et AVANT
+        -- Layout.lua, qui s'en sert pour dimensionner les trois boutons d'image.
         assert.are.equal("Core/Simulation.lua", files[9])
-        assert.are.equal("Core/Layout.lua", files[10])
-        assert.are.equal("UI/Panel.lua", files[11])
-        assert.are.equal("UI/Intermission.lua", files[12])
+        assert.are.equal("Core/Textures.lua", files[10])
+        -- Core/Layout.lua EN DERNIER des Core/ (il mesure les libelles), puis la
+        -- couche de rendu (UI/) qui applique le tout.
+        assert.are.equal("Core/Layout.lua", files[11])
+        assert.are.equal("UI/Panel.lua", files[12])
+        assert.are.equal("UI/Intermission.lua", files[13])
     end)
 
     it("expose toutes les couches attendues", function()
@@ -188,24 +203,31 @@ describe("chargement de l'addon", function()
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.matches("BEFORE THE PULL", panel.headline:GetText())
-        assert.is_true(contains(panel.body:GetText(), "Options > Keybindings"))
-        assert.is_true(contains(panel.body:GetText(), "No out-of-game plan loaded (optional)."))
+        -- Le mode placement montre les MEMES images que le combat, et PAS UN MOT
+        -- d'explication a l'ecran (raid lead : « enleve tout le blabla » ; le mode
+        -- d'emploi vit dans le README et dans le chat).
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_true(panel.buttons[2]:IsShown())
+        assert.is_true(panel.buttons[3]:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        assert.is_false(panel.redo:IsShown())
         assert.is_true(panel.ok:IsShown())
-        assert.is_false(panel.buttons[1]:IsShown())
         panel.ok:Click()
         assert.is_false(panel:IsShown())
         assert.is_table(_G.GideonRaidDB.intermission.position)
         assert.matches("Placement saved", messages())
     end)
 
-    it("/gr inter place ouvre aussi le mode placement et Close annule", function()
+    it("/gr inter place ouvre aussi le mode placement et la CROIX annule", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.matches("BEFORE THE PULL", panel.headline:GetText())
-        panel.close:Click()
+        -- Le bouton texte "Fermer" n'existe plus : la croix fait le travail.
+        assert.is_nil(panel.close)
+        assert.is_truthy(panel.closeCross)
+        panel.closeCross:Click()
         assert.is_false(panel:IsShown())
     end)
 
@@ -232,39 +254,55 @@ describe("chargement de l'addon", function()
         -- 45 s : ouvert, en attente du debut de l'intermission.
         stub.fireTickers(51)
         assert.is_true(panel:IsShown())
-        assert.matches("GET READY", panel.headline:GetText())
-        assert.are.equal("", panel.state:GetText())
         assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_true(panel.buttons[2]:IsShown())
+        assert.is_true(panel.buttons[3]:IsShown())
         assert.is_false(panel.redo:IsShown())
-        -- + 2 s : l'intermission commence (compte a rebours de visibilite).
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        -- + 2 s : l'intermission commence (compte a rebours de visibilite) et
+        -- + 3,5 s : salle obscurcie. L'ecran NE CHANGE PAS d'un mot : il n'y a plus
+        -- AUCUN texte avant le clic (consigne du raid lead), seulement les images.
         stub.fireTickers(20)
-        assert.matches("LOOK AT THE ORB COLOR", panel.headline:GetText())
-        -- + 3,5 s : salle obscurcie.
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_false(panel.word:IsShown())
         stub.fireTickers(35)
-        assert.matches("DARKENED", panel.headline:GetText())
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
         -- Fin de l'intermission (duree par defaut 20 s) : fermeture automatique.
         stub.fireTickers(200)
         assert.is_false(panel:IsShown(), "le panneau se ferme tout seul a la fin")
     end)
 
-    it("clic sur une composition : etat en gros, role, PING et UNE action", function()
+    it("clic sur une composition : l'image du bouton, puis UN SEUL mot", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("2 green %+ 2 red", panel.buttons[2]:GetText())
-        assert.matches("1 or 3", panel.buttons[1]:GetText())
-        panel.buttons[2]:Click() -- 2V2R
-        assert.are.equal("2V2R", panel.state:GetText())
-        assert.are.equal("PING: NO", panel.pingBanner:GetText())
-        assert.is_true(panel.pingBanner:IsShown())
-        local text = panel.body:GetText()
-        assert.is_true(contains(text, "ROLE: MIDDLE"))
-        assert.is_true(contains(text, "DO NOT PING - go to the middle / under the boss"))
-        -- Le pave technique a disparu : plus aucune de ces lignes.
-        for _, banned in ipairs({ "ROLE ORDER", "PING POLICY", "STATE THAT JOINS YOU", "GUILD CONVENTION", "UNKNOWN" }) do
-            assert.is_false(contains(text, banned), banned)
+        -- Chaque bouton PORTE l'image de sa composition (le chemin vient de
+        -- Core/Textures.lua) et AUCUN libelle de composition n'est dessine dessus.
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            local key = ns.Layout.INTERMISSION_CHOICE_ORDER[index]
+            assert.are.equal(ns.Textures.pathFor(key), panel.buttons[index]:GetNormalTexture():GetTexture())
+            assert.are.equal("", panel.buttons[index]:GetText(), "le bouton " .. key .. " porte un texte")
         end
+        panel.buttons[2]:Click() -- 2V2R (2e bouton de l'ordre fige)
+        -- UN SEUL mot, et rien d'autre : plus d'etat, plus de role, plus de ligne
+        -- d'action, plus de bandeau de ping (tout le blabla a disparu).
+        assert.is_true(panel.wordBig:IsShown())
+        assert.are.equal(ns.Locale.t("state.word.2V2R"), panel.wordBig:GetText())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.buttons[1]:IsShown())
+        assert.is_false(panel.buttons[2]:IsShown())
+        assert.is_false(panel.buttons[3]:IsShown())
+        for _, gone in ipairs({ "state", "headline", "pingBanner", "body", "title", "close" }) do
+            assert.is_nil(panel[gone], "l'element " .. gone .. " existe encore dans le panneau")
+        end
+        -- Le mot BOSS est le plus gros element de la fenetre : il utilise la plus
+        -- grande police du client, les deux mots de survie la police courante.
+        assert.are.equal("GameFontNormalHuge", panel.wordBig:GetFontObject())
+        assert.are.equal("GameFontNormalLarge", panel.word:GetFontObject())
     end)
 
     it("bouton CORRIGER : ramene aux trois choix, utilisable plusieurs fois", function()
@@ -272,26 +310,36 @@ describe("chargement de l'addon", function()
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
-        assert.are.equal("1V3R", panel.state:GetText())
+        local function wordText()
+            if panel.wordBig:IsShown() then
+                return panel.wordBig:GetText()
+            end
+            return panel.word:GetText()
+        end
+        panel.buttons[1]:Click() -- 3V1R (1er bouton de l'ordre fige)
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), wordText())
         assert.is_true(panel.redo:IsShown())
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
+        assert.is_false(panel.buttons[1]:IsShown())
         panel.redo:Click()
-        assert.are.equal("", panel.state:GetText())
+        -- Retour aux trois images, plus aucun mot.
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_true(panel.buttons[2]:IsShown())
+        assert.is_true(panel.buttons[3]:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
         assert.is_false(panel.redo:IsShown())
-        assert.is_true(contains(panel.body:GetText(), "Click the composition you see"))
         -- Deuxieme corrige, puis troisieme : toujours possible.
-        panel.buttons[3]:Click()
-        assert.are.equal("3V1R", panel.state:GetText())
+        buttonFor(panel, "1V3R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), wordText())
         panel.redo:Click()
-        panel.buttons[2]:Click()
-        assert.are.equal("2V2R", panel.state:GetText())
+        buttonFor(panel, "2V2R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.2V2R"), wordText())
         panel.redo:Click()
-        panel.buttons[1]:Click()
-        assert.are.equal("1V3R", panel.state:GetText())
+        buttonFor(panel, "3V1R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), wordText())
     end)
 
-    it("affiche la touche de ping quand le joueur en a bindi une", function()
+    it("le panneau ne montre PLUS la touche de ping (tout le texte est parti)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GetBindingKey = function(name)
             if name == "PING_WARNING" then
@@ -302,20 +350,23 @@ describe("chargement de l'addon", function()
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.is_true(contains(panel.body:GetText(), "PING: Warning - press Q"))
+        buttonFor(panel, "1V3R"):Click()
+        -- Le clic affiche UN SEUL mot : ni le mot "PING", ni la touche bindi, ni la
+        -- moindre consigne. La touche reste accessible dans /gr sim ping.
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
+        assert.is_false(panel.word:GetText():find("Q", 1, true) ~= nil)
+        assert.is_nil(panel.body)
     end)
 
-    it("sans raccourci bindi (ou GetBindingKey absent) : demande un raccourci", function()
+    it("sans raccourci bindi, le rendu ne depend PAS de GetBindingKey", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.is_nil(_G.GetBindingKey, "le harnais ne definit PAS GetBindingKey")
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.is_true(contains(panel.body:GetText(), "PING: Warning - set a keybind in Options > Keybindings"))
+        buttonFor(panel, "1V3R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
+        assert.is_false(panel.buttons[1]:IsShown())
     end)
 
     it("survit a un GetBindingKey qui leve une erreur", function()
@@ -326,8 +377,8 @@ describe("chargement de l'addon", function()
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click()
-        assert.is_true(contains(panel.body:GetText(), "set a keybind in Options > Keybindings"))
+        buttonFor(panel, "1V3R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
     end)
 
     it("rouvre le panneau a l'intermission SUIVANTE (cycle complet)", function()
@@ -343,8 +394,10 @@ describe("chargement de l'addon", function()
         assert.is_false(panel:IsShown())
         stub.fireTickers(25) -- 147,0 s : reouverture automatique
         assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
-        assert.matches("GET READY", panel.headline:GetText())
-        assert.are.equal("", panel.state:GetText())
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        assert.is_false(panel.redo:IsShown())
     end)
 
     it("ENCOUNTER_END ferme le panneau et desarme le planning", function()
@@ -362,7 +415,7 @@ describe("chargement de l'addon", function()
     it("publie la decision du joueur dans les SavedVariables (lue par le kit diag)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter start")
-        _G.GideonRaidIntermissionPanel.buttons[3]:Click() -- 3V1R
+        buttonFor(_G.GideonRaidIntermissionPanel, "3V1R"):Click()
         local decision = _G.GideonRaidDB.intermission.lastDecision
         assert.is_not_nil(decision)
         assert.equals("3V1R", decision.composition)
@@ -390,12 +443,19 @@ describe("chargement de l'addon", function()
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown(), "desactive = aucune ouverture automatique")
     end)
 
-    it("le panneau reste lisible et n'affiche aucune valeur dynamique", function()
+    it("le panneau n'affiche AUCUN texte a l'ouverture, et aucune valeur dynamique", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter start")
-        local text = _G.GideonRaidIntermissionPanel.body:GetText()
-        assert.is_nil(string.find(text, "UnitHealth", 1, true))
-        assert.is_nil(string.find(text, "UnitAura", 1, true))
+        local panel = _G.GideonRaidIntermissionPanel
+        -- Plus de pavé : avant le clic, TOUT le texte du panneau est vide (les deux
+        -- FontStrings du mot sont cachees et vides).
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        assert.are.equal("", panel.word:GetText())
+        assert.are.equal("", panel.wordBig:GetText())
+        for _, gone in ipairs({ "body", "state", "headline", "pingBanner", "title" }) do
+            assert.is_nil(panel[gone], "l'element " .. gone .. " existe encore")
+        end
     end)
 
     -- ------------------------------------------------------------------------
@@ -450,15 +510,17 @@ describe("chargement de l'addon", function()
         assert.is_false(panel:IsShown())
         stub.fireTickers(760)
         assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
-        assert.matches("GET READY", panel.headline:GetText())
+        assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
     end)
 
-    it("en placement, la croix ANNULE (meme effet que le bouton Close existant)", function()
+    it("en placement, la croix ANNULE", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.matches("BEFORE THE PULL", panel.headline:GetText())
+        assert.is_true(panel.ok:IsShown())
         panel.closeCross:Click()
         assert.is_false(panel:IsShown())
         -- Annulation : le placement n'est PAS valide.
@@ -538,7 +600,7 @@ describe("chargement de l'addon", function()
         assert.is_true(help:IsShown())
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown(), "l'aide au ping ne bloque pas le placement")
-        _G.GideonRaidIntermissionPanel.close:Click()
+        _G.GideonRaidIntermissionPanel.closeCross:Click()
         pullTargetBoss()
         assert.is_false(help:IsShown())
         assert.matches("Encounter started", messages())
@@ -562,25 +624,29 @@ describe("chargement de l'addon", function()
         local banner = panel.simBanner:GetText()
         assert.is_true(contains(banner, "SIMULATION - NO BOSS, NO RAID"))
         assert.is_true(contains(banner, "YOU CLOSE THE PANEL YOURSELF"))
-        local headline = panel.headline:GetText()
-        assert.is_false(contains(headline, "LOOK AT THE ORB COLOR"))
-        assert.is_true(contains(headline, "NO ORB TO READ"))
-        assert.is_true(contains(panel.body:GetText(), "close this panel yourself"))
+        -- Le blabla a disparu : le bandeau SIMULATION est le SEUL texte de la
+        -- repetition, et aucune composition n'est encore declaree.
+        assert.is_nil(panel.headline)
+        assert.is_nil(panel.body)
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
         assert.is_true(panel.buttons[1]:IsShown())
+        assert.is_true(panel.buttons[2]:IsShown())
+        assert.is_true(panel.buttons[3]:IsShown())
 
         -- Le geste complet du joueur : composition, CORRIGER, composition.
-        panel.buttons[1]:Click()
-        assert.are.equal("1V3R", panel.state:GetText())
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.is_true(contains(panel.body:GetText(), "ROLE: ANCHOR"))
+        buttonFor(panel, "1V3R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
+        assert.is_true(panel.word:IsShown())
         assert.is_true(panel.redo:IsShown())
         assert.is_false(panel.buttons[1]:IsShown(), "les trois choix disparaissent apres le clic")
         assert.is_false(panel.buttons[2]:IsShown())
         assert.is_false(panel.buttons[3]:IsShown())
         panel.redo:Click()
-        assert.are.equal("", panel.state:GetText())
-        panel.buttons[3]:Click()
-        assert.are.equal("3V1R", panel.state:GetText())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        buttonFor(panel, "3V1R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), panel.word:GetText())
         -- Une repetition ne publie AUCUNE decision : le kit de diagnostic ne doit
         -- jamais lire une repetition comme un vrai choix.
         assert.is_nil(_G.GideonRaidDB.intermission.lastDecision)
@@ -588,8 +654,8 @@ describe("chargement de l'addon", function()
         -- Elle ne se ferme PAS toute seule : aucun temps ne tourne.
         stub.fireTickers(5000)
         assert.is_true(panel:IsShown())
-        -- ... c'est le JOUEUR qui la ferme (bouton Fermer), et le chat le dit.
-        panel.close:Click()
+        -- ... c'est le JOUEUR qui la ferme (la croix), et le chat le dit.
+        panel.closeCross:Click()
         assert.is_false(panel:IsShown())
         assert.matches("Simulation closed", messages())
         assert.matches("no boss, no raid", messages())
@@ -607,70 +673,80 @@ describe("chargement de l'addon", function()
         assert.is_false(panel.simBanner:IsShown(), "plus de bandeau SIMULATION hors repetition")
     end)
 
-    it("5e test : les trois boutons de composition sont affiches, poses et fonctionnels", function()
+    it("5e test : les trois boutons d'image sont affiches, poses et fonctionnels", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
         local layout = ns.Layout
         assert.is_true(panel:IsShown())
-        for index = 1, 3 do
+        for index = 1, #layout.INTERMISSION_CHOICE_ORDER do
+            local key = layout.INTERMISSION_CHOICE_ORDER[index]
             local button = panel.buttons[index]
-            assert.is_true(button:IsShown(), "le bouton de composition " .. index .. " doit etre affiche")
+            assert.is_true(button:IsShown(), "le bouton de composition " .. key .. " doit etre affiche")
             -- ANCRE : le bug du 5e test etait une ancre NULLE (SetPoint(nil) leve
             -- en jeu, l'applier s'arretait et ces trois boutons disparaissaient).
-            assert.are.equal("TOPLEFT", button.__point[1])
+            assert.are.equal("TOP", button.__point[1])
             assert.is_number(button.__point[2])
             assert.is_number(button.__point[3])
-            -- TAILLE mesuree depuis le libelle : plus jamais un cadre fixe.
-            assert.is_true(button.__width >= layout.CHOICE_MIN_WIDTH, "bouton trop etroit")
-            assert.is_true(button.__height >= layout.CHOICE_MIN_HEIGHT, "bouton trop court")
-            assert.is_true(
-                layout.textWidth(button:GetText(), "button") <= (button.__width - (2 * layout.BUTTON_PADDING_X)),
-                "le libelle doit tenir dans le bouton avec sa marge"
-            )
+            -- TAILLE : celle de l'IMAGE (ratio conserve), plus jamais un cadre fixe
+            -- et plus jamais mesuree depuis un libelle (il n'y en a plus).
+            local expectedWidth, expectedHeight = ns.Textures.displaySize(key, layout.CHOICE_IMAGE_MAX)
+            assert.are.equal(expectedWidth, button.__width, key .. " : largeur de l'image")
+            assert.are.equal(expectedHeight, button.__height, key .. " : hauteur de l'image")
+            -- LE BOUTON AFFICHE L'IMAGE DE SA COMPOSITION, et aucun texte.
+            assert.are.equal(ns.Textures.pathFor(key), button:GetNormalTexture():GetTexture(), key)
+            assert.are.equal("", button:GetText(), key .. " : un texte est dessine sur l'image")
         end
-        -- Le bouton Fermer est la lui aussi ; OK n'a rien a faire dans une
-        -- repetition (il valide une POSITION, pas un choix).
-        assert.is_true(panel.close:IsShown())
+        -- La croix est la (elle ferme le panneau) ; OK n'a rien a faire dans une
+        -- repetition (il valide une POSITION, pas un choix). La croix est du
+        -- "chrome" attache au coin du cadre, hors plan (Core ne la place pas).
+        assert.is_truthy(panel.closeCross)
         assert.is_false(panel.ok:IsShown())
-        -- CHAQUE bouton remplit sa fonction : etat + role + PING + ligne d'action.
+        -- CHAQUE bouton remplit sa fonction : UN SEUL mot, celui du raid lead.
         local expected = {
-            { index = 1, state = "1V3R", role = "ROLE: ANCHOR", ping = "PING: YES", action = "PING: YES - hover YOUR OWN" },
-            { index = 2, state = "2V2R", role = "ROLE: MIDDLE", ping = "PING: NO", action = "DO NOT PING - go to the middle" },
-            { index = 3, state = "3V1R", role = "ROLE: CHASER", ping = "PING: NO", action = "DO NOT PING - run to a ping" },
+            { state = "3V1R", word = "state.word.3V1R", big = false },
+            { state = "2V2R", word = "state.word.2V2R", big = true },
+            { state = "1V3R", word = "state.word.1V3R", big = false },
         }
         for _, case in ipairs(expected) do
-            panel.buttons[case.index]:Click()
-            assert.are.equal(case.state, panel.state:GetText())
-            local body = panel.body:GetText()
-            assert.is_true(contains(body, case.role), case.state .. " : role manquant")
-            assert.are.equal(case.ping, panel.pingBanner:GetText())
-            assert.is_true(panel.pingBanner:IsShown())
-            assert.is_true(contains(body, case.action), case.state .. " : ligne d'action manquante")
-            for index = 1, 3 do
+            buttonFor(panel, case.state):Click()
+            local drawn = case.big and panel.wordBig or panel.word
+            assert.is_true(drawn:IsShown(), case.state .. " : le mot doit etre affiche")
+            assert.are.equal(ns.Locale.t(case.word), drawn:GetText(), case.state)
+            -- ... et RIEN d'autre : l'autre FontString du mot reste cachee.
+            assert.is_false((case.big and panel.word or panel.wordBig):IsShown(), case.state)
+            for index = 1, #layout.INTERMISSION_CHOICE_ORDER do
                 assert.is_false(panel.buttons[index]:IsShown(), "les trois choix disparaissent apres le clic")
             end
-            -- CORRIGER ramene les trois boutons et vide l'etat.
+            -- CORRIGER ramene les trois boutons et efface le mot.
             assert.is_true(panel.redo:IsShown())
             panel.redo:Click()
-            assert.are.equal("", panel.state:GetText())
+            assert.is_false(panel.word:IsShown())
+            assert.is_false(panel.wordBig:IsShown())
             assert.is_false(panel.redo:IsShown())
-            for index = 1, 3 do
+            for index = 1, #layout.INTERMISSION_CHOICE_ORDER do
                 assert.is_true(panel.buttons[index]:IsShown(), "CORRIGER doit ramener les trois choix")
             end
         end
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
     end)
 
-    it("placement : le texte dit de placer le panneau puis d'appuyer sur OK", function()
+    it("placement : les trois images et OK, AUCUN texte a l'ecran", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
         assert.is_true(panel.ok:IsShown(), "le bouton OK doit etre affiche en mode placement")
-        local body = panel.body:GetText()
-        assert.is_true(contains(body, "Place the panel where you want it to appear, then press OK"), body)
-        assert.is_true(contains(body, "during the fight it opens by itself"), body)
+        -- Le mode placement n'explique PLUS rien a l'ecran (raid lead : « enleve
+        -- tout le blabla ») : les trois images, OK, et c'est tout.
+        for _, gone in ipairs({ "body", "headline", "state", "title" }) do
+            assert.is_nil(panel[gone], "l'element " .. gone .. " existe encore")
+        end
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            assert.is_true(panel.buttons[index]:IsShown(), "les images restent visibles pendant le placement")
+        end
         -- ... et OK valide vraiment : il sauvegarde la position et ferme.
         panel.ok:Click()
         assert.is_false(panel:IsShown())
@@ -678,18 +754,24 @@ describe("chargement de l'addon", function()
         assert.matches("Placement saved", messages())
     end)
 
-    it("placement : le texte francais dit la meme chose (client frFR)", function()
+    it("placement en FR : le panneau est traduit et AUCUN texte n'est dessine", function()
         _G.GetLocale = function()
             return "frFR"
         end
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
-        local body = panel.body:GetText()
-        assert.is_true(contains(body, "Place le panneau la ou tu veux qu'il apparaisse, puis appuie sur OK"), body)
-        assert.is_true(contains(body, "pendant le combat il s'ouvre tout seul"), body)
-        assert.matches("OK", panel.ok:GetText())
-        assert.matches("Fermer", panel.close:GetText())
+        assert.is_true(panel:IsShown())
+        assert.are.equal("OK", panel.ok:GetText())
+        assert.are.equal("X", panel.closeCross:GetText())
+        assert.is_nil(panel.close)
+        assert.is_nil(panel.body)
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
+        -- Les trois mots du raid lead en francais.
+        assert.are.equal("Ping", ns.Locale.t("state.word.1V3R", "fr"))
+        assert.are.equal("BOSS", ns.Locale.t("state.word.2V2R", "fr"))
+        assert.are.equal("Chasseur", ns.Locale.t("state.word.3V1R", "fr"))
     end)
 
     it("la croix de la repetition la ferme aussi (un seul cycle, pas de relance)", function()
@@ -825,20 +907,24 @@ describe("chargement de l'addon", function()
         assert.is_false(help:IsShown())
     end)
 
-    it("la disposition appliquee garde le grand etat SOUS le bandeau (EN + FR)", function()
+    it("la disposition appliquee garde le MOT sous le bandeau (EN + FR)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click() -- le grand etat "1V3R" apparait
-        assert.are.equal("1V3R", panel.state:GetText())
+        buttonFor(panel, "1V3R"):Click() -- le mot du 1V3R apparait
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
         for _, lang in ipairs({ "en", "fr" }) do
             _G.SlashCmdList["GIDEONRAID"]("lang " .. lang)
             local _, _, _, _, bannerY = panel.simBanner:GetPoint(1)
-            local _, _, _, _, stateY = panel.state:GetPoint(1)
-            -- Le grand etat est SOUS le bas du bandeau (bug du 4e test en jeu).
-            assert.is_true(stateY < bannerY, lang .. " : le grand etat chevauche le bandeau")
+            local _, _, _, _, wordY = panel.word:GetPoint(1)
+            -- Le mot est SOUS le bas du bandeau (bug du 4e test en jeu : un bloc
+            -- dessine sur le bandeau rendait les deux illisibles).
+            assert.is_true(wordY < bannerY, lang .. " : le mot chevauche le bandeau")
             -- ... et il reste dans le cadre (le panneau grandit avec le contenu).
-            assert.is_true(stateY > -panel.__height, "l'etat sort du cadre en " .. lang)
+            assert.is_true(wordY > -panel.__height, "le mot sort du cadre en " .. lang)
+            -- Le mot suit la langue servie, sans re-clic.
+            assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText(), lang)
+            assert.is_true(panel.word:IsShown(), lang)
         end
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
     end)
@@ -984,40 +1070,42 @@ describe("chargement de l'addon", function()
     -- ------------------------------------------------------------------------
     -- PANNEAU DE COMBAT : les trois choix DISPARAISSENT apres le clic
     -- ------------------------------------------------------------------------
-    it("apres le clic, les trois boutons disparaissent, CORRIGER seul reste", function()
+    it("apres le clic, les trois images disparaissent, le mot et CORRIGER restent", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
-        -- Avant le clic : les trois choix, pas de CORRIGER.
+        -- Avant le clic : les trois images, aucun mot, pas de CORRIGER.
         for index = 1, 3 do
             assert.is_true(panel.buttons[index]:IsShown(), "choix " .. index)
         end
         assert.is_false(panel.redo:IsShown())
+        assert.is_false(panel.word:IsShown())
+        assert.is_false(panel.wordBig:IsShown())
 
-        panel.buttons[1]:Click() -- 1V3R
-        assert.are.equal("1V3R", panel.state:GetText())
+        buttonFor(panel, "1V3R"):Click()
         for index = 1, 3 do
             assert.is_false(panel.buttons[index]:IsShown(), "choix " .. index .. " masque apres le clic")
         end
         assert.is_true(panel.redo:IsShown(), "CORRIGER reste disponible")
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        local first = panel.body:GetText()
-        assert.is_true(contains(first, "ROLE: ANCHOR"))
-        assert.is_true(contains(first, "hover YOUR OWN character frame"))
+        -- UN SEUL mot : "Ping", en vert (couleur du theme), et rien d'autre.
+        assert.is_true(panel.word:IsShown())
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
+        assert.are.same({ 0.25, 1.0, 0.25 }, panel.word.__color)
 
-        -- CORRIGER ramene les trois choix (etat vide)...
+        -- CORRIGER ramene les trois images (et efface le mot)...
         panel.redo:Click()
-        assert.are.equal("", panel.state:GetText())
+        assert.is_false(panel.word:IsShown())
         assert.is_false(panel.redo:IsShown())
         for index = 1, 3 do
             assert.is_true(panel.buttons[index]:IsShown(), "choix " .. index .. " de retour")
         end
-        assert.is_true(contains(panel.body:GetText(), "Click the composition you see"))
 
         -- ... et le clic suivant masque a nouveau : le geste est rejouable.
-        panel.buttons[3]:Click() -- 3V1R
-        assert.are.equal("3V1R", panel.state:GetText())
+        buttonFor(panel, "2V2R"):Click()
+        assert.is_true(panel.wordBig:IsShown())
+        assert.are.equal(ns.Locale.t("state.word.2V2R"), panel.wordBig:GetText())
+        assert.is_false(panel.word:IsShown())
         assert.is_false(panel.buttons[1]:IsShown())
         assert.is_false(panel.buttons[2]:IsShown())
         assert.is_false(panel.buttons[3]:IsShown())
@@ -1039,5 +1127,158 @@ describe("chargement de l'addon", function()
         assert.is_true(panel.redo:IsShown())
         panel.redo:Click()
         assert.is_true(panel.buttons[2]:IsShown())
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- 6. Fermeture BORNEE : le panneau ne reste JAMAIS a l'ecran (raid lead)
+-- ---------------------------------------------------------------------------
+
+describe("fermeture bornee du panneau d'intermission", function()
+    local ns
+
+    before_each(function()
+        _G.GideonRaid = nil
+        _G.GideonRaidDB = nil
+        _G.GideonRaidCharDB = nil
+        _G.GideonRaidPanel = nil
+        _G.GideonRaidIntermissionPanel = nil
+        _G.GideonRaidPingHelpPanel = nil
+        _G.GameTooltip = nil
+        _G.SlashCmdList = nil
+        _G.GetBindingKey = nil
+        stub.install()
+        ns = wowenv.loadAddon()
+    end)
+
+    --- Le boss CIBLE du harness (allow-list vide par defaut).
+    local BOSS_ID = 1234
+    local function pullTargetBoss()
+        _G.GideonRaidDB.intermission.bossIds = { BOSS_ID }
+        stub.mainFrame():Fire("ENCOUNTER_START", BOSS_ID, "Entombed Sentinels", 16, 20)
+    end
+
+    --- Bloque la machine a etats : le cas ou l'intermission ne se termine JAMAIS
+    --- toute seule (etat perdu, tick gele). C'est exactement le cadre qui restait a
+    --- l'ecran pour toujours avant le filet : la phase n'avance plus, donc le seul
+    --- chemin de fermeture qui reste est le filet borne.
+    local function freezeIntermission()
+        local realTick = ns.Intermission.tick
+        ns.Intermission.tick = function()
+            return nil
+        end
+        return function()
+            ns.Intermission.tick = realTick
+        end
+    end
+
+    it("ferme le panneau a la fin de l'intermission, meme si la machine se bloque", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        pullTargetBoss()
+        stub.fireTickers(450) -- ouverture automatique avant la 1re intermission
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+
+        local unfreeze = freezeIntermission()
+        -- Filet par defaut : 30 s (fenetre reelle de 25 s + marge de 5 s). A 25 s,
+        -- le panneau est encore la : le filet ne coupe JAMAIS une intermission en
+        -- cours.
+        stub.fireTickers(250)
+        assert.is_true(panel:IsShown(), "le filet ne doit pas couper une intermission en cours")
+        -- ... et au-dela du delai borne, il disparait TOUT SEUL.
+        stub.fireTickers(100)
+        assert.is_false(panel:IsShown(), "le panneau doit disparaitre malgre la machine bloquee")
+        unfreeze()
+    end)
+
+    it("le delai est CONFIGURABLE (SavedVariables) et toujours borne", function()
+        _G.GideonRaidDB = { intermission = { autoCloseSeconds = 60 } }
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        pullTargetBoss()
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        local unfreeze = freezeIntermission()
+        stub.fireTickers(400) -- 40 s : sous le delai configure de 60 s
+        assert.is_true(panel:IsShown(), "le delai configure doit etre respecte")
+        stub.fireTickers(300) -- 70 s : au-dela
+        assert.is_false(panel:IsShown(), "le delai configure finit par fermer")
+        unfreeze()
+    end)
+
+    it("une valeur absurde dans les SavedVariables reste bornee", function()
+        -- Planning reduit a UNE intermission : on isole le filet du planning.
+        _G.GideonRaidDB = { intermission = { autoCloseSeconds = 99999, scheduleSeconds = { 46.3 } } }
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        pullTargetBoss()
+        stub.fireTickers(450)
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        local unfreeze = freezeIntermission()
+        -- Le maximum borne est de 300 s : passe ce delai, le panneau a disparu.
+        stub.fireTickers(3100)
+        assert.is_false(panel:IsShown(), "un delai hors bornes doit etre ramene au maximum")
+        unfreeze()
+    end)
+
+    it("le filet est REARME a chaque nouvelle intermission", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        pullTargetBoss()
+        local panel = _G.GideonRaidIntermissionPanel
+        stub.fireTickers(450) -- 1re intermission
+        assert.is_true(panel:IsShown())
+        -- 1re intermission : fermeture automatique par la machine a etats (le filet
+        -- est desarme avec elle).
+        stub.fireTickers(255)
+        assert.is_false(panel:IsShown())
+        local unfreeze = freezeIntermission()
+        -- 2e intermission : le panneau se rouvre et disparait ENCORE tout seul.
+        stub.fireTickers(765)
+        assert.is_true(panel:IsShown())
+        stub.fireTickers(100)
+        assert.is_true(panel:IsShown(), "le delai repart de zero a chaque intermission")
+        stub.fireTickers(250)
+        assert.is_false(panel:IsShown(), "le filet doit etre rearme a chaque intermission")
+        unfreeze()
+    end)
+
+    it("croix et fermeture a la main restent possibles, sans laisser de filet arme", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter start")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        panel.closeCross:Click()
+        assert.is_false(panel:IsShown())
+        -- Rouverte a la main (/gr inter = bascule), puis refermee par la bascule.
+        _G.SlashCmdList["GIDEONRAID"]("inter")
+        assert.is_true(panel:IsShown())
+        _G.SlashCmdList["GIDEONRAID"]("inter")
+        assert.is_false(panel:IsShown())
+        stub.fireTickers(500)
+        assert.is_false(panel:IsShown())
+        -- Rouverte seule : le filet la referme (aucune intermission ne tourne, le
+        -- delai configure est la seule borne).
+        _G.SlashCmdList["GIDEONRAID"]("inter")
+        assert.is_true(panel:IsShown())
+        stub.fireTickers(350)
+        assert.is_false(panel:IsShown(), "un panneau ouvert a la main ne reste pas non plus")
+    end)
+
+    it("le mode placement n'est PAS soumis au filet (le joueur prend son temps)", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.GideonRaidPanel.place:Click()
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        -- Un placement peut durer : aucune fermeture surprise.
+        stub.fireTickers(3000)
+        assert.is_true(panel:IsShown(), "le mode placement ne doit pas se fermer tout seul")
+        panel.ok:Click()
+        assert.is_false(panel:IsShown())
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        assert.is_true(panel:IsShown())
+        stub.fireTickers(3000)
+        assert.is_true(panel:IsShown())
+        panel.closeCross:Click()
+        assert.is_false(panel:IsShown())
     end)
 end)

@@ -973,6 +973,25 @@ Locale.STRINGS = {
         fr = "1 ou 3",
     },
 
+    -- THE ONE WORD the intermission panel writes after a click (raid-lead
+    -- wording, EN = the official labels, FR = the raid lead's own words). It is
+    -- the ONLY text of the panel: no state line, no role line, no action line,
+    -- no key reminder. "BOSS" is upper case in BOTH languages on purpose (the
+    -- raid lead's convention), and it is drawn with the biggest font of the
+    -- window; "Ping" and "Chasseur" are drawn in the theme green.
+    ["state.word.1V3R"] = {
+        en = "Ping",
+        fr = "Ping",
+    },
+    ["state.word.2V2R"] = {
+        en = "Boss",
+        fr = "BOSS",
+    },
+    ["state.word.3V1R"] = {
+        en = "Chaser",
+        fr = "Chasseur",
+    },
+
     -- ------------------------------------------------------------- meetings
     ["meeting.safe"] = {
         en = "safe combination (%d green + %d red)",

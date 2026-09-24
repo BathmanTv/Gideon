@@ -1295,3 +1295,109 @@ describe("Config : panneau principal (position persistee + verrou)", function()
         assert.is_false(odd.lockPanel)
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Intermission : le FILET DE FERMETURE BORNE (le panneau ne reste jamais)
+-- ---------------------------------------------------------------------------
+
+describe("Intermission : filet de fermeture borne du panneau", function()
+    local ns = wowenv.loadCore()
+    local Intermission, Config = ns.Intermission, ns.Config
+
+    --- Fenetre REELLE d'une intermission : lead (le panneau ouvre en avance) +
+    --- visibilite + duree de la salle obscurcie.
+    local function window(timeline)
+        return timeline.leadSeconds + timeline.visibilitySeconds + timeline.durationSeconds
+    end
+
+    it("le delai par defaut couvre TOUTE la fenetre reelle, plus une marge", function()
+        -- Valeur par defaut MESUREE sur les timings reels du boss cible :
+        -- 2 s de lead + 3 s de visibilite + 20 s de duree = 25 s de fenetre.
+        local defaults = Config.defaultIntermission()
+        assert.are.equal(Config.DEFAULT_AUTO_CLOSE_SECONDS, defaults.autoCloseSeconds)
+        local resolved = Config.resolveIntermission({})
+        assert.are.equal(25, window(resolved))
+        assert.is_true(
+            resolved.autoCloseSeconds >= window(resolved) + Intermission.AUTO_CLOSE_MARGIN_SECONDS,
+            "le filet doit couvrir la fenetre reelle"
+        )
+        -- Le module PUR et la couche de persistance annoncent les MEMES bornes :
+        -- Config ne connait pas Intermission (ordre de chargement), donc les deux
+        -- tables sont miroir et ce test les empeche de deriver.
+        assert.are.equal(Config.DEFAULT_AUTO_CLOSE_SECONDS, Intermission.DEFAULT_AUTO_CLOSE_SECONDS)
+        assert.are.equal(Config.MIN_AUTO_CLOSE_SECONDS, Intermission.MIN_AUTO_CLOSE_SECONDS)
+        assert.are.equal(Config.MAX_AUTO_CLOSE_SECONDS, Intermission.MAX_AUTO_CLOSE_SECONDS)
+        assert.are.equal(Config.DEFAULT_AUTO_CLOSE_SECONDS, Intermission.closeDelay(resolved, nil))
+    end)
+
+    it("est configurable et borne : jamais sous le minimum, jamais au-dela du maximum", function()
+        local timeline = { leadSeconds = 2, visibilitySeconds = 3, durationSeconds = 20 }
+        -- Trop court : borne au minimum (plus court, le filet couperait une
+        -- intermission en cours).
+        assert.are.equal(Intermission.MIN_AUTO_CLOSE_SECONDS, Intermission.closeDelay(nil, 1))
+        -- Trop long : borne au maximum (un filet trop long ne sert a rien).
+        assert.are.equal(Intermission.MAX_AUTO_CLOSE_SECONDS, Intermission.closeDelay(nil, 10000))
+        -- Valeur valide : utilisee telle quelle.
+        assert.are.equal(12, Intermission.closeDelay(nil, 12))
+        -- Meme configure au minimum, le delai ne peut JAMAIS etre plus court que la
+        -- fenetre reelle + la marge : c'est la garantie de ne pas couper une
+        -- intermission en cours.
+        assert.are.equal(
+            window(timeline) + Intermission.AUTO_CLOSE_MARGIN_SECONDS,
+            Intermission.closeDelay(timeline, Intermission.MIN_AUTO_CLOSE_SECONDS)
+        )
+        -- Une valeur illisible retombe sur le defaut, jamais sur nil.
+        assert.are.equal(Intermission.DEFAULT_AUTO_CLOSE_SECONDS, Intermission.closeDelay(nil, "beaucoup"))
+        assert.are.equal(Intermission.DEFAULT_AUTO_CLOSE_SECONDS, Intermission.closeDelay(nil, nil))
+        -- Une timeline absurde (SavedVariables editee) ne fabrique pas un delai
+        -- demesure : le resolveur pur la borne AVANT le calcul (10 + 10 + 120).
+        assert.are.equal(140, Intermission.windowSeconds({ leadSeconds = 99999, visibilitySeconds = 99999, durationSeconds = 99999 }))
+        assert.are.equal(145, Intermission.closeDelay({ leadSeconds = 99999, visibilitySeconds = 99999, durationSeconds = 99999 }, 30))
+        assert.is_true(
+            Intermission.closeDelay({ leadSeconds = 99999, visibilitySeconds = 99999, durationSeconds = 99999 }, 30)
+                <= Intermission.MAX_AUTO_CLOSE_SECONDS
+        )
+    end)
+
+    it("la garde s'arme, expire UNE fois, et se rearme a l'intermission suivante", function()
+        local guard = Intermission.newCloseGuard()
+        assert.is_false(Intermission.closeGuardArmed(guard))
+        assert.is_false(Intermission.tickCloseGuard(guard, 100), "une garde non armee n'expire pas")
+        Intermission.armCloseGuard(guard, 3)
+        assert.is_true(Intermission.closeGuardArmed(guard))
+        assert.is_false(Intermission.tickCloseGuard(guard, 1))
+        assert.is_false(Intermission.tickCloseGuard(guard, 1))
+        assert.is_true(Intermission.tickCloseGuard(guard, 1), "expire au bout du delai annonce")
+        -- Elle se DESARME en rapportant : le tick suivant ne rapporte plus rien,
+        -- donc un appelant ne peut pas fermer deux fois le meme panneau.
+        assert.is_false(Intermission.closeGuardArmed(guard))
+        assert.is_false(Intermission.tickCloseGuard(guard, 10))
+        -- Rearmee (nouvelle intermission) : le delai repart de zero.
+        Intermission.armCloseGuard(guard, 2)
+        assert.is_false(Intermission.tickCloseGuard(guard, 1))
+        assert.is_true(Intermission.tickCloseGuard(guard, 1))
+        -- Entree hostile : un pas absent ou negatif n'avance pas la garde.
+        Intermission.armCloseGuard(guard, 1)
+        assert.is_false(Intermission.tickCloseGuard(guard, nil))
+        assert.is_false(Intermission.tickCloseGuard(guard, "peu"))
+        assert.is_false(Intermission.tickCloseGuard(guard, -5))
+        assert.is_true(Intermission.tickCloseGuard(guard, 1))
+        -- Desarmement explicite (fermeture a la main) : definitif.
+        Intermission.disarmCloseGuard(guard)
+        assert.is_false(Intermission.closeGuardArmed(guard))
+        assert.is_false(Intermission.tickCloseGuard(guard, 60))
+        -- Un delai qui n'est pas un nombre POSITIF n'arme rien : un appelant qui a
+        -- oublie la valeur ne peut pas garer le panneau pour toujours.
+        local other = Intermission.newCloseGuard()
+        Intermission.armCloseGuard(other, 0)
+        assert.is_false(Intermission.closeGuardArmed(other))
+        Intermission.armCloseGuard(other, nil)
+        assert.is_false(Intermission.closeGuardArmed(other))
+        assert.is_false(Intermission.tickCloseGuard(other, 600))
+        -- Jamais d'erreur sur une garde absente ou d'un autre type.
+        assert.is_false(Intermission.tickCloseGuard(nil, 1))
+        assert.is_false(Intermission.closeGuardArmed(nil))
+        assert.is_nil(Intermission.armCloseGuard(nil, 5))
+        assert.is_nil(Intermission.disarmCloseGuard("garde"))
+    end)
+end)

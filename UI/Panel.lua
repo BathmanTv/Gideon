@@ -90,6 +90,10 @@ end
 
 --- Applies ONE block of a PURE layout (Core/Layout.lua) to its element: the
 --- rendering layer copies the geometry and the text, it computes NOTHING.
+--- An IMAGE block (the three orb buttons of the intermission panel) is handled
+--- FIRST and differently: it draws a TEXTURE and carries no label at all - not
+--- even an empty one (the raid lead asked for the picture INSTEAD of the written
+--- composition, never next to it).
 --- @param frame Frame|FontString|nil
 --- @param block table
 local function applyBlock(frame, block)
@@ -98,6 +102,22 @@ local function applyBlock(frame, block)
     end
     frame:ClearAllPoints()
     frame:SetPoint(anchorOf(block), block.x, block.top)
+    if block.kind == "image" then
+        frame:SetSize(block.width, block.height)
+        if type(block.texture) == "string" and block.texture ~= "" then
+            -- The client refuses a nil path; the type() guards keep the applier
+            -- standing even on a button built by another code path (a missing
+            -- setter must not abort the refresh of the whole panel).
+            if type(frame.SetNormalTexture) == "function" then
+                frame:SetNormalTexture(block.texture)
+            end
+            if type(frame.SetPushedTexture) == "function" then
+                frame:SetPushedTexture(block.texture)
+            end
+        end
+        frame:Show()
+        return frame
+    end
     if block.kind == "button" then
         frame:SetSize(block.width, block.height)
     else

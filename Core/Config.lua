@@ -105,6 +105,20 @@ Config.POSITION_POINTS = {
     "BOTTOMRIGHT",
 }
 
+--- Default of the BOUNDED auto-close safety delay (seconds), MEASURED on the
+--- real timings of the target boss: 2 s of lead (the panel opens before the
+--- intermission) + 3 s of visibility + 20 s of intermission = a 25 s window,
+--- plus a 5 s margin. MIRROR of Intermission.DEFAULT_AUTO_CLOSE_SECONDS and of
+--- Intermission.AUTO_CLOSE_MARGIN_SECONDS (tests/spec/intermission_spec.lua
+--- asserts the two modules agree, so they can never drift apart).
+Config.DEFAULT_AUTO_CLOSE_SECONDS = 30
+
+--- Bounds of the resolved auto-close delay. Below the minimum the panel could
+--- vanish in the MIDDLE of a real intermission; above the maximum a hand-edited
+--- SavedVariables could park it on screen for minutes.
+Config.MIN_AUTO_CLOSE_SECONDS = 5
+Config.MAX_AUTO_CLOSE_SECONDS = 300
+
 --- SavedVariables schema of the PANEL preferences (position + lock). Bumped when
 --- a migration has to run once: see Config.ensureDB.
 Config.PANEL_SCHEMA = 1
@@ -140,6 +154,14 @@ function Config.defaultIntermission()
         leadSeconds = Config.DEFAULT_LEAD_SECONDS,
         visibilitySeconds = 3,
         durationSeconds = 20,
+        -- BOUNDED AUTO-CLOSE (see Core/Intermission.newCloseGuard): the safety
+        -- delay after which the panel is hidden even when the intermission clock
+        -- never reached DONE. Measured on the real timings of the target boss
+        -- (2 s of lead + 3 s of visibility + 20 s of intermission = 25 s, plus a
+        -- 5 s margin). It is CONFIGURABLE (this field) and CLAMPED by
+        -- resolveIntermission, so a hand-edited SavedVariables can neither make
+        -- the panel vanish during a real intermission nor park it on screen.
+        autoCloseSeconds = Config.DEFAULT_AUTO_CLOSE_SECONDS,
         -- Pre-computed intermission schedule, in seconds since ENCOUNTER_START.
         scheduleSeconds = Config.defaultScheduleSeconds(),
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
@@ -489,6 +511,16 @@ function Config.resolveIntermission(raw)
     -- value falls back to the default instead of showing the panel way too early.
     if type(raw.leadSeconds) == "number" then
         out.leadSeconds = math.floor(clampNumber(raw.leadSeconds, 0, 10) + 0.5)
+    end
+    -- BOUNDED AUTO-CLOSE: the safety delay after which the panel is hidden even
+    -- when the intermission clock never reached DONE. Bounded HERE (5 s..300 s):
+    -- a hand-edited SavedVariables can neither make the panel disappear during a
+    -- real intermission nor park it on screen for minutes. The value is only a
+    -- LOWER bound: Core/Intermission.closeDelay stretches it to the whole real
+    -- window of the intermission when that is longer.
+    if type(raw.autoCloseSeconds) == "number" then
+        out.autoCloseSeconds =
+            math.floor(clampNumber(raw.autoCloseSeconds, Config.MIN_AUTO_CLOSE_SECONDS, Config.MAX_AUTO_CLOSE_SECONDS) + 0.5)
     end
     out.scheduleSeconds = Config.resolveSchedule(raw.scheduleSeconds)
     -- Ping policy: pure and bounded resolution, an unknown value falls back to

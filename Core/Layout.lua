@@ -58,6 +58,13 @@ local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Lay
 --- duplicated table, they cannot drift).
 local Intermission = assert(ns.Intermission, "Core/Intermission.lua must be loaded before Core/Layout.lua")
 
+--- Core/Textures.lua is loaded BEFORE this file by the .toc: the image buttons
+--- display the raid lead's screenshots, and their SIZE is DATA (Core/ cannot open
+--- a file): the fitted size of each TGA lives there, this module only fits it in
+--- the box of the panel. Two modules can therefore never disagree on the size of
+--- an orb button.
+local Textures = assert(ns.Textures, "Core/Textures.lua must be loaded before Core/Layout.lua")
+
 ---@class Layout
 local Layout = {}
 ns.Layout = Layout
@@ -103,18 +110,65 @@ Layout.BUTTON_MIN_HEIGHT = 24
 Layout.CROSS_SIZE = 22
 Layout.CROSS_OFFSET = 8
 
+--- Relative tolerance of the aspect ratio of an IMAGE button against the texture
+--- it draws: 5 % is far below what the eye notices on an orb, and far above the
+--- rounding of a fitted size (Layout.imageButtonSize rounds to the pixel).
+Layout.ASPECT_TOLERANCE = 0.05
+
 --- Frame widths of the three surfaces (they may only GROW: a wide label always
 --- wins over the nominal width, see build()).
 Layout.MAIN_PANEL_WIDTH = 360
 Layout.INTERMISSION_WIDTH = 560
 Layout.PING_HELP_WIDTH = 520
 
---- Composition buttons of the intermission panel: their three-line labels are
---- MEASURED like every other button (wide inner margin included) and are only
---- floored by the size validated in game.
-Layout.CHOICE_MIN_WIDTH = 168
-Layout.CHOICE_MIN_HEIGHT = 64
+--- Composition buttons of the intermission panel. THE THREE BUTTONS DISPLAY AN
+--- IMAGE (the raid lead's screenshot of the orbs): their size is the fitted size
+--- of the TGA (Core/Textures.lua), so the aspect ratio of the screenshot is
+--- preserved and nothing is ever stretched.
+--- LONGEST SIDE of a displayed orb button, in pixels: the TGA is 256 px wide, so
+--- the client downscales it (crisp) instead of upscaling it (blurry).
+Layout.CHOICE_IMAGE_MAX = 160
 Layout.CHOICE_GAP = 8
+
+--- THE FROZEN VERTICAL ORDER of the three image buttons, TOP TO BOTTOM (raid-lead
+--- request): 3 green + 1 red first, then 2 green + 2 red, then 1 green + 3 red.
+--- This list is the single source of the order: intermissionPanel() builds its
+--- image blocks from it and tests/spec/layout_spec.lua locks it down, so a future
+--- change can not silently reorder the buttons under the player's finger.
+Layout.INTERMISSION_CHOICE_ORDER = { "3V1R", "2V2R", "1V3R" }
+
+--- The frozen order covers EXACTLY the canonical states of Core/Intermission.lua:
+--- a state with no image button would be UNDECLARABLE in game (the player sees
+--- the composition above their head and has no button to click), so a build
+--- where the two lists disagree must not even load. tests/spec/layout_spec.lua
+--- asserts the same equality, with a readable failure.
+assert(
+    #Layout.INTERMISSION_CHOICE_ORDER == #Intermission.STATES,
+    "Layout.INTERMISSION_CHOICE_ORDER must cover every canonical state of Core/Intermission.lua"
+)
+
+--- The state whose word is drawn with the BIGGEST font of the window: the MIDDLE
+--- composition ("BOSS"), which the raid lead wants unmistakable.
+Layout.INTERMISSION_BIG_WORD_STATE = "2V2R"
+
+--- Font style of the word written after a click: the biggest one for the BOSS
+--- state, the large one for the two others.
+Layout.WORD_STYLE = "large"
+Layout.WORD_STYLE_BIG = "huge"
+
+--- THE THEME: the ONLY color values of the addon live here. A color is never
+--- written again in a UI/ file (that is how a green drifts into a different green
+--- from one release to the next): the rendering layer asks for THEME.GREEN and
+--- applies it as-is, and tests/spec/layout_spec.lua asserts the constant.
+---   GREEN : the survival words ("Ping" / "Chasseur"), the green of the 3V1R
+---           ping (|cff40ff40, i.e. 64/255 = 0.25, 255/255 = 1.0);
+---   BOSS  : the big word (gold, readable on the dark dialog background).
+Layout.THEME = {
+    GREEN = { r = 0.25, g = 1.0, b = 0.25 },
+    BOSS = { r = 1.0, g = 0.82, b = 0.0 },
+    -- The SIMULATION banner keeps the gold it always had, from the same table.
+    SIMULATION = { r = 1.0, g = 0.82, b = 0.0 },
+}
 
 Layout.DEFAULT_WIDTH = 320
 
@@ -279,6 +333,59 @@ function Layout.buttonSize(text, style, minWidth, minHeight)
     return width, height
 end
 
+--[[ ------------------------------------------------------- image buttons
+
+     An IMAGE button draws a texture instead of a label (the three orb
+     screenshots of the intermission panel). Its size is NEVER guessed here: it is
+     the declared size of the texture (Core/Textures.lua), fitted in
+     Layout.CHOICE_IMAGE_MAX with the aspect ratio preserved. An unknown state
+     yields 0, 0: the caller then draws nothing, and no nil is ever handed to
+     Frame:SetSize.
+]]
+
+--- Size of the image button of a state.
+--- @param state string|nil canonical state ("3V1R" | "2V2R" | "1V3R")
+--- @return number width, number height (0, 0 when the state is unknown)
+function Layout.imageButtonSize(state)
+    return Textures.displaySize(state, Layout.CHOICE_IMAGE_MAX)
+end
+
+--- Font style of the word written after a click: the BIGGEST one for the middle
+--- composition, the large one for the others. An unknown state gets the standard
+--- style (never a nil style the client would refuse).
+--- @param state string|nil
+--- @return string style key
+function Layout.wordStyle(state)
+    local key = Textures.resolveState(state)
+    if key == Layout.INTERMISSION_BIG_WORD_STATE then
+        return Layout.WORD_STYLE_BIG
+    end
+    return Layout.WORD_STYLE
+end
+
+--- Id of the element carrying the word: the two font sizes are two distinct
+--- FontStrings in the rendering layer (a FontString is created with its font),
+--- so Core names the one it wants and the applier maps it as-is.
+--- @param state string|nil
+--- @return string block id ("wordBig" | "word")
+function Layout.wordBlockId(state)
+    if Layout.wordStyle(state) == Layout.WORD_STYLE_BIG then
+        return "wordBig"
+    end
+    return "word"
+end
+
+--- Color of the word of a state (THEME above): the two survival words are GREEN,
+--- the middle composition is the gold BOSS.
+--- @param state string|nil
+--- @return table { r, g, b } (never nil: the fallback is the green)
+function Layout.wordColor(state)
+    if Layout.wordStyle(state) == Layout.WORD_STYLE_BIG then
+        return Layout.THEME.BOSS
+    end
+    return Layout.THEME.GREEN
+end
+
 --[[ --------------------------------------------------------------- packing
 ]]
 
@@ -291,6 +398,14 @@ local function fixedWidth(raw, gap)
             return raw.width
         end
         return Layout.buttonSize(raw.text, raw.style, raw.minWidth, raw.minHeight)
+    end
+    if raw.kind == "image" then
+        -- An image button can not be wrapped either: the frame is at least as
+        -- wide as the picture it draws.
+        if type(raw.width) == "number" then
+            return raw.width
+        end
+        return Layout.imageButtonSize(raw.state)
     end
     if raw.kind == "row" then
         local items = raw.items or {}
@@ -390,6 +505,33 @@ local function measureBlock(raw, frameWidth, marginX, gap)
         end
         block.point = "TOPLEFT"
         block.x = 0
+        return block
+    end
+    if block.kind == "image" then
+        -- AN IMAGE BUTTON: the picture IS the button (no label at all - the raid
+        -- lead's screenshots replaced the written composition). Its size comes
+        -- from the declared size of the texture, unless the caller measured it
+        -- itself; both are floored at 1 px so nothing can be handed as a size to
+        -- Frame:SetSize.
+        local state = Textures.resolveState(raw.state)
+        local width, height = Layout.imageButtonSize(state)
+        if type(raw.width) == "number" then
+            width = raw.width
+        end
+        if type(raw.height) == "number" then
+            height = raw.height
+        end
+        block.state = state
+        block.texture = type(raw.texture) == "string" and raw.texture or Textures.pathFor(state)
+        block.width = math.max(1, round(width))
+        block.height = math.max(1, round(height))
+        if block.align == "center" then
+            block.point = "TOP"
+            block.x = 0
+        else
+            block.point = "TOPLEFT"
+            block.x = marginX
+        end
         return block
     end
     if block.kind == "button" then
@@ -653,6 +795,32 @@ function Layout.violations(layout)
             for issue = 1, #labelIssues do
                 report(labelIssues[issue])
             end
+        elseif block.kind == "image" then
+            -- AN IMAGE BUTTON with no picture is an invisible button: the player
+            -- would click on an empty rectangle during an intermission. A button
+            -- whose aspect ratio no longer matches its texture is a STRETCHED
+            -- orb, i.e. a composition that can be misread: both are defects.
+            if type(block.texture) ~= "string" or block.texture == "" then
+                report(string.format("image button '%s' has no texture", block.id))
+            end
+            if block.width <= 0 or block.height <= 0 then
+                report(string.format("image button '%s' has no usable size", block.id))
+            end
+            local declaredWidth, declaredHeight = Textures.sizeFor(block.state)
+            if declaredWidth ~= nil and declaredHeight ~= nil and block.height > 0 then
+                local drawn = block.width / block.height
+                local expected = declaredWidth / declaredHeight
+                if math.abs(drawn - expected) > Layout.ASPECT_TOLERANCE then
+                    report(
+                        string.format(
+                            "image button '%s' does not keep the aspect ratio of its texture (%.3f instead of %.3f)",
+                            block.id,
+                            drawn,
+                            expected
+                        )
+                    )
+                end
+            end
         elseif block.text ~= nil then
             if blockIsWide(block) then
                 report(string.format("text of block '%s' is wider than its block", block.id))
@@ -736,18 +904,24 @@ function Layout.mainPanel(spec)
     return Layout.build({ minWidth = Layout.MAIN_PANEL_WIDTH, blocks = blocks })
 end
 
---- Intermission panel (combat surface): title, SIMULATION banner, state,
---- headline, ping banner, body, composition buttons, action row.
+--- Intermission panel (the combat surface). The raid lead's request, applied
+--- as-is: BEFORE a click the panel shows the three IMAGE BUTTONS stacked
+--- VERTICALLY (frozen order) and NOTHING ELSE - no title, no state line, no role
+--- line, no action line, no key reminder; the close cross and the dragging are
+--- chrome, not blocks. AFTER a click the three buttons give way to the ONE word
+--- of the composition ("Ping" / "BOSS" / "Chasseur") plus CORRECT (and OK, in
+--- placement mode).
+--- The SIMULATION banner is the ONE text left, and only during a rehearsal (the
+--- raid lead wants the panel unmistakably marked as a simulation).
 --- @param spec table|nil {
 ---   bannerLines = array|nil (SIMULATION banner: only during a rehearsal),
----   stateText = string|nil, headline = string|nil, pingBanner = string|nil,
----   bodyLines = array|nil, showChoices = boolean|nil, showRedo = boolean|nil,
----   showOk = boolean|nil }
+---   showChoices = boolean|nil (the three image buttons),
+---   wordText = string|nil, wordState = string|nil (the one word + its state),
+---   showRedo = boolean|nil, showOk = boolean|nil }
 function Layout.intermissionPanel(spec)
     local opts = type(spec) == "table" and spec or {}
     local blocks = {}
 
-    blocks[#blocks + 1] = { id = "title", kind = "text", align = "center", style = "normal", text = Locale.t("ui.panelTitle") }
     if type(opts.bannerLines) == "table" and #opts.bannerLines > 0 then
         blocks[#blocks + 1] = {
             id = "simBanner",
@@ -757,74 +931,62 @@ function Layout.intermissionPanel(spec)
             text = table.concat(opts.bannerLines, "\n"),
         }
     end
-    if type(opts.stateText) == "string" and opts.stateText ~= "" then
-        blocks[#blocks + 1] = { id = "state", kind = "text", align = "center", style = "huge", text = opts.stateText }
-    end
-    if type(opts.headline) == "string" and opts.headline ~= "" then
-        blocks[#blocks + 1] = { id = "headline", kind = "text", align = "center", style = "large", text = opts.headline }
-    end
-    if type(opts.pingBanner) == "string" and opts.pingBanner ~= "" then
-        blocks[#blocks + 1] = { id = "pingBanner", kind = "text", align = "left", style = "large", text = opts.pingBanner }
-    end
-    local bodyLines = opts.bodyLines or {}
-    if #bodyLines > 0 then
-        blocks[#blocks + 1] = { id = "body", kind = "text", align = "left", style = "normal", text = table.concat(bodyLines, "\n") }
-    end
+
     if opts.showChoices then
-        -- THE THREE COMPOSITION BUTTONS (fifth in-game test: they must be there
-        -- as long as no composition is declared, with their own functionality -
-        -- a click shows the state, the role, the ping and the action line and
-        -- the three buttons disappear). Their labels come from the canonical
-        -- states and their SIZE from those labels: one single size for the row
-        -- (the widest label of the ACTIVE language decides), never a fixed box
-        -- a longer French label could overflow.
-        local labels = {}
-        local width, height = Layout.CHOICE_MIN_WIDTH, Layout.CHOICE_MIN_HEIGHT
-        local items = {}
-        for index = 1, #Intermission.STATES do
-            local key = Intermission.STATES[index]
-            local rec = Intermission.getDeclaration(key)
-            labels[index] = rec ~= nil and rec.buttonLabel or key
-            local neededWidth, neededHeight = Layout.buttonSize(labels[index], "button", width, height)
-            if neededWidth > width then
-                width = neededWidth
-            end
-            if neededHeight > height then
-                height = neededHeight
-            end
+        -- THE THREE IMAGE BUTTONS, STACKED VERTICALLY in the FROZEN order of
+        -- Layout.INTERMISSION_CHOICE_ORDER (3V1R on top, then 2V2R, then 1V3R).
+        -- Each one draws its OWN screenshot (the texture of its state, resolved
+        -- by Core/Textures.lua) and carries NO label: a written composition
+        -- beside a picture of the same composition is exactly the noise the raid
+        -- lead asked to remove.
+        for index = 1, #Layout.INTERMISSION_CHOICE_ORDER do
+            local state = Layout.INTERMISSION_CHOICE_ORDER[index]
+            blocks[#blocks + 1] = { id = "choice" .. index, kind = "image", align = "center", state = state }
         end
-        for index = 1, #labels do
-            items[#items + 1] = { id = "choice" .. index, text = labels[index], width = width, height = height }
-        end
-        blocks[#blocks + 1] = { id = "choices", kind = "row", gap = Layout.CHOICE_GAP, items = items }
     end
-    -- Action row: CORRECT on the left, then (right to left) Close, OK. Same rule
-    -- as every other button here: the labels are measured, never a fixed width
-    -- ("Close" / "Fermer" / "OK" / "REDO" / "CORRIGER" all fit, in both
-    -- languages, with a real margin from the border).
+
+    -- THE ONE WORD. Its size and its block id come from the STATE (the middle
+    -- composition is the big one), never from the text itself: the rendering
+    -- layer draws the word in the FontString Core names.
+    if type(opts.wordText) == "string" and opts.wordText ~= "" then
+        blocks[#blocks + 1] = {
+            id = Layout.wordBlockId(opts.wordState),
+            kind = "text",
+            align = "center",
+            style = Layout.wordStyle(opts.wordState),
+            text = opts.wordText,
+        }
+    end
+
+    -- Action row: CORRECT on the left, OK (placement mode only) on the right.
+    -- NO Close button any more: the close cross ("X", chrome, always present)
+    -- closes the panel in every mode, and a second way to close it was one more
+    -- sentence on a surface read during a fight. The labels are MEASURED, never a
+    -- fixed width ("OK" / "REDO" / "CORRIGER" all fit, in both languages).
     local actions = {}
     if opts.showRedo then
         actions[#actions + 1] = { id = "redo", align = "left", text = Locale.t("ui.redo") }
     end
-    actions[#actions + 1] = { id = "close", align = "right", text = Locale.t("ui.close") }
     if opts.showOk then
         actions[#actions + 1] = { id = "ok", align = "right", text = Locale.t("ui.ok") }
     end
-    local actionWidth, actionHeight = Layout.BUTTON_MIN_WIDTH, Layout.BUTTON_MIN_HEIGHT
-    for index = 1, #actions do
-        local neededWidth, neededHeight = Layout.buttonSize(actions[index].text, "button", actionWidth, actionHeight)
-        if neededWidth > actionWidth then
-            actionWidth = neededWidth
+    if #actions > 0 then
+        local actionWidth, actionHeight = Layout.BUTTON_MIN_WIDTH, Layout.BUTTON_MIN_HEIGHT
+        for index = 1, #actions do
+            local neededWidth, neededHeight = Layout.buttonSize(actions[index].text, "button", actionWidth, actionHeight)
+            if neededWidth > actionWidth then
+                actionWidth = neededWidth
+            end
+            if neededHeight > actionHeight then
+                actionHeight = neededHeight
+            end
         end
-        if neededHeight > actionHeight then
-            actionHeight = neededHeight
+        for index = 1, #actions do
+            actions[index].width = actionWidth
+            actions[index].height = actionHeight
         end
+        blocks[#blocks + 1] = { id = "actions", kind = "row", gap = Layout.CHOICE_GAP, items = actions }
     end
-    for index = 1, #actions do
-        actions[index].width = actionWidth
-        actions[index].height = actionHeight
-    end
-    blocks[#blocks + 1] = { id = "actions", kind = "row", gap = Layout.CHOICE_GAP, items = actions }
 
     return Layout.build({ minWidth = Layout.INTERMISSION_WIDTH, blocks = blocks })
 end

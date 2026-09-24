@@ -143,14 +143,26 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("en", ns.Locale.getActive())
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.matches("GET READY", panel.headline:GetText())
-        -- Fermer est toujours la ; CORRIGER n'apparait qu'apres un clic (la
-        -- disposition ne montre que ce qui est utile dans la phase en cours).
-        assert.matches("Close", panel.close:GetText())
-        assert.matches("1 green %+ 3 red", panel.buttons[1]:GetText())
-        panel.buttons[1]:Click()
+        -- Plus AUCUN texte avant le clic : ni titre, ni bouton "Fermer" (la croix
+        -- ferme), ni libelle de composition (les boutons portent les IMAGES).
+        assert.is_nil(panel.headline)
+        assert.is_nil(panel.close)
+        assert.is_false(panel.word:IsShown())
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            assert.is_true(panel.buttons[index]:IsShown())
+            assert.are.equal("", panel.buttons[index]:GetText())
+            assert.are.equal(
+                ns.Textures.pathFor(ns.Layout.INTERMISSION_CHOICE_ORDER[index]),
+                panel.buttons[index]:GetNormalTexture():GetTexture()
+            )
+        end
+        -- Le clic ecrit UN SEUL mot, dans la langue servie (+ CORRIGER, traduit) :
+        -- le bouton du HAUT est le "3 verts + 1 rouge", celui du BAS le "1 vert + 3
+        -- rouges" (l'ordre vertical est fige par Core).
+        panel.buttons[3]:Click()
+        assert.are.equal(ns.Locale.t("state.word.1V3R", "en"), panel.word:GetText())
         assert.matches("REDO", panel.redo:GetText())
-        assert.matches("PING: YES", panel.pingBanner:GetText())
+        assert.is_nil(panel.pingBanner)
     end)
 
     it("sert le francais automatiquement sur un client frFR", function()
@@ -162,12 +174,19 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("auto", _G.GideonRaidDB.locale)
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.is_truthy(string.find(panel.headline:GetText(), "TIENS-TOI PRET", 1, true))
-        assert.matches("Fermer", panel.close:GetText())
-        assert.matches("1 vert %+ 3 rouges", panel.buttons[1]:GetText())
+        assert.is_nil(panel.headline)
+        assert.is_nil(panel.close)
+        -- Les trois mots du raid lead, en francais (la pile verticale : 3V1R en
+        -- haut, 2V2R au milieu, 1V3R en bas).
         panel.buttons[1]:Click()
+        assert.are.equal("Chasseur", panel.word:GetText())
         assert.matches("CORRIGER", panel.redo:GetText())
-        assert.matches("PING : OUI", panel.pingBanner:GetText())
+        panel.redo:Click()
+        panel.buttons[2]:Click()
+        assert.are.equal("BOSS", panel.wordBig:GetText())
+        panel.redo:Click()
+        panel.buttons[3]:Click()
+        assert.are.equal("Ping", panel.word:GetText())
     end)
 
     it("sert l'anglais sur un client enUS et sur toute autre locale", function()
@@ -206,8 +225,12 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.matches("langue effective = fr", messages())
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        assert.is_truthy(string.find(panel.headline:GetText(), "TIENS-TOI PRET", 1, true))
-        assert.matches("Fermer", panel.close:GetText())
+        -- Le panneau suit la langue : seul le MOT du clic est ecrit, et il est
+        -- francais.
+        assert.is_nil(panel.headline)
+        panel.buttons[1]:Click()
+        assert.are.equal("Chasseur", panel.word:GetText())
+        assert.are.equal("CORRIGER", panel.redo:GetText())
     end)
 
     it("/gr lang en gagne sur un client frFR", function()
@@ -219,7 +242,9 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("en", _G.GideonRaidDB.locale)
         assert.are.equal("en", _G.GideonRaid.locale)
         _G.SlashCmdList["GIDEONRAID"]("inter start")
-        assert.matches("GET READY", _G.GideonRaidIntermissionPanel.headline:GetText())
+        local panel = _G.GideonRaidIntermissionPanel
+        panel.buttons[2]:Click()
+        assert.are.equal("Boss", panel.wordBig:GetText())
     end)
 
     it("/gr lang auto revient a la langue du client", function()

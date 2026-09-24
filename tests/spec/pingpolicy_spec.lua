@@ -243,6 +243,8 @@ describe("Ping : configuration persistee", function()
 end)
 
 describe("Ping : commande en jeu /gr ping", function()
+    local ns
+
     before_each(function()
         _G.GideonRaid = nil
         _G.GideonRaidDB = nil
@@ -252,8 +254,30 @@ describe("Ping : commande en jeu /gr ping", function()
         _G.SlashCmdList = nil
         _G.GetBindingKey = nil
         stub.install()
-        wowenv.loadAddon()
+        ns = wowenv.loadAddon()
     end)
+
+    --- Le bouton d'image d'une composition : l'ordre vertical est fige par Core
+    --- (3V1R en haut, 2V2R au milieu, 1V3R en bas), un test ne passe donc JAMAIS
+    --- par un index en dur.
+    local function buttonFor(panel, stateKey)
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            if ns.Layout.INTERMISSION_CHOICE_ORDER[index] == stateKey then
+                return panel.buttons[index]
+            end
+        end
+        return nil
+    end
+
+    --- L'etat de combat d'une composition, tel que Core le calcule (le panneau de
+    --- combat n'affiche PLUS la consigne de ping : elle reste disponible ici, dans
+    --- le snapshot lu par /gr inter ping et par le kit de diagnostic).
+    local function snapFor(stateKey, pingMode)
+        local state = ns.Intermission.newState()
+        ns.Intermission.start(state, { leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
+        ns.Intermission.declare(state, stateKey)
+        return ns.Intermission.snapshot(state, pingMode)
+    end
 
     local function messages()
         return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
@@ -268,7 +292,7 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.matches("/gr ping anchors|color|none", text)
     end)
 
-    it("/gr ping color persiste la politique et rafraichit le panneau", function()
+    it("/gr ping color persiste la politique et le panneau ne dit plus rien", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping color")
         assert.are.equal("color", _G.GideonRaidDB.intermission.pingMode)
@@ -276,22 +300,34 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.matches("every state pings with its own ping", messages())
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[3]:Click() -- 3V1R
-        assert.are.equal("PING: YES", panel.pingBanner:GetText())
-        assert.is_true(contains(panel.body:GetText(), "PING: Assist"))
+        buttonFor(panel, "3V1R"):Click()
+        -- Le panneau de combat n'affiche plus AUCUNE consigne de ping (raid lead :
+        -- « enleve tout le blabla ») : UN SEUL mot, celui du clic.
+        assert.is_nil(panel.pingBanner)
+        assert.is_nil(panel.body)
+        assert.are.equal(ns.Locale.t("state.word.3V1R"), panel.word:GetText())
+        -- La politique reste CALCULEE par Core : un CHASSEUR ping en mode color.
+        local snap = snapFor("3V1R", "color")
+        assert.is_true(snap.shouldPing)
+        assert.are.equal("PING: YES", snap.pingBanner)
+        assert.is_true(contains(snap.actionLine, "PING (Assist)"))
     end)
 
-    it("/gr ping none persistee : plus aucune consigne de ping", function()
+    it("/gr ping none persistee : Core ne fait plus pinger personne", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping none")
         assert.are.equal("none", _G.GideonRaidDB.intermission.pingMode)
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
-        panel.buttons[1]:Click() -- 1V3R = ANCRE, pourtant sans ping ici
-        assert.are.equal("PING: NO", panel.pingBanner:GetText())
-        local text = panel.body:GetText()
-        assert.is_false(contains(text, "PING: Warning"))
-        assert.is_true(contains(text, "STAY WHERE YOU ARE"))
+        buttonFor(panel, "1V3R"):Click() -- l'ANCRE, pourtant sans ping ici
+        assert.is_nil(panel.pingBanner)
+        assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
+        -- Cote Core : personne ne ping, et la consigne dit de rester sur place.
+        local snap = snapFor("1V3R", "none")
+        assert.is_false(snap.shouldPing)
+        assert.are.equal("PING: NO", snap.pingBanner)
+        assert.is_false(contains(snap.actionLine, "PING: Warning"))
+        assert.is_true(contains(snap.actionLine, "STAY WHERE YOU ARE"))
     end)
 
     it("/gr ping avec une valeur inconnue est refuse et ne persiste rien", function()
@@ -312,9 +348,13 @@ describe("Ping : commande en jeu /gr ping", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.are.equal("color", ns2.Config.resolveIntermission(_G.GideonRaidDB.intermission).pingMode)
         _G.SlashCmdList["GIDEONRAID"]("inter start")
-        _G.GideonRaidIntermissionPanel.buttons[2]:Click()
-        assert.are.equal("PING: YES", _G.GideonRaidIntermissionPanel.pingBanner:GetText())
-        assert.is_true(contains(_G.GideonRaidIntermissionPanel.body:GetText(), "On My Way"))
+        local panel = _G.GideonRaidIntermissionPanel
+        buttonFor(panel, "2V2R"):Click()
+        assert.are.equal(ns.Locale.t("state.word.2V2R"), panel.wordBig:GetText())
+        -- ... et la politique relue par Core vaut bien « color ».
+        local snap = snapFor("2V2R", ns.Config.resolveIntermission(_G.GideonRaidDB.intermission).pingMode)
+        assert.is_true(snap.shouldPing)
+        assert.is_true(contains(snap.actionLine, "PING (On My Way)"))
     end)
 
     it("/gr inter status rappelle la politique de ping et le planning", function()
@@ -336,7 +376,7 @@ describe("Ping : commande en jeu /gr ping", function()
             return nil
         end
         _G.SlashCmdList["GIDEONRAID"]("inter start")
-        _G.GideonRaidIntermissionPanel.buttons[1]:Click()
+        buttonFor(_G.GideonRaidIntermissionPanel, "1V3R"):Click()
         _G.SlashCmdList["GIDEONRAID"]("inter ping")
         local text = messages()
         assert.matches("PING: Warning %- press Q", text)
