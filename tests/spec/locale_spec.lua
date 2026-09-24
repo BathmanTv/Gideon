@@ -153,7 +153,10 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
             assert.are.equal("", panel.buttons[index]:GetText())
             assert.are.equal(
                 ns.Textures.pathFor(ns.Layout.INTERMISSION_CHOICE_ORDER[index]),
-                panel.buttons[index]:GetNormalTexture():GetTexture()
+                -- La carte garde sa bordure visible : l'image est une texture ENFANT
+                -- du cadre (picture), pas une SetNormalTexture qui peindrait
+                -- par-dessus le fond et la bordure.
+                panel.buttons[index].picture:GetTexture()
             )
         end
         -- Le clic ecrit UN SEUL mot, dans la langue servie (+ CORRIGER, traduit) :

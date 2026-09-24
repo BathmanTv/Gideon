@@ -4,6 +4,77 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.1] - 2026-09-24
+
+**The placement panel is the illustration alone, the intermission panel has no
+title any more, the word is much bigger, and the buttons are thin-bordered cards.**
+Four requests from the raid lead after the first evening with the picture panel.
+
+### Changed
+
+- **The placement panel shows ONLY the illustration.** During `/gr inter place`
+  (and the **PLACE INTERMISSION PANEL** button) the panel used to show the three
+  composition pictures plus an **OK** button; it now shows the raid lead's Gideon
+  illustration (`Texture/placement.tga`) and **nothing else** — no button, no
+  label, no composition. It is the **visual reference** of the window being placed:
+  you see the size and the spot it will take during the fight. The panel stays
+  **draggable** (position saved), the close cross **cancels**, and the placement is
+  validated by the new **`/gr inter ok`** command, which saves the position exactly
+  like the former button did.
+- **No title, anywhere.** The intermission panel's title (`ui.panelTitle`, rendered
+  by an old content builder) and the whole pre-pull text block are **deleted** —
+  the builder (`Intermission.setupView`), its strings (`ui.setup.*`, `ui.ok`) and
+  the placement **OK** button are gone from the source, not merely hidden. The
+  panel now carries nothing but: the three picture cards, the close cross, and the
+  one word + **CORRECT** after the click. The **SIMULATION** banner stays (it is
+  what tells a rehearsal from a real fight) and no other title is allowed.
+- **The word after the click is five notches bigger.** `Ping` and `Chasseur` are
+  now drawn at **44 px** and `BOSS` at **64 px** (the biggest text of the window),
+  with an **explicit font file and size** (`Layout.WORD_FONT_FILE`,
+  `Layout.WORD_SIZE`, `Layout.WORD_SIZE_BIG`) applied through
+  `FontString:SetFont(file, size, "")` on a FontString the addon creates — never a
+  Blizzard font object, whose real size an addon cannot read out of game. The frame
+  **widens itself** until the word fits whole (`nowrap`), so `Chasseur` and `BOSS`
+  are **never truncated nor pushed out of the frame**, in French as in English.
+- **The buttons are simple cards.** Each composition picture is now drawn inside a
+  **thin border with a discreet dark background** (`Layout.BUTTON_STYLES.card`),
+  with **no text** and **one single feedback**: the border lights up under the mouse
+  and while pressed. Nothing else moves. The **style is a parameter**
+  (`Layout.BUTTON_STYLES` + `Layout.CHOICE_STYLE`): the richer picker the raid lead
+  is still choosing will be a new entry in that table, and `UI.ApplyCardStyle` reads
+  whatever Core names.
+
+### Added
+
+- **`Texture/placement.tga`**: the Gideon illustration delivered by the raid lead,
+  converted to **uncompressed 32-bit TGA** with the same reproducible tool
+  (`tools/make_textures.py`), fitted in a **384 px box** with the aspect ratio kept,
+  listed in `GideonRaid.toc` and kept outside `assets/`. Note that this delivery is
+  **opaque** (the PNG has no alpha channel), unlike the three orb screenshots.
+- **`/gr inter ok`** (alias `/gr inter confirm`): validates the placement and closes
+  the panel; it replaces the OK button on a panel that must show no button at all.
+- **`Core/Textures.lua`** now exposes the placement file, its size, its client path
+  and a shared aspect-preserving fit; **`Core/Layout.lua`** gained the card styles,
+  the explicit word size/font constants, `Layout.placementPanel()`, the per-panel
+  text allow-lists and the card rules of `violations()`.
+- **Tests**: the placement panel builds **one** block (the illustration) and it is
+  the only one — no button, no text, nothing under the cross; the placement TGA
+  exists, is 32-bit uncompressed, is listed in the `.toc`, is fitted in a ~384 px
+  box and is **not** an orb state; the old title/placement strings
+  (`ui.panelTitle`, `ui.ok`, `ui.setup.*`) **can not come back** and the layout
+  rules **refuse** any text a panel is not allowed to write; the word's font size is
+  asserted per composition **in FR and EN** (>= 44 px, >= 64 px for `BOSS`) with no
+  truncation and no overflow; cards carry a border and a discreet background, size =
+  picture + the padding of the style, with the border lighting up on hover/press and
+  **no sound** outside a click; `/gr inter ok` saves the position and closes.
+
+### Fixed
+
+- A fitting bug in `Core/Textures.lua`: `Textures.placementDisplaySize` handed the
+  box to `fitInBox` as the **height** (a Lua multi-value call in the middle of an
+  argument list), which sized the placement illustration at the default box instead
+  of 384 px. The aspect-ratio rule of `Layout.violations()` is what caught it.
+
 ## [0.13.0] - 2026-09-24
 
 **The intermission panel is now three pictures and one word.** Every line of text

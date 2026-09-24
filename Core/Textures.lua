@@ -16,6 +16,15 @@
         3V1R -> Texture/3v1r.tga      2V2R -> Texture/2v2r.tga
         1V3R -> Texture/1v3r.tga
 
+      AND, outside the states, the PLACEMENT illustration:
+
+        placement -> Texture/placement.tga   (384 px box, one sole picture)
+
+    The placement window shows that illustration and NOTHING else (no button, no
+    text): it is the visual reference of the size the panel will have during the
+    fight. It has no canonical state, so it is declared on its own
+    (Textures.PLACEMENT_*) instead of being forced into the state table.
+
     THE THREE RULES ARE HERE, out of game, because they are rules and not
     rendering:
       1. ONE FILE PER STATE: Textures.FILES_BY_STATE / Textures.pathFor. The
@@ -78,6 +87,38 @@ Textures.FILES_BY_STATE = {
 --- The same three file names as an ORDERED list (same order as Textures.STATES):
 --- used by the tests that check the .toc entries and the files on disk.
 Textures.FILE_NAMES = { "1v3r.tga", "2v2r.tga", "3v1r.tga" }
+
+--[[ ------------------------------------------------- THE PLACEMENT ILLUSTRATION
+
+     The panel shown while the player PLACES it (`/gr inter place`, the PLACE
+     button of the main panel) displays ONE thing and nothing else: the Gideon
+     illustration the raid lead delivered. No button, no text, no composition -
+     the picture IS the window, and it is the VISUAL REFERENCE of the size the
+     window will have during the fight (that is the whole point of the
+     placement step: seeing where the panel lands BEFORE the pull).
+
+     It is NOT a state: no composition maps to it, so it lives in its own
+     declaration instead of being forced into FILES_BY_STATE (an image button is
+     built from a canonical state, and a fake state would be a lie the state
+     machine could read back). Same rules as the three orbs: a 32-bit
+     uncompressed TGA, mapped here, listed in GideonRaid.toc, produced by
+     tools/make_textures.py and verified on disk by tests/spec/texture_spec.lua.
+]]
+
+--- File name of the placement illustration (lower case, no accent, stable: the
+--- CONTRACT with the raid lead who delivers the PNG).
+Textures.PLACEMENT_FILE = "placement.tga"
+
+--- The box the placement illustration is fitted in, in pixels. LARGER than the
+--- orb box on purpose (Textures.BOX = 256): the orbs are read at a glance, the
+--- illustration is the reference the player aims the window with.
+Textures.PLACEMENT_BOX = 384
+
+--- Size of Texture/placement.tga ON DISK, MEASURED at conversion time by
+--- tools/make_textures.py (it prints this exact line). The longest side is
+--- exactly PLACEMENT_BOX and the aspect ratio of the source PNG (1448x1086,
+--- i.e. 4:3) is preserved: nothing is stretched, nothing is padded.
+Textures.PLACEMENT_SIZE = { 384, 288 }
 
 --- State -> size of the TGA ON DISK, MEASURED at conversion time by
 --- tools/make_textures.py (it prints this exact block). Both values are <= BOX
@@ -166,6 +207,49 @@ function Textures.aspectOf(state)
     return width / height
 end
 
+--- CLIENT path of the PLACEMENT illustration (same folder as the three orbs).
+--- Exactly what the rendering layer hands to a Texture:SetTexture, and exactly
+--- what GideonRaid.toc lists.
+--- @return string client path
+function Textures.placementPath()
+    return Textures.FOLDER .. Textures.PLACEMENT_FILE
+end
+
+--- Size of Texture/placement.tga ON DISK, as a copy (never the shared table, so
+--- a caller can not mutate the declaration).
+--- @return number width, number height
+function Textures.placementSize()
+    return Textures.PLACEMENT_SIZE[1], Textures.PLACEMENT_SIZE[2]
+end
+
+--- Fits a declared size into a square box, ASPECT RATIO PRESERVED: the longest
+--- side becomes `box`, the other one follows the ratio. Local helper shared by
+--- an orb and by the placement illustration: ONE fitting rule for every texture
+--- of the addon, so the two can never drift apart.
+--- @return number width, number height
+local function fitInBox(width, height, box)
+    local maxSide = tonumber(box) or Textures.BOX
+    if maxSide <= 0 or width == nil or height == nil or width <= 0 or height <= 0 then
+        return 0, 0
+    end
+    local scale = maxSide / math.max(width, height)
+    local fittedWidth = math.floor(width * scale + 0.5)
+    local fittedHeight = math.floor(height * scale + 0.5)
+    if fittedWidth < 1 then
+        fittedWidth = 1
+    end
+    if fittedHeight < 1 then
+        fittedHeight = 1
+    end
+    if fittedWidth > maxSide then
+        fittedWidth = maxSide
+    end
+    if fittedHeight > maxSide then
+        fittedHeight = maxSide
+    end
+    return fittedWidth, fittedHeight
+end
+
 --- Fits a declared size into a square box, ASPECT RATIO PRESERVED: the longest
 --- side becomes `box`, the other one follows the ratio. TOTAL and bounded: a
 --- missing size or a nonsense box returns zeroes instead of a nil the caller
@@ -174,39 +258,24 @@ end
 --- @param box number|nil box in pixels (Textures.BOX by default)
 --- @return number width, number height (0, 0 when nothing can be drawn)
 function Textures.displaySize(state, box)
-    local maxSide = tonumber(box) or Textures.BOX
-    if maxSide <= 0 then
+    local width, height = Textures.sizeFor(state)
+    if width == nil or height == nil then
         return 0, 0
     end
-    local aspect = Textures.aspectOf(state)
-    if aspect == nil then
-        return 0, 0
-    end
-    local width, height
-    if aspect >= 1 then
-        width = maxSide
-        height = maxSide / aspect
-    else
-        height = maxSide
-        width = maxSide * aspect
-    end
-    -- Rounded, never below 1 px, never above the box (a rounded value can not
-    -- push a button out of its own frame).
-    local roundedW = math.floor(width + 0.5)
-    local roundedH = math.floor(height + 0.5)
-    if roundedW < 1 then
-        roundedW = 1
-    end
-    if roundedH < 1 then
-        roundedH = 1
-    end
-    if roundedW > maxSide then
-        roundedW = maxSide
-    end
-    if roundedH > maxSide then
-        roundedH = maxSide
-    end
-    return roundedW, roundedH
+    return fitInBox(width, height, box)
+end
+
+--- Display size of the PLACEMENT illustration, fitted in `box` (aspect ratio
+--- preserved). Bounded like displaySize: 0, 0 when nothing can be drawn.
+--- @param box number|nil box in pixels (Textures.PLACEMENT_BOX by default)
+--- @return number width, number height
+function Textures.placementDisplaySize(box)
+    -- The two values are read into locals FIRST: `fitInBox(Textures.placementSize(),
+    -- box)` would hand the box as the HEIGHT (a function call that is not the last
+    -- argument yields a single value), and the illustration would be fitted in the
+    -- default box instead of the requested one.
+    local width, height = Textures.placementSize()
+    return fitInBox(width, height, box or Textures.PLACEMENT_BOX)
 end
 
 return Textures

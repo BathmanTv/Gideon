@@ -53,7 +53,8 @@ Locale.STRINGS = {
     ["cmd.help"] = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  (place = the panel shows the illustration alone; ok = save the position and close)\n"
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
@@ -62,7 +63,8 @@ Locale.STRINGS = {
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  (place = le panneau n'affiche que l'illustration ; ok = enregistre la position et ferme)\n"
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
@@ -592,11 +594,13 @@ Locale.STRINGS = {
         fr = "assignation OK, %d paires",
     },
 
-    -- -------------------------------------------------- intermission UI chrome
-    ["ui.panelTitle"] = {
-        en = "GideonRaid - Intermission Coach",
-        fr = "GideonRaid - Intermission Coach",
-    },
+    -- ------------------------------------------------ intermission UI chrome
+    -- NO WINDOW TITLE KEY ANY MORE (ui.panelTitle was "GideonRaid - Intermission
+    -- Coach" and ui.ok was the label of the placement button). Both usages were
+    -- removed with the title block and the OK button; the KEYS are gone too, so
+    -- there is no string left to display by accident. The intermission panel
+    -- writes the ONE word after a click (state.word.*) and, in rehearsal, the
+    -- SIMULATION banner (sim.banner) - nothing else.
     ["ui.mainTitle"] = {
         en = "GideonRaid",
         fr = "GideonRaid",
@@ -615,10 +619,6 @@ Locale.STRINGS = {
     ["ui.closeTooltip"] = {
         en = "Close",
         fr = "Fermer",
-    },
-    ["ui.ok"] = {
-        en = "OK",
-        fr = "OK",
     },
     ["ui.redo"] = {
         en = "REDO",
@@ -725,32 +725,13 @@ Locale.STRINGS = {
     },
 
     -- -------------------------------------------- placement mode (before pull)
-    ["ui.setup.headline"] = {
-        en = "BEFORE THE PULL - PLACE THE PANEL",
-        fr = "AVANT LE PULL - PLACE LE PANNEAU",
-    },
-    ["ui.setup.drag"] = {
-        en = "Drag this frame where you want it during the fight (position saved).",
-        fr = "Deplace ce cadre la ou tu le veux pendant le combat (position enregistree).",
-    },
-    ["ui.setup.keys"] = {
-        en = "Prepare your ping: Options > Keybindings > ping system, one key per ping.",
-        fr = "Prepare ton ping : Options > Raccourcis > systeme de ping, une touche par ping.",
-    },
-    ["ui.setup.ready"] = {
-        en = "Place the panel where you want it to appear, then press OK: during the fight it opens by itself %d s "
-            .. "before each intermission and closes at the end.",
-        fr = "Place le panneau la ou tu veux qu'il apparaisse, puis appuie sur OK : pendant le combat il s'ouvre tout "
-            .. "seul %d s avant chaque intermission et se ferme a la fin.",
-    },
-    ["ui.setup.plan"] = {
-        en = "Out-of-game plan loaded (%d pairs).",
-        fr = "Plan hors jeu charge (%d paires).",
-    },
-    ["ui.setup.noPlan"] = {
-        en = "No out-of-game plan loaded (optional).",
-        fr = "Aucun plan hors jeu charge (optionnel).",
-    },
+    -- NO KEY HERE ANY MORE. The placement panel used to carry a title
+    -- ("BEFORE THE PULL - PLACE THE PANEL"), a drag reminder, the ping keybind
+    -- procedure and the plan line, plus the "OK" label of its validation button.
+    -- The raid lead asked for the panel to show the ILLUSTRATION and nothing
+    -- else, so the whole block was DELETED (with ui.panelTitle and ui.ok): a
+    -- string that no longer exists can not come back on screen by accident.
+    -- The placement is validated by `/gr inter ok` (ui.setupDone says so).
 
     -- ------------------------------------------- intermission headlines/lines
     -- The panel shows the ESSENTIAL only: state, role, PING: YES/NO and ONE

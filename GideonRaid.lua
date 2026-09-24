@@ -491,6 +491,12 @@ local function slashHandler(cmd)
         ns.UI.IntermissionPrintPing()
     elseif cmd == "inter place" or cmd == "inter setup" then
         ns.UI.IntermissionSetup()
+    elseif cmd == "inter ok" or cmd == "inter confirm" then
+        -- VALIDATION OF THE PLACEMENT. The panel itself shows the illustration
+        -- and NOTHING else (no button at all, raid-lead request), so the former
+        -- OK button is replaced by this command: it saves the position exactly
+        -- like the button did (UI.IntermissionConfirmSetup) and closes the panel.
+        ns.UI.IntermissionConfirmSetup()
     elseif cmd == "inter on" then
         ns.UI.IntermissionSetEnabled(true)
     elseif cmd == "inter off" then

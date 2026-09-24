@@ -323,7 +323,7 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
         local rehearsal = S.forRehearsal(I.snapshot(I.start(I.newState(), { leadSeconds = 0 }), "anchors"), run)
         return {
             { id = "panneau-principal", layout = L.mainPanel({ bodyLines = { "plan" } }) },
-            { id = "placement", layout = L.intermissionPanel({ showChoices = true, showOk = true }) },
+            { id = "placement", layout = L.placementPanel() },
             {
                 id = "repetition",
                 layout = L.intermissionPanel({
@@ -359,24 +359,83 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
         end
     end)
 
-    it("le bouton OK du mode placement est mesure, ancre et present", function()
+    it("le mot du clic est EXPLICITE, plus GROS que le minimum demande, et jamais tronque", function()
+        -- Le raid lead a demande le mot « 5 crans plus gros » : au moins 44 px
+        -- pour PING et CHASSEUR, au moins 64 px pour BOSS (le plus gros element
+        -- de la fenetre). Les deux tailles ET le fichier de police sont une
+        -- DONNEE DE CORE (L.WORD_SIZE / L.WORD_SIZE_BIG / L.WORD_FONT_FILE) et le
+        -- bloc du plan les PORTE : la couche UI/ appelle SetFont(file, taille, "")
+        -- avec ces valeurs, jamais un objet de police Blizzard dont la taille ne
+        -- peut pas etre lue hors du jeu.
+        assert.is_true(L.WORD_SIZE >= 44, "PING/CHASSEUR : taille demandee >= 44 px (recu " .. tostring(L.WORD_SIZE) .. ")")
+        assert.is_true(L.WORD_SIZE_BIG >= 64, "BOSS : taille demandee >= 64 px (recu " .. tostring(L.WORD_SIZE_BIG) .. ")")
+        assert.is_true(L.WORD_SIZE_BIG > L.WORD_SIZE, "BOSS doit rester le plus gros mot de la fenetre")
+        assert.are.equal("string", type(L.WORD_FONT_FILE))
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
-            local layout = L.intermissionPanel({ showChoices = true, showOk = true })
-            local ok = rowItemOf(layout, "actions", "ok")
-            assert.is_truthy(ok, "le bouton OK manque en " .. lang)
-            assert.are.equal(ns.Locale.t("ui.ok"), ok.text)
-            assert.are.equal("TOPLEFT", ok.point)
-            assert.is_true(ok.width >= L.BUTTON_MIN_WIDTH)
-            assert.is_true(ok.height >= L.BUTTON_MIN_HEIGHT)
-            assertLabelFits(ok, "ok/" .. lang)
-            -- Le bouton "Fermer" a disparu du panneau d'intermission : la croix
-            -- ferme (raid lead : le panneau ne doit plus porter de texte).
-            assert.is_nil(rowItemOf(layout, "actions", "close"))
-            assert.is_true(ok.x + ok.width <= layout.width)
-            -- OK est SOUS les trois images.
-            local last = blockOf(layout, "choice" .. #L.INTERMISSION_CHOICE_ORDER)
-            assert.is_true(blockOf(layout, "actions").top < last.bottom)
+            for _, state in ipairs({ "1V3R", "3V1R", "2V2R" }) do
+                local layout = L.intermissionPanel({
+                    wordText = ns.Locale.t("state.word." .. state),
+                    wordState = state,
+                    showRedo = true,
+                })
+                local id = L.wordBlockId(state)
+                local word = blockOf(layout, id)
+                assert.is_truthy(word, ("%s / %s : le mot manque"):format(lang, state))
+                assert.are.equal(L.WORD_FONT_FILE, word.fontFile, ("%s / %s : fichier de police"):format(lang, state))
+                assert.are.equal(L.wordFontSize(state), word.fontSize, ("%s / %s : taille"):format(lang, state))
+                assert.is_true(word.fontSize >= 44, ("%s / %s : mot trop petit"):format(lang, state))
+                if state == "2V2R" then
+                    assert.is_true(word.fontSize >= 64, lang .. " : BOSS doit valoir au moins 64 px")
+                    -- Le plus GROS texte du module : aucun style de texte n'a une
+                    -- police plus haute que BOSS.
+                    for style, font in pairs(L.FONTS) do
+                        assert.is_true(word.fontSize >= font.height, "BOSS (" .. word.fontSize .. " px) plus petit que le style " .. style)
+                    end
+                end
+                -- JAMAIS TRONQUE, en FR comme en EN : le mot tient dans la largeur
+                -- UTILE du panneau (les marges laterales sont exclues) et le
+                -- panneau s'est elargi pour lui. Le bloc `nowrap` interdit de le
+                -- couper en deux lignes.
+                local drawn = L.wordWidth(word.text, word.style)
+                assert.is_true(
+                    drawn <= (layout.width - (2 * L.MARGIN_X)),
+                    ("%s / %s : « %s » (%d px dessines) deborde du panneau (%d px)"):format(lang, state, word.text, drawn, layout.width)
+                )
+                assert.is_true(word.width <= (layout.width - (2 * L.MARGIN_X)), lang .. " / " .. state)
+                assert.is_true(word.nowrap == true, lang .. " / " .. state .. " : le mot doit rester sur une ligne")
+                assert.are.equal("", problemsOf(L, layout), lang .. " / " .. state)
+            end
+        end
+    end)
+
+    it("le panneau d'intermission n'a AUCUN bouton d'action : ni OK, ni Fermer", function()
+        -- Le panneau de placement n'affiche plus QUE l'illustration (raid lead :
+        -- « aucun bouton ») et la validation passe par `/gr inter ok` : il ne
+        -- reste donc aucun bouton OK. Le bouton « Fermer » avait deja disparu au
+        -- profit de la croix. CORRIGER reste, seul, dans sa ligne d'actions.
+        for _, lang in ipairs({ "en", "fr" }) do
+            ns.Locale.setActive(lang)
+            local afterClick = L.intermissionPanel({
+                wordText = ns.Locale.t("state.word.1V3R"),
+                wordState = "1V3R",
+                showRedo = true,
+            })
+            local row = blockOf(afterClick, "actions")
+            assert.is_truthy(row, lang .. " : la ligne de CORRIGER a disparu")
+            assert.are.equal(1, #row.items, lang .. " : un bouton de trop dans la ligne d'actions")
+            assert.are.equal("redo", row.items[1].id, lang)
+            assert.is_nil(rowItemOf(afterClick, "actions", "ok"), lang)
+            assert.is_nil(rowItemOf(afterClick, "actions", "close"), lang)
+            assert.are.equal("", problemsOf(L, afterClick), lang)
+            -- Sans CORRIGER, il n'y a plus AUCUNE ligne d'actions.
+            local plain = L.intermissionPanel({ wordText = ns.Locale.t("state.word.1V3R"), wordState = "1V3R" })
+            assert.is_nil(blockOf(plain, "actions"), lang .. " : une ligne d'actions traine")
+            -- Et le panneau de placement ne contient AUCUN bouton du tout.
+            local placement = L.placementPanel()
+            for index = 1, #placement.blocks do
+                assert.are.equal("image", placement.blocks[index].kind, lang .. " : un bouton traine sur le panneau de placement")
+            end
         end
     end)
 
@@ -705,19 +764,27 @@ describe("Layout : panneau d'intermission (images, ordre fige, deux langues)", f
         end
     end)
 
-    it("mode placement : les trois images et OK, aucun texte, rien sous la croix", function()
+    it("mode placement : l'illustration SEULE, aucun bouton, aucun texte, rien sous la croix", function()
+        -- Retour du raid lead : pendant le placement, le panneau n'affiche QUE la
+        -- nouvelle illustration (un repere visuel pour voir la taille et
+        -- l'emplacement qu'aura la fenetre). Aucun bouton, aucun texte, aucune
+        -- composition : la validation se fait par `/gr inter ok`, l'annulation par
+        -- la croix, le deplacement par le drag.
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
-            local layout = planFor({ showChoices = true, showOk = true })
+            local layout = L.placementPanel()
+            assert.are.equal(1, #layout.blocks, lang .. " : le panneau de placement doit avoir UN seul bloc")
             assert.are.equal("", problemsOf(L, layout), lang)
             -- Aucun texte : le mode placement explique en chat/README, pas a l'ecran.
             assert.are.equal(0, #textBlocks(layout), lang)
-            local ok = rowItemOf(layout, "actions", "ok")
-            assert.is_truthy(ok, lang)
-            assert.is_true(ok.x + ok.width <= layout.width, lang)
-            -- Plus de bouton "Fermer" : la croix annule le placement.
-            assert.is_nil(rowItemOf(layout, "actions", "close"), lang)
-            assert.is_nil(rowItemOf(layout, "actions", "redo"), lang)
+            local picture = layout.blocks[1]
+            assert.are.equal("placement", picture.id, lang)
+            assert.are.equal("image", picture.kind, lang)
+            assert.are.equal(T.placementPath(), picture.texture, lang)
+            -- L'image est dessinee en entier, a l'echelle de son fichier : le
+            -- repere a donc EXACTEMENT la taille de l'illustration livree.
+            assert.are.equal(T.placementSize(), picture.sourceWidth, lang)
+            assert.are.equal(select(2, T.placementSize()), picture.sourceHeight, lang)
             -- Rien ne deborde (le passage sous la croix est deja couvert par
             -- problemsOf -> Layout.violations, appele plus haut).
             for index = 1, #layout.blocks do
@@ -726,6 +793,51 @@ describe("Layout : panneau d'intermission (images, ordre fige, deux langues)", f
                 assert.is_true(left >= 0 and blockRight <= layout.width, lang .. " / " .. block.id)
             end
         end
+    end)
+
+    it("refuse un TITRE qui reviendrait sur le panneau d'intermission", function()
+        -- La regle « aucun titre residuel » est STRUCTURELLE (Layout.violations
+        -- applique l'allow-list du panneau) : ce test la met a l'epreuve avec un
+        -- faux titre, exactement celui que le raid lead voyait encore.
+        local withTitle = L.build({
+            panel = L.PANEL.INTERMISSION,
+            minWidth = 300,
+            blocks = {
+                { id = "title", kind = "text", align = "center", style = "normal", text = "GideonRaid - Intermission Coach" },
+                { id = "choice1", kind = "image", align = "center", state = "3V1R" },
+            },
+        })
+        local titleProblems = problemsOf(L, withTitle)
+        assert.is_true(contains(titleProblems, "not allowed"), titleProblems)
+        assert.is_true(contains(titleProblems, "title"), titleProblems)
+        -- Et les blocs LEGITIMES ne declenchent rien : le bandeau SIMULATION et le
+        -- mot du clic sont les deux seuls textes autorises pendant le combat.
+        for _, id in ipairs({ "simBanner", "word", "wordBig" }) do
+            local legit = L.build({
+                panel = L.PANEL.INTERMISSION,
+                minWidth = 300,
+                blocks = { { id = id, kind = "text", align = "center", style = "normal", text = "x" } },
+            })
+            assert.are.equal("", problemsOf(L, legit), id)
+        end
+        -- Le panneau de placement, lui, refuse TOUT ce qui n'est pas l'illustration.
+        local withButton = L.build({
+            panel = L.PANEL.PLACEMENT,
+            blocks = {
+                {
+                    id = "placement",
+                    kind = "image",
+                    imageWidth = 64,
+                    imageHeight = 64,
+                    sourceWidth = 64,
+                    sourceHeight = 64,
+                    texture = "Interface\\AddOns\\GideonRaid\\Texture\\placement.tga",
+                },
+                { id = "ok", kind = "button", text = "OK" },
+            },
+        })
+        local placementProblems = problemsOf(L, withButton)
+        assert.is_true(contains(placementProblems, "placement panel"), placementProblems)
     end)
 end)
 

@@ -88,12 +88,85 @@ local function anchorOf(block)
     return "TOPLEFT"
 end
 
+--[[ THE CARD: a thin border and a discreet dark background behind a picture.
+
+     The image "buttons" of the intermission panel (and the placement
+     illustration) are CARDS, not Blizzard buttons: the raid lead asked for "just
+     a frame with edges". HOW a card looks is NOT decided here - it is a
+     PARAMETER read from Core/Layout.BUTTON_STYLES through Layout.style(name), so
+     a future style is one entry in Core and one name passed to these helpers.
+]]
+--- Applies the style `styleName` (Core/Layout.BUTTON_STYLES) to a card frame.
+--- @param frame Frame the frame to dress
+--- @param styleName string|nil name of the style (Layout.CHOICE_STYLE by default)
+--- @return table the style table applied (never nil)
+function UI.ApplyCardStyle(frame, styleName)
+    local style = ns.Layout.style(styleName)
+    if type(frame.SetBackdrop) == "function" then
+        frame:SetBackdrop({
+            bgFile = style.bgFile,
+            edgeFile = style.edgeFile,
+            edgeSize = style.edgeSize,
+            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+        })
+    end
+    frame.cardStyle = style
+    return style
+end
+
+--- The state of a card, for the ONLY feedback it has (the border lights up).
+UI.CARD_STATE = {
+    REST = "rest",
+    HOVER = "hover",
+    PRESSED = "pressed",
+}
+
+--- The card's border/background colours of a state. NOTHING else moves and
+--- nothing else is drawn: no glow, no pushed texture, no label - "the border
+--- lights up, nothing more" (raid-lead request).
+--- @param frame Frame a card
+--- @param state string|nil UI.CARD_STATE value (REST by default)
+--- @return table { r, g, b, a } the border colour applied
+function UI.CardBorder(frame, state)
+    local style = frame.cardStyle or ns.Layout.style(nil)
+    local border = style.border
+    if state == UI.CARD_STATE.HOVER then
+        border = style.borderHover
+    elseif state == UI.CARD_STATE.PRESSED then
+        border = style.borderPressed
+    end
+    if type(frame.SetBackdropBorderColor) == "function" then
+        frame:SetBackdropBorderColor(border.r, border.g, border.b, border.a)
+    end
+    local background = style.background
+    if background ~= nil and type(frame.SetBackdropColor) == "function" then
+        frame:SetBackdropColor(background.r, background.g, background.b, background.a)
+    end
+    return border
+end
+
+--- A CARD ready to be dressed and filled by Core: a frame of the given type with
+--- its own picture (a child texture, so the border is never covered and the
+--- picture is drawn WHOLE inside the padding of the style).
+--- @param frameType string "Button" (clickable) or "Frame" (decoration only)
+--- @param parent Frame
+--- @param styleName string|nil
+--- @return Frame the card
+function UI.CreateCard(frameType, parent, styleName)
+    local card = CreateFrame(frameType, nil, parent, "BackdropTemplate")
+    card.picture = card:CreateTexture(nil, "ARTWORK")
+    UI.ApplyCardStyle(card, styleName)
+    UI.CardBorder(card, UI.CARD_STATE.REST)
+    return card
+end
+
 --- Applies ONE block of a PURE layout (Core/Layout.lua) to its element: the
 --- rendering layer copies the geometry and the text, it computes NOTHING.
---- An IMAGE block (the three orb buttons of the intermission panel) is handled
---- FIRST and differently: it draws a TEXTURE and carries no label at all - not
---- even an empty one (the raid lead asked for the picture INSTEAD of the written
---- composition, never next to it).
+--- An IMAGE block (the three orb cards of the intermission panel and the
+--- placement illustration) is handled FIRST and differently: it draws a
+--- PICTURE inside its border and carries no label at all - not even an empty one
+--- (the raid lead asked for the picture INSTEAD of the written composition,
+--- never next to it).
 --- @param frame Frame|FontString|nil
 --- @param block table
 local function applyBlock(frame, block)
@@ -104,15 +177,23 @@ local function applyBlock(frame, block)
     frame:SetPoint(anchorOf(block), block.x, block.top)
     if block.kind == "image" then
         frame:SetSize(block.width, block.height)
+        -- The style is a DATA of the layout (Core named it): whatever table Core
+        -- serves is applied as-is.
+        UI.ApplyCardStyle(frame, block.style)
         if type(block.texture) == "string" and block.texture ~= "" then
-            -- The client refuses a nil path; the type() guards keep the applier
-            -- standing even on a button built by another code path (a missing
-            -- setter must not abort the refresh of the whole panel).
-            if type(frame.SetNormalTexture) == "function" then
+            local picture = frame.picture
+            if picture ~= nil and type(picture.SetTexture) == "function" then
+                -- THE PICTURE IS DRAWN WHOLE: it is inset by the padding of the
+                -- style, so the border never eats a slice of the orb.
+                local padding = tonumber(block.padding) or 0
+                picture:ClearAllPoints()
+                picture:SetPoint("TOPLEFT", frame, "TOPLEFT", padding, -padding)
+                picture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -padding, padding)
+                picture:SetTexture(block.texture)
+            elseif type(frame.SetNormalTexture) == "function" then
+                -- Safety net for a frame built by another code path (no picture
+                -- child): the picture is then the button's own texture.
                 frame:SetNormalTexture(block.texture)
-            end
-            if type(frame.SetPushedTexture) == "function" then
-                frame:SetPushedTexture(block.texture)
             end
         end
         frame:Show()

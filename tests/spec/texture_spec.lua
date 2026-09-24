@@ -270,6 +270,92 @@ describe("Textures : les trois TGA livres sont valides", function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- 2b. L'illustration du PANNEAU DE PLACEMENT (hors etats canoniques)
+-- ---------------------------------------------------------------------------
+
+describe("Textures : l'illustration du panneau de placement", function()
+    local ns = wowenv.loadCore()
+    local Textures = ns.Textures
+
+    it("est livree en TGA 32 bits non compresse, dans Texture/ et listee au .toc", function()
+        -- Pendant `/gr inter place`, le panneau n'affiche QUE cette illustration :
+        -- elle sert de repere visuel (taille et emplacement de la fenetre). Le
+        -- client retail ne charge pas de PNG, la livraison est donc convertie par
+        -- tools/make_textures.py en TGA 32 bits NON compresse.
+        local file = Textures.PLACEMENT_FILE
+        local present, size = fileExists("Texture/" .. file)
+        assert.is_true(present, "Texture/" .. file .. " est absent du depot")
+        assert.is_true(size > 0, "Texture/" .. file .. " est vide")
+        -- Sans entree au .toc, le client ne charge PAS la texture par chemin :
+        -- l'illustration ne s'afficherait pas du tout en jeu.
+        local entries = wowenv.tocEntries()
+        assert.is_true(entriesContain(entries, "Texture/" .. file), "Texture/" .. file .. " doit etre liste dans GideonRaid.toc")
+        local content = readFile("Texture/" .. file)
+        local header = tgaHeader(content)
+        assert.are.equal(0, header.idLength, file .. " : pas de champ d'identification")
+        assert.are.equal(0, header.colorMapType, file .. " : pas de palette")
+        assert.are.equal(2, header.imageType, file .. " : doit etre un TGA non compresse")
+        assert.are.equal(32, header.bitsPerPixel, file .. " : doit etre du 32 bits (alpha)")
+        assert.are.equal(8, header.descriptor % 16, file .. " : 8 bits d'alpha attendus")
+        -- Taille EXACTE d'un TGA non compresse (en-tete + RGBA + pied de page 2.0).
+        local expected = 18 + header.idLength + header.width * header.height * 4
+        assert.are.equal(expected + 26, #content, file .. " : taille incoherente avec l'en-tete")
+        -- Les dimensions de l'en-tete sont CELLES declarees par Core/Textures.lua,
+        -- et la boite demandee par le raid lead est ~384 px, ratio conserve (le
+        -- cote long vaut EXACTEMENT la boite : aucun etirement).
+        local width, height = Textures.placementSize()
+        assert.are.equal(width, header.width, file .. " : largeur declaree")
+        assert.are.equal(height, header.height, file .. " : hauteur declaree")
+        assert.are.equal(Textures.PLACEMENT_BOX, math.max(header.width, header.height), file .. " : cote long")
+        assert.is_true(
+            math.abs(Textures.PLACEMENT_BOX - 384) <= 8,
+            file .. " : la boite demandee est ~384 px (recu " .. tostring(Textures.PLACEMENT_BOX) .. ")"
+        )
+        -- Le CANAL ALPHA est CONSERVE : le fichier est du 32 bits avec 8 bits
+        -- d'alpha (un export en 24 bits l'aurait supprime, et le client lirait
+        -- alors un TGA different), et la couche alpha est une VRAIE couche
+        -- coherente : sur toute l'illustration livree elle est uniforme.
+        -- NOTE : l'illustration livree pour cette version est OPAQUE (le PNG
+        -- d'origine n'a pas de canal alpha : c'est un rectangle plein, ce qui
+        -- donne exactement le repere « voici la taille et l'emplacement de la
+        -- fenetre » demande). Une future livraison detouree garderait le meme
+        -- chemin et la meme boite : ce test accepte les deux (uniformement
+        -- opaque ou uniformement transparente), mais refuse un alpha perdu.
+        assert.is_true(#content > 18, file .. " : fichier tronque")
+        local samples = {}
+        local pixels = header.width * header.height
+        for index = 0, 8 do
+            local offset = 18 + (math.floor((pixels - 1) * index / 8) * 4) + 3
+            samples[#samples + 1] = content:byte(offset + 1)
+        end
+        local firstAlpha = samples[1]
+        assert.is_true(firstAlpha ~= nil, file .. " : couche alpha illisible")
+        for index = 1, #samples do
+            assert.are.equal(firstAlpha, samples[index], file .. " : couche alpha incoherente")
+        end
+        -- Et rien ne vit dans assets/, exclu du paquet.
+        assert.is_false(fileExists("assets/" .. file), "assets/ est exclu du paquet : " .. file)
+    end)
+
+    it("n'est PAS un etat de composition (le repere du placement reste a part)", function()
+        -- Une confusion etat <-> illustration enverrait la mauvaise image sur un
+        -- bouton de composition, donc la mauvaise decision de ping.
+        assert.is_false(entriesContain(Textures.STATES, Textures.PLACEMENT_FILE))
+        assert.is_false(entriesContain(Textures.FILE_NAMES, Textures.PLACEMENT_FILE))
+        for index = 1, #Textures.STATES do
+            local state = Textures.STATES[index]
+            assert.are_not.equal(Textures.PLACEMENT_FILE, Textures.fileName(state))
+            assert.are_not.equal(Textures.placementPath(), Textures.pathFor(state))
+        end
+        -- Le chemin client est complet (le client ne resout pas un chemin relatif)
+        -- et il vise bien le dossier Texture/ de l'addon.
+        local path = Textures.placementPath()
+        assert.is_true(path:find("Interface\\AddOns\\GideonRaid\\Texture\\", 1, true) ~= nil, path)
+        assert.is_true(path:find(Textures.PLACEMENT_FILE, 1, true) ~= nil, path)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
 -- 3. Packaging : rien n'exclut Texture/ du zip, et assets/ n'est PAS la place
 -- ---------------------------------------------------------------------------
 

@@ -83,7 +83,66 @@ function stub.install()
     function Frame:EnableMouse() end
     function Frame:RegisterForDrag() end
     function Frame:RegisterForClicks() end
-    function Frame:SetBackdrop() end
+    function Frame:SetBackdrop(backdrop)
+        -- Le client dessine un fond et une bordure a partir de cette table : le
+        -- stub la CONSERVE pour qu'un test puisse verifier qu'un encart a bien un
+        -- fond sombre et une bordure (le style vient de Core/Layout).
+        self.__backdrop = backdrop
+    end
+    function Frame:SetBackdropColor(r, g, b, a)
+        self.__backdropColor = { r, g, b, a }
+    end
+    function Frame:GetBackdropColor()
+        local c = self.__backdropColor
+        if not c then
+            return 1, 1, 1, 1
+        end
+        return c[1], c[2], c[3], c[4]
+    end
+    function Frame:SetBackdropBorderColor(r, g, b, a)
+        self.__backdropBorderColor = { r, g, b, a }
+    end
+    function Frame:GetBackdropBorderColor()
+        local c = self.__backdropBorderColor
+        if not c then
+            return 1, 1, 1, 1
+        end
+        return c[1], c[2], c[3], c[4]
+    end
+    function Frame:CreateTexture(_, _)
+        -- Une texture ENFANT (le stub enregistre les points et la texture posee,
+        -- comme le client). Les cartes de composition portent une image enfant :
+        -- le cadre garde donc sa bordure visible autour de l'image.
+        local tex = {}
+        function tex:SetPoint(point, ...)
+            assert(type(point) == "string" and point ~= "", "Texture:SetPoint attend une chaine d'ancre (recu : " .. tostring(point) .. ")")
+            tex.__point = { point, ... }
+            -- Une texture peut etre posee aux QUATRE coins (SetPoint TOPLEFT puis
+            -- BOTTOMRIGHT) : le stub garde la LISTE, sinon un test ne verrait que
+            -- la derniere ancre.
+            tex.__points = tex.__points or {}
+            tex.__points[#tex.__points + 1] = { point, ... }
+        end
+        function tex:GetPoint()
+            local p = tex.__point
+            if not p or not p[1] then
+                return "CENTER", _G.UIParent, "CENTER", 0, 0
+            end
+            return p[1], p[2], p[3], p[4] or 0, p[5] or 0
+        end
+        function tex:ClearAllPoints()
+            tex.__point = nil
+        end
+        function tex:SetTexture(file)
+            tex.__texture = file
+        end
+        function tex:GetTexture()
+            return tex.__texture
+        end
+        function tex:Show() end
+        function tex:Hide() end
+        return tex
+    end
     function Frame:SetClampedToScreen() end
     function Frame:SetScale(scale)
         self.__scale = scale
@@ -134,10 +193,28 @@ function stub.install()
         function fs:SetJustifyV() end
         function fs:SetFontObject(fontObject)
             fs.__font = fontObject
+            fs.__fontFile = nil
+            fs.__fontSize = nil
             return fs.__font
         end
         function fs:GetFontObject()
             return fs.__font
+        end
+        --- SetFont(file, size, flags) : LE CLIENT REMPLACE L'OBJET DE POLICE. Le
+        --- stub enregistre donc le FICHIER et la TAILLE telle quelle (troisieme
+        --- argument : le drapeau, une chaine vide chez nous). Un test peut ainsi
+        --- verifier la taille REELLE du mot (44 px / 64 px, Core/Layout) au lieu
+        --- de croire un objet de police dont l'addon ne peut pas lire la taille
+        --- hors du jeu.
+        function fs:SetFont(file, size, flags)
+            fs.__fontFile = file
+            fs.__fontSize = size
+            fs.__fontFlags = flags
+            fs.__font = nil
+            return true
+        end
+        function fs:GetFont()
+            return fs.__fontFile, fs.__fontSize, fs.__fontFlags
         end
         function fs:SetWidth(width)
             fs.__width = width

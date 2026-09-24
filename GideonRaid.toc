@@ -79,10 +79,10 @@ Sound\assign-2v2r.ogg
 Sound\assign-3v1r.ogg
 Sound\intermission-start.ogg
 
-# TEXTURES OF THE THREE IMAGE BUTTONS (the raid lead's screenshots of the orbs).
+# TEXTURES OF THE THREE CARDS (the raid lead's screenshots of the orbs).
 # THEY MUST BE LISTED HERE, exactly like the sounds: a texture loaded by PATH
 # ("Interface\AddOns\GideonRaid\Texture\3v1r.tga") and NOT listed in the .toc is
-# not loaded by the client, and the button then draws nothing at all.
+# not loaded by the client, and the card then draws nothing at all.
 # THEY ARE NOT IN assets/: that folder is EXCLUDED from the packaged zip
 # (.pkgmeta, `ignore: assets`) and is only there for the project documentation.
 # The files are produced by tools/make_textures.py (RGBA PNG -> 32-bit
@@ -95,3 +95,14 @@ Sound\intermission-start.ogg
 Texture\1v3r.tga
 Texture\2v2r.tga
 Texture\3v1r.tga
+
+# THE ILLUSTRATION OF THE PLACEMENT PANEL (the drawing the raid lead delivered).
+# It is NOT a state: it never appears during a fight, it is the reference the
+# player uses to see the size and the spot the window will occupy (/gr inter
+# place, "PLACE INTERMISSION PANEL"). Same rules as the three cards: a 32-bit
+# uncompressed TGA in Texture/ (never in assets/), listed HERE (a texture loaded
+# by path and not listed is not loaded at all), produced by
+# tools/make_textures.py from the delivered PNG, fitted in a 384 px box with the
+# aspect ratio and the alpha preserved (Textures.PLACEMENT_SIZE reports the real
+# size, tests/spec/texture_spec.lua compares it with the header of the file).
+Texture\placement.tga

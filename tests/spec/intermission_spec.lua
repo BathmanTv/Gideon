@@ -863,29 +863,48 @@ describe("Intermission : machine d'etat", function()
 end)
 
 describe("Intermission : panneau de placement (avant le pull)", function()
-    local I = wowenv.loadCore().Intermission
+    local ns = wowenv.loadCore()
+    local I, L = ns.Intermission, ns.Layout
 
-    it("explique le placement, le raccourci de ping et la suite du flux", function()
-        local view = I.setupView({ leadSeconds = 2, pairs = 2 })
-        assert.are.equal("BEFORE THE PULL - PLACE THE PANEL", view.headline)
-        assert.are.equal("OK", view.okLabel)
-        assert.are.equal("Close", view.closeLabel)
-        local text = table.concat(view.lines, "\n")
-        assert.is_true(contains(text, "Drag this frame"))
-        assert.is_true(contains(text, "Options > Keybindings"))
-        assert.is_true(contains(text, "2 s before each intermission"))
-        assert.is_true(contains(text, "Out-of-game plan loaded (2 pairs)."))
+    it("n'a PLUS aucun texte de placement (ni titre, ni consigne, ni bouton)", function()
+        -- Retour du raid lead : pendant le placement, le panneau n'affiche QUE
+        -- l'illustration de Gideon. L'ancien contenu (titre « BEFORE THE PULL -
+        -- PLACE THE PANEL », rappel de drag, touches de ping, ligne de plan,
+        -- libelle OK) a donc ete SUPPRIME, pas seulement masque : ce test verifie
+        -- qu'aucun constructeur de texte ne traine encore dans Core/.
+        assert.is_nil(I.setupView, "l'ancien bloc de texte du placement existe encore")
+        -- Les cles de traduction sont parties avec lui : une chaine qui n'existe
+        -- plus ne peut pas revenir a l'ecran par accident.
+        for _, key in ipairs({
+            "ui.panelTitle",
+            "ui.ok",
+            "ui.setup.headline",
+            "ui.setup.drag",
+            "ui.setup.keys",
+            "ui.setup.ready",
+            "ui.setup.plan",
+            "ui.setup.noPlan",
+        }) do
+            assert.is_nil(ns.Locale.STRINGS[key], "la cle " .. key .. " traine encore dans Core/Locale.lua")
+        end
     end)
 
-    it("dit que le plan hors jeu est optionnel quand il n'y en a pas", function()
-        local view = I.setupView({})
-        local text = table.concat(view.lines, "\n")
-        assert.is_true(contains(text, "No out-of-game plan loaded (optional)."))
-        assert.is_true(contains(text, "2 s before each intermission"), "lead par defaut")
-        local zero = I.setupView({ leadSeconds = 0, pairs = 0 })
-        assert.is_true(contains(table.concat(zero.lines, "\n"), "0 s before each intermission"))
-        -- Aucun argument : jamais d'erreur.
-        assert.is_table(I.setupView(nil).lines)
+    it("le plan de placement ne contient QUE l'illustration", function()
+        local layout = L.placementPanel()
+        assert.are.equal(L.PANEL.PLACEMENT, layout.panel)
+        assert.are.equal("", table.concat(L.violations(layout), " | "))
+        assert.are.equal(1, #layout.blocks)
+        assert.are.equal(L.PLACEMENT_BLOCK_ID, layout.blocks[1].id)
+        assert.are.equal("image", layout.blocks[1].kind)
+        assert.are.equal(ns.Textures.placementPath(), layout.blocks[1].texture)
+        -- Le fichier est bien livre a cote des trois orbes, et il est DECLARE dans
+        -- le .toc : une texture chargee par chemin mais absente du .toc n'est pas
+        -- chargee par le client (l'illustration ne s'afficherait pas).
+        assert.is_true(ns.Textures.placementPath():find("Texture", 1, true) ~= nil)
+        local handle = assert(io.open("GideonRaid.toc", "r"), "GideonRaid.toc illisible")
+        local toc = handle:read("*a")
+        handle:close()
+        assert.is_true(toc:find("Texture\\placement.tga", 1, true) ~= nil, "le TGA de placement manque du .toc")
     end)
 end)
 

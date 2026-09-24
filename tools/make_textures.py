@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Converts the raid lead's orb screenshots into the textures of the addon.
+"""Converts the raid lead's PNG deliveries into the textures of the addon.
 
 WHY THIS TOOL EXISTS
   The retail client does NOT accept a PNG for an addon texture: the three
-  composition buttons of the intermission panel display TGA files. The raid lead
-  delivers SCREENSHOTS (RGBA PNG, transparent background); this tool turns them
-  into the exact files the client can load, so the conversion is reproducible and
-  reviewable instead of being a one-off manual export.
+  composition buttons of the intermission panel display TGA files, and so does
+  the placement illustration. The raid lead delivers PNG files; this tool turns
+  them into the exact files the client can load, so the conversion is
+  reproducible and reviewable instead of being a one-off manual export.
 
 WHAT IT PRODUCES
-  Texture/<state>.tga for the three canonical states (3V1R / 2V2R / 1V3R):
+  1. Texture/<state>.tga for the three canonical states (3V1R / 2V2R / 1V3R):
     - 32 bits, UNCOMPRESSED true-color TGA (image type 2, 32 bpp, alpha kept);
     - fitted into a 256x256 box WITH the aspect ratio preserved (the longest
       side is exactly 256 px, the other one follows the source ratio);
@@ -20,11 +20,19 @@ WHAT IT PRODUCES
     - resized in PREMULTIPLIED alpha (the weight of a pixel is its alpha), which
       is the only way a resize cannot pull the transparent background into the
       orbs.
+  2. Texture/placement.tga, the PLACEMENT illustration the raid lead delivered:
+    the panel shows NOTHING ELSE while the player places it, so the picture is
+    both the content and the visual reference of the window's size. It goes
+    through the very same conversion (32 bits uncompressed, aspect preserved)
+    but in its OWN box (PLACEMENT_BOX = 384 px): an illustration is shown large,
+    an orb is read at a glance. An OPAQUE source keeps its opaque background -
+    the bleed only ever touches transparent pixels.
 
   The sizes it prints are the ones to keep in `Core/Textures.lua`
-  (`Textures.SIZES_BY_STATE`): the pure module cannot read a file, so the
-  dimensions are DATA there, and tests/spec/texture_spec.lua asserts that the
-  data matches the real header of the TGA on disk.
+  (`Textures.SIZES_BY_STATE` and `Textures.PLACEMENT_SIZE`): the pure module
+  cannot read a file, so the dimensions are DATA there, and
+  tests/spec/texture_spec.lua asserts that the data matches the real header of
+  the TGA on disk.
 
 USAGE
   python3 tools/make_textures.py --source-dir /root/.hermes/images
@@ -54,6 +62,13 @@ SOURCES = (
 
 # Fitted box, in pixels: Core/Textures.lua declares the same value.
 BOX = 256
+
+# The PLACEMENT illustration the raid lead delivered (the panel shows nothing
+# else while the player places it, see Layout.placementPanel): it has its OWN
+# box - an illustration is shown LARGE (it is the visual reference of the window
+# the player is placing), where an orb is read at a glance.
+PLACEMENT = ("PLACEMENT", "upload_20260924_233619_4.png")
+PLACEMENT_BOX = 384
 
 # How many dilation passes spread the opaque color under the transparent
 # background. 6 px is far more than the ~2 px the filtering of a 256 px texture
@@ -189,47 +204,75 @@ def check_header(path: str) -> tuple[int, int, int, int]:
     return image_type, width, height, bits
 
 
+def convert(source: str, target: str, box: int) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int, int, int]]:
+    """One PNG -> one TGA the client can load, fitted in `box` (ratio kept).
+
+    Returns (source size, fitted size, TGA header) so the caller can print the
+    exact block to report in Core/Textures.lua.
+    """
+    with Image.open(source) as raw:
+        image = raw.convert("RGBA")
+    source_size = image.size
+    width, height = fit_box(*image.size, box)
+    prepared = bleed_alpha(image)
+    resized = premultiplied_resize(prepared, (width, height))
+    save_tga(resized, target)
+    return source_size, (width, height), check_header(target)
+
+
 def main(argv: list[str]) -> int:
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source-dir", required=True, help="folder holding the raid lead's PNG screenshots")
     parser.add_argument("--out-dir", default=os.path.join(repo, "Texture"), help="output folder (default: Texture/)")
-    parser.add_argument("--box", type=int, default=BOX, help=f"fitted box in pixels (default: {BOX})")
+    parser.add_argument("--box", type=int, default=BOX, help=f"fitted box of the orb textures, in pixels (default: {BOX})")
+    parser.add_argument(
+        "--placement-box",
+        type=int,
+        default=PLACEMENT_BOX,
+        help=f"fitted box of the placement illustration, in pixels (default: {PLACEMENT_BOX})",
+    )
     args = parser.parse_args(argv)
 
     os.makedirs(args.out_dir, exist_ok=True)
+
+    # (state, source file, target file, box): the orb textures first, then the
+    # placement illustration. The mapping is the CONTRACT with Core/Textures.lua
+    # (same names, same folder) and with the .toc (an unlisted file is not
+    # loaded by the client).
+    jobs = [(state, name, f"{state.lower()}.tga", args.box) for state, name in SOURCES]
+    jobs.append((PLACEMENT[0], PLACEMENT[1], f"{PLACEMENT[0].lower()}.tga", args.placement_box))
+
     failed = False
-    for state, name in SOURCES:
+    sizes: dict[str, tuple[int, int]] = {}
+    for state, name, file, box in jobs:
         source = os.path.join(args.source_dir, name)
         if not os.path.isfile(source):
             print(f"ECHEC: {source} introuvable", file=sys.stderr)
             failed = True
             continue
-        with Image.open(source) as raw:
-            image = raw.convert("RGBA")
-        width, height = fit_box(*image.size, args.box)
-        prepared = bleed_alpha(image)
-        resized = premultiplied_resize(prepared, (width, height))
-        target = os.path.join(args.out_dir, f"{state.lower()}.tga")
-        save_tga(resized, target)
-        image_type, header_w, header_h, bits = check_header(target)
+        target = os.path.join(args.out_dir, file)
+        source_size, fitted, (image_type, header_w, header_h, bits) = convert(source, target, box)
+        sizes[state] = (header_w, header_h)
         ok = (
             image_type == TGA_IMAGE_TYPE_UNCOMPRESSED_TRUE_COLOR
             and bits == TGA_BITS_PER_PIXEL_RGBA
-            and (header_w, header_h) == (width, height)
+            and (header_w, header_h) == fitted
         )
         status = "OK" if ok else "ECHEC"
         if not ok:
             failed = True
-        print(f"{status} {os.path.basename(target)} <- {name} ({image.size[0]}x{image.size[1]}) = {width}x{height}, {bits} bits, type {image_type}")
+        print(f"{status} {file} <- {name} ({source_size[0]}x{source_size[1]}) = {header_w}x{header_h}, {bits} bits, type {image_type}")
 
     print("")
     print("A reporter dans Core/Textures.lua (Textures.SIZES_BY_STATE):")
-    for state, name in SOURCES:
-        target = os.path.join(args.out_dir, f"{state.lower()}.tga")
-        if os.path.isfile(target):
-            _, header_w, header_h, _ = check_header(target)
-            print(f'    ["{state}"] = {{ {header_w}, {header_h} }},')
+    for state, _ in SOURCES:
+        if state in sizes:
+            print(f'    ["{state}"] = {{ {sizes[state][0]}, {sizes[state][1]} }},')
+    print("")
+    print("A reporter dans Core/Textures.lua (Textures.PLACEMENT_SIZE) :")
+    if PLACEMENT[0] in sizes:
+        print(f"    Textures.PLACEMENT_SIZE = {{ {sizes[PLACEMENT[0]][0]}, {sizes[PLACEMENT[0]][1]} }}")
     return 1 if failed else 0
 
 

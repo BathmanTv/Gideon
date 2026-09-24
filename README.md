@@ -91,18 +91,19 @@ possible:
 | Screen | Content | Data source |
 |---|---|---|
 | Main panel (`/gr`) | partner, role, position, pairs, then the buttons **in this order**: **PLACE INTERMISSION PANEL** -> **SIM: PING YOURSELF** -> **SIM: INTERMISSION GROUP** -> the LOCK/UNLOCK utility (frozen by a test: an evening flow, then a separated utility); the panel is **draggable** and reopens where you left it, and its frame is **as wide as its longest label in both languages** | `assignment` block prepared out of game by GIDEON |
-| Placement mode (before the pull) | the panel is dragged where you want it, then **OK** saves the position and closes (the body says it explicitly: *place the panel where you want it to appear, then press OK: during the fight it opens by itself*); the close cross (`X`) and **Close** cancel instead of validating | the player's drag (persisted) |
-| Intermission panel (opens by itself 2 s before the intermission — **only on the delivered/configured target boss** (`/gr boss`, delivered id `3445` = *Entombed Sentinels*, every difficulty) — or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint); the **intermission start sound** plays once here | the player's click |
-| After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button; **the three composition buttons disappear** (REDO brings them back, empty state) | convention frozen in `Core/Intermission.lua` |
+| Placement mode (before the pull) | the panel shows **ONE thing only**: the Gideon illustration (`Texture/placement.tga`), so you can see the size and the spot the window will take; it is **dragged** where you want it and **`/gr inter ok`** saves the position and closes — the panel carries **no button at all**; the close cross (`X`) cancels instead of validating | the player's drag (persisted) |
+| Intermission panel (opens by itself 2 s before the intermission — **only on the delivered/configured target boss** (`/gr boss`, delivered id `3445` = *Entombed Sentinels*, every difficulty) — or `/gr inter`) | **three vertically stacked cards** carrying the raid lead's screenshots of the three compositions (`3V1R` / `2V2R` / `1V3R`, order frozen by `Core/Layout.lua`), each one **a thin border around its picture**, **no title and no text at all**; during a rehearsal only, the SIMULATION banner; **no sound** at that moment | the player's click |
+| After the click | **ONE word, and nothing else** — `Ping` / `BOSS` / `Chasseur` (**44 px**, and **64 px** for `BOSS`, the biggest text of the window), the two survival words in green, `BOSS` in the theme colour — plus the **CORRECT** button; **the three cards disappear** (CORRECT brings them back) | `Core/Locale.lua` (`state.word.*`) + the theme in `Core/Layout.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
-| Assignment sound | **one soundboard per composition**, played **once** the moment you declare yours (real flow *and* rehearsal), on the Master channel; `/gr sound on\|off` mutes it, `/gr sound test 1v3r\|2v2r\|3v1r` plays one on request — plus the **intermission start sound** (`/gr sound test start`), played once at the beginning of every intermission | `Core/Sound.lua` (pure table) + four Ogg files in `Sound/` |
+| Assignment sound | **one soundboard per composition**, played **once** the moment you declare yours (real flow *and* rehearsal) — and **on the click only**: the addon plays **no** sound by itself (the intermission start file is manual, `/gr sound test start`), on the Master channel; `/gr sound on\|off` mutes it, `/gr sound test 1v3r\|2v2r\|3v1r` plays one on request | `Core/Sound.lua` (pure table) + four Ogg files in `Sound/` |
 | Which boss may open the panel | a **delivered default target** (encounter id `3445` = *Entombed Sentinels*, all difficulties, no command needed) plus a **persisted allow-list of encounter ids**: `/gr boss <id>`, `/gr boss list` (with provenance), `/gr boss clear` (**explicitly** drops the delivered default = nothing opens), optional name list, `/gr idlog on\|off` to read the real id in game; `/gr inter on` = manual override for the next encounter; `/gr diag` = read-only health report | pure decision in `Core/BossFilter.lua` + the delivered constants in `Core/Config.lua` + the pure report in `Core/Diag.lua` |
 | Close cross (`X`, top right) | closes the panel — on **both** the main panel, the intermission panel and the ping help window | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
-| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens **RIGHT AWAY** with **its three composition buttons** (`1V3R` / `2V2R` / `3V1R`, sized on their own labels), you click your composition, get the state + role + `PING: YES/NO` + the action line, correct it with REDO and **you close it yourself** (X or Close) - ONE single cycle, nothing closes it and nothing relaunches it; **Ping help** (`/gr sim ping` = `/gr pinghelp`): a **short information window** (draggable, closable) telling you **how to bind one key per ping** (`Options > Keybindings > Ping`) and the operational reminder - **during the boss, when the panel says `PING: YES`, hover YOUR OWN character frame and press your key: you ping yourself** - plus the two limits: pings only show **while grouped** and **the addon cannot detect a ping** | pure logic in `Core/Simulation.lua` + the pure layout in `Core/Layout.lua` (+ the close cross and the main-panel buttons) |
+| SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens **RIGHT AWAY** with **its three picture cards** (`3V1R` / `2V2R` / `1V3R`, each one a thin border around the raid lead's screenshot), you click your composition, get **the one word** + CORRECT and **you close it yourself** (X) - ONE single cycle, nothing closes it and nothing relaunches it; **Ping help** (`/gr sim ping` = `/gr pinghelp`): a **short information window** (draggable, closable) telling you **how to bind one key per ping** (`Options > Keybindings > Ping`) and the operational reminder - **during the boss, when the panel says `PING: YES`, hover YOUR OWN character frame and press your key: you ping yourself** - plus the two limits: pings only show **while grouped** and **the addon cannot detect a ping** | pure logic in `Core/Simulation.lua` + the pure layout in `Core/Layout.lua` (+ the close cross and the main-panel buttons) |
 
-The panel shows the essential only (state, role, `PING: OUI/NON`, one action
-line); the explanations and the way each decision is justified live in
-[`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md), never on screen.
+The panel shows the essential only — before the click the three picture cards,
+after the click ONE word and CORRECT; the explanations and the way each decision is
+justified live in [`docs/INTERMISSION-COACH.md`](docs/INTERMISSION-COACH.md), never
+on screen.
 
 ### 3.1 Ping roles by STATE (instead of one duty per number)
 
@@ -156,8 +157,11 @@ player is the one who places it.
 ### 3.2 Evening flow
 
 1. before the pull, `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`):
-   drag the panel where it must appear, prepare your ping keybind in
-   *Options > Keybindings*, press **OK** (the position is saved);
+   the panel then shows **one single thing** — the Gideon illustration — so you can
+   see the **size and the spot** the window will occupy during the fight. Drag the
+   panel where it must appear, prepare your ping keybind in
+   *Options > Keybindings*, then **`/gr inter ok`** to save the position (the panel
+   itself carries **no button at all**; the close cross **cancels**);
 2. before the pull **you have nothing to configure**: the addon already targets
    *Entombed Sentinels* (encounter id `3445`, every difficulty — see §3.4). To
    target **another** boss, `/gr boss <id>` (the *encounter id*, read in game with
@@ -172,14 +176,18 @@ player is the one who places it.
    else, and a value that cannot be read (a *secret* value in 12.x) is never a
    match;
 4. **1–2 s before each intermission the panel opens by itself** with **three
-   stacked vertical image buttons** — one picture per orb composition instead of
-   words (§3.5). **Nothing is written and nothing is played** at that moment: the
+   stacked vertical cards** — one picture per orb composition instead of words
+   (§3.5): each card is a **thin border around the picture**, nothing else. **The
+   panel writes no title at all** and **nothing is played** at that moment: the
    window is silent;
-5. click the picture that matches the four orbs above your head: the three buttons
-   disappear (so no accidental second click) and the panel shows **one single word**
-   — `PING` in green (1 green + 3 red, the anchor), `BOSS` in the largest font
-   (2 green + 2 red, the middle) or `CHASER` in green (3 green + 1 red, the chaser)
-   — plus **CORRECT**, which brings the three pictures back as many times as needed;
+5. click the picture that matches the four orbs above your head: the three cards
+   disappear (so no accidental second click) and the panel shows **one single
+   word**, **five notches bigger than before** — `PING` in green (1 green + 3 red,
+   the anchor), `BOSS` (2 green + 2 red, the middle) in the **biggest font of the
+   window** (64 px) or `CHASER` in green (3 green + 1 red, the chaser), both at
+   44 px — plus **CORRECT**, which brings the three pictures back as many times as
+   needed. The panel widens itself so that **no word is ever truncated**, in
+   French as in English;
 6. at the end of the intermission the panel **closes by itself** (bounded delay,
    `Config.autoCloseSeconds`, 30 s by default); the next one reopens it
    automatically.
@@ -447,34 +455,62 @@ confirmed in game" items):
 
 ---
 
-### 3.5 The intermission panel: three pictures, one word
+### 3.5 The intermission panel: three cards, one big word
 
 Requested by the raid lead: *"remove all the text, keep only the three simplest
-possible buttons, put the pictures of the three possibilities in the buttons"*.
+possible buttons, put the pictures of the three possibilities in the buttons"* —
+then, after the next test: *"the placement panel shows ONLY the illustration, no
+button at all"* and *"the word after the click must be five notches bigger"*.
 
 **Before the click** the panel contains nothing but:
 
-- **three vertically stacked image buttons** (fixed order, top to bottom:
-  3 green + 1 red, 2 green + 2 red, 1 green + 3 red — pinned by
-  `Layout.INTERMISSION_CHOICE_ORDER` and checked by a test);
+- **three vertically stacked cards** (fixed order, top to bottom: 3 green + 1 red,
+  2 green + 2 red, 1 green + 3 red — pinned by `Layout.INTERMISSION_CHOICE_ORDER`
+  and checked by a test). A card is exactly what the raid lead asked for: **a thin
+  border with a discreet dark background behind the picture**, the picture drawn
+  whole, **no text**, and **one single feedback** — the border lights up under the
+  mouse and while pressed. No Blizzard button chrome, no glow, no pushed texture;
 - the **close cross**, and the fact that the panel **can be dragged** (position
   saved).
 
 No title, no state line, no role line, no action line, no ping key reminder:
-**every word was removed**, so the panel is read in one glance while Vashnik hides
-the raid.
+**every word was removed** — including the panel **title**, which is gone from the
+source and can not come back (see the "no leftover title" rule below) — so the
+panel is read in one glance while Vashnik hides the raid.
 
-**After the click**, one single word:
+**After the click**, one single word, **much bigger than before**:
 
-| Composition | Word (FR / EN) | Aspect | Meaning |
-|---|---|---|---|
-| `1V3R` (1 green + 3 red) | `Ping` | **green** | the anchor: ping yourself and stay put |
-| `2V2R` (2 green + 2 red) | `BOSS` / `Boss` | **largest font of the window** | the middle: go under the boss |
-| `3V1R` (3 green + 1 red) | `Chasseur` / `Chaser` | **green** | the chaser: run to a ping |
+| Composition | Word (FR / EN) | Size | Aspect | Meaning |
+|---|---|---|---|---|
+| `1V3R` (1 green + 3 red) | `Ping` | **44 px** | **green** | the anchor: ping yourself and stay put |
+| `2V2R` (2 green + 2 red) | `BOSS` / `Boss` | **64 px** | **biggest text of the window** | the middle: go under the boss |
+| `3V1R` (3 green + 1 red) | `Chasseur` / `Chaser` | **44 px** | **green** | the chaser: run to a ping |
 
-The green and the font come from the shared theme (`Core/Layout.lua`:
-`THEME.GREEN`, `wordStyle`), never from literals scattered in the UI. `CORRECT`
+The size is **not** inherited from a Blizzard font object: the addon creates its own
+FontString and calls `SetFont(<file>, <size>, "")` with the two **explicit**
+constants of the theme (`Layout.WORD_FONT_FILE`, `Layout.WORD_SIZE = 44`,
+`Layout.WORD_SIZE_BIG = 64`). A font object would hide its real size — an addon can
+not read it out of game — and "the biggest font of the window" would then be a
+promise nobody could verify. The layout carries the file and the size with the
+block, `Core/Layout.lua` widens the frame until the word fits whole (`nowrap`), and
+a test asserts, **in French and in English**, that `Chasseur` and `BOSS` are neither
+truncated nor pushed out of the frame. The green and the size come from the shared
+theme (`Core/Layout.lua`), never from literals scattered in the UI. `CORRECT`
 stays available, discreet, and brings the three pictures back.
+
+**The style of a card is a parameter.** `Layout.BUTTON_STYLES` holds the styles and
+`Layout.CHOICE_STYLE` names the one in use; today **one** style is defined (the
+thin-bordered card the raid lead asked for) because the richer picker is still
+being chosen. Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
+whatever Core names, and a test locks the geometry, the padding and the border
+colours down.
+
+**The "no leftover title" rule.** Each panel built by `Core/Layout.lua` carries its
+own id, and `Layout.violations()` refuses any text block the panel is not allowed to
+write (`Layout.panelTextIds`): the intermission panel may only write the SIMULATION
+banner and the one word, the placement panel may write **nothing**. The strings that
+used to carry a title (`ui.panelTitle`, the old placement blob) were deleted with
+their locale keys, and a test asserts they can not come back.
 
 The window **always closes at the end of the intermission**: besides the cross and
 the toggle, a bounded close guard (`Core/Intermission.newCloseGuard`, pure) driven
@@ -493,15 +529,28 @@ background):
 | `2V2R` | `Texture/2v2r.tga` | `Interface\AddOns\GideonRaid\Texture\2v2r.tga` |
 | `3V1R` | `Texture/3v1r.tga` | `Interface\AddOns\GideonRaid\Texture\3v1r.tga` |
 
+#### The placement panel shows the illustration, and nothing else
+
+During `/gr inter place` (and the **PLACE INTERMISSION PANEL** button) the panel
+displays **one single picture**: the Gideon illustration the raid lead delivered
+(`Texture/placement.tga`, 384 px box, aspect ratio and alpha kept, same conversion
+tool). It is the **visual reference** of the window being placed — you see the size
+and the spot it will occupy during the fight. There is **no button, no label and no
+composition** on that panel: drag it where you want, validate with `/gr inter ok`
+(which saves the position, `UI.IntermissionConfirmSetup`) or cancel with the cross.
+Note that this illustration is **opaque** (the delivered PNG has no alpha channel),
+unlike the three orb screenshots.
+
 Retail does **not** load PNG for addon textures, hence the conversion; it is
 reproducible with `tools/make_textures.py` (Pillow, premultiplied-alpha resize),
-and `Core/Textures.lua` (pure) is the single place mapping a state to its file, its
-size and its client path. The textures live in `Texture/`, **not** in `assets/` —
-which the packager excludes.
+and `Core/Textures.lua` (pure) is the single place mapping a state — or the
+placement panel — to its file, its size and its client path. The textures live in
+`Texture/`, **not** in `assets/` — which the packager excludes.
 
 A test (`tests/spec/texture_spec.lua`) reads the TGA header byte by byte, checks
-the declared dimensions, the transparent background, the `.toc` listing and the
-state → screenshot mapping.
+the declared dimensions, the transparent background, the `.toc` listing, the
+state → screenshot mapping **and** the placement illustration (32-bit, 384 px box,
+not an orb state).
 
 **A new texture file needs a client RESTART** (a `/reload` does not load files
 added after the client started) — exactly like a new sound file.
@@ -579,8 +628,15 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │   ├── assign-1v3r.ogg  (1V3R)   <- silent placeholders until the raid lead
 │   ├── assign-2v2r.ogg  (2V2R)   delivers the real recordings: same names,
 │   ├── assign-3v1r.ogg  (3V1R)   same folder, no code change (README §3.3)
-│   └── intermission-start.ogg    <- the raid lead's recording: played ONCE at the
-│                                    beginning of every intermission (do not rename)
+│   └── intermission-start.ogg    <- the raid lead's recording: MANUAL ONLY since
+│                                    0.13.0 (`/gr sound test start`), never played
+│                                    by the addon itself (do not rename)
+├── Texture/           <- the pictures, ALL LISTED in the .toc (never in assets/)
+│   ├── 1v3r.tga 2v2r.tga 3v1r.tga <- the raid lead's screenshots of the three
+│   │                                 orb compositions (32-bit uncompressed TGA,
+│   │                                 256 px box, alpha kept)
+│   └── placement.tga              <- the Gideon illustration of the PLACEMENT
+│                                    panel (384 px box, the window's reference)
 ├── libs/              <- embedded libraries (externals)
 ├── tests/             <- busted + fixtures (excluded from the zip)
 ├── tools/             <- CLI + .toc validator (excluded from the zip)
@@ -607,46 +663,52 @@ Reference result (after the Intermission Coach redesign, the close cross + SIMUL
 mode, the fourth in-game pass (no ping macro, minimal panel, REDO, full evening
 flow with the pre-computed schedule, panels laid out by `Core/Layout.lua`, rehearsal
 opened right away and closed by the player, ping help window instead of a guided
-sequence), the fifth in-game pass (validated self-ping, OK button of the
-placement mode, composition buttons restored in the rehearsal, every button sized on
-its own label), the assignment soundboards, the **auto-open boss filter +
-intermission start sound**, and the **delivered default target (measured id 3445) +
-`/gr diag`**):
+sequence), the fifth in-game pass (validated self-ping, composition buttons restored
+in the rehearsal, every button sized on its own label), the assignment soundboards,
+the **auto-open boss filter + intermission start sound**, the **delivered default
+target (measured id 3445) + `/gr diag`**, the **three pictures + one word panel with
+the click-only soundboards**, and the **0.13.1 pass (placement panel = the
+illustration alone, no title anywhere on the intermission panel, the word five
+notches bigger, the buttons turned into thin-bordered cards)**):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 28 files        # luacheck
+Total: 0 warnings / 0 errors in 30 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (16 files listed: 12 lua + 4 sounds)
+OK GideonRaid.toc                              # check_toc (21 files listed: 13 lua + 4 sounds + 4 textures)
 busted
-331 successes / 0 failures / 0 errors / 0 pending : 2.28 seconds
+359 successes / 0 failures / 0 errors / 0 pending : 3.42 seconds
 ```
 
-The 331 tests are spread over `intermission_spec.lua` (88 — including the
+The 359 tests are spread over `intermission_spec.lua` (91 — including the
 resolution of the **delivered target**: never configured vs explicit
-`/gr boss clear` vs player addition),
-`load_spec.lua` (49 — real loading, `.toc` order, evening flow, movable panels,
-close cross, simulations, button order, placement OK button, rehearsal composition
-buttons), `bossfilter_spec.lua` (45 — **which boss may open the panel**: the
-**delivered default target** (id 3445 + the EN/FR names, every difficulty),
-explicit clear vs never configured, pure decision, good/wrong/unreadable id, empty
-name, `/gr boss` and `/gr idlog` wiring, idlog ring, manual override),
-`sound_spec.lua` (31 — assignment soundboards **and the intermission start sound**:
+`/gr boss clear` vs player addition, and the **removal** of the old placement text
+blob: `setupView` and its locale keys must stay gone),
+`load_spec.lua` (56 — real loading, `.toc` order, evening flow, movable panels,
+close cross, simulations, button order, **placement panel = the illustration alone
+with `/gr inter ok`**, **the explicit 44/64 px font of the word and no Blizzard font
+object**, **the card borders lighting up under the mouse with no sound**),
+`bossfilter_spec.lua` (45 — **which boss may open the panel**: the **delivered
+default target** (id 3445 + the EN/FR names, every difficulty), explicit clear vs
+never configured, pure decision, good/wrong/unreadable id, empty name, `/gr boss`
+and `/gr idlog` wiring, idlog ring, manual override),
+`sound_spec.lua` (32 — assignment soundboards **and the intermission start sound**:
 pure table state -> file, one playback per intermission, paths listed in the `.toc`
 and present on disk, bounded `/gr sound` preference, one playback per assignment,
-survival to a failing/absent `PlaySoundFile`),
-`layout_spec.lua` (22 — pure panel geometry: no overlap, no overflow, every button
-sized on its label with its inner margin, in both languages),
-`locale_spec.lua` (21),
-`pingpolicy_spec.lua` (20 — ping roles and policies),
-`diag_spec.lua` (19 — `/gr diag`: the **silence gate** of the audio probe, the
-verdict of each of the 4 sound files, the report lines, and the wiring: **no sound
-is ever played when the client is audible**), `simulation_spec.lua` (14 — pure
-rehearsal + ping help), `pairing_spec.lua` (11) and `guard_spec.lua` (11 —
-anti-forbidden-API guard, audio call restricted to `UI/` under `pcall` and behind
-the silence gate, simulation isolation).
+survival to a failing/absent `PlaySoundFile`), `layout_spec.lua` (24 — pure panel
+geometry: no overlap, no overflow, every card sized on its picture with the padding
+of its style, the **minimum font size per word in both languages**, the **refusal of
+any leftover title**, no truncation of `Chasseur`/`BOSS`), `locale_spec.lua` (21),
+`pingpolicy_spec.lua` (20 — ping roles and policies), `diag_spec.lua` (19 — `/gr diag`:
+the **silence gate** of the audio probe, the verdict of each of the 4 sound files, the
+report lines, and the wiring: **no sound is ever played when the client is audible**),
+`texture_spec.lua` (15 — TGA headers read byte by byte, the three orb screenshots
+**and the placement illustration**), `simulation_spec.lua` (14 — pure rehearsal +
+ping help), `pairing_spec.lua` (11) and `guard_spec.lua` (11 — anti-forbidden-API
+guard, audio call restricted to `UI/` under `pcall` and behind the silence gate,
+simulation isolation).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)
 

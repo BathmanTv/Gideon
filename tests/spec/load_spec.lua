@@ -198,22 +198,26 @@ describe("chargement de l'addon", function()
         assert.is_false(contains(text, "roster assign"))
     end)
 
-    it("mode placement : bouton du panneau principal, OK ferme et sauvegarde", function()
+    it("mode placement : bouton du panneau principal, /gr inter ok sauvegarde et ferme", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        -- Le mode placement montre les MEMES images que le combat, et PAS UN MOT
-        -- d'explication a l'ecran (raid lead : « enleve tout le blabla » ; le mode
-        -- d'emploi vit dans le README et dans le chat).
-        assert.is_true(panel.buttons[1]:IsShown())
-        assert.is_true(panel.buttons[2]:IsShown())
-        assert.is_true(panel.buttons[3]:IsShown())
+        -- Le mode placement n'affiche QUE l'illustration de Gideon (raid lead :
+        -- « uniquement son illustration, pas de boutons ») : PAS une composition,
+        -- PAS un mot, PAS un texte, PAS un bouton.
+        assert.is_false(panel.buttons[1]:IsShown())
+        assert.is_false(panel.buttons[2]:IsShown())
+        assert.is_false(panel.buttons[3]:IsShown())
         assert.is_false(panel.word:IsShown())
         assert.is_false(panel.wordBig:IsShown())
         assert.is_false(panel.redo:IsShown())
-        assert.is_true(panel.ok:IsShown())
-        panel.ok:Click()
+        assert.is_true(panel.placement:IsShown())
+        assert.are.equal(ns.Textures.placementPath(), panel.placement.picture:GetTexture())
+        -- Aucun bouton du tout : la validation passe par `/gr inter ok` (le bouton
+        -- OK a disparu avec le reste du texte du panneau).
+        assert.is_nil(panel.ok)
+        _G.SlashCmdList["GIDEONRAID"]("inter ok")
         assert.is_false(panel:IsShown())
         assert.is_table(_G.GideonRaidDB.intermission.position)
         assert.matches("Placement saved", messages())
@@ -284,7 +288,10 @@ describe("chargement de l'addon", function()
         -- Core/Textures.lua) et AUCUN libelle de composition n'est dessine dessus.
         for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
             local key = ns.Layout.INTERMISSION_CHOICE_ORDER[index]
-            assert.are.equal(ns.Textures.pathFor(key), panel.buttons[index]:GetNormalTexture():GetTexture())
+            -- L'image est une texture ENFANT de la carte (le cadre garde donc sa
+            -- bordure visible autour de l'image, raid lead : « un simple encart
+            -- avec des bords »).
+            assert.are.equal(ns.Textures.pathFor(key), panel.buttons[index].picture:GetTexture())
             assert.are.equal("", panel.buttons[index]:GetText(), "le bouton " .. key .. " porte un texte")
         end
         panel.buttons[2]:Click() -- 2V2R (2e bouton de l'ordre fige)
@@ -296,13 +303,26 @@ describe("chargement de l'addon", function()
         assert.is_false(panel.buttons[1]:IsShown())
         assert.is_false(panel.buttons[2]:IsShown())
         assert.is_false(panel.buttons[3]:IsShown())
-        for _, gone in ipairs({ "state", "headline", "pingBanner", "body", "title", "close" }) do
+        for _, gone in ipairs({ "state", "headline", "pingBanner", "body", "title", "close", "ok" }) do
             assert.is_nil(panel[gone], "l'element " .. gone .. " existe encore dans le panneau")
         end
-        -- Le mot BOSS est le plus gros element de la fenetre : il utilise la plus
-        -- grande police du client, les deux mots de survie la police courante.
-        assert.are.equal("GameFontNormalHuge", panel.wordBig:GetFontObject())
-        assert.are.equal("GameFontNormalLarge", panel.word:GetFontObject())
+        -- Le mot BOSS est le plus GROS texte de la fenetre : une police et une
+        -- TAILLE EXPLICITES (les constantes de Core/Layout), jamais un objet de
+        -- police Blizzard dont l'addon ne peut pas lire la taille hors du jeu.
+        -- C'est la reponse a « le mot doit etre beaucoup plus gros » : la taille
+        -- est verifiee ici, pas supposee.
+        local bigFile, bigSize = panel.wordBig:GetFont()
+        assert.are.equal(ns.Layout.WORD_FONT_FILE, bigFile)
+        assert.are.equal(ns.Layout.WORD_SIZE_BIG, bigSize)
+        assert.is_true(bigSize >= 64, "BOSS doit valoir au moins 64 px (recu " .. tostring(bigSize) .. ")")
+        local smallFile, smallSize = panel.word:GetFont()
+        assert.are.equal(ns.Layout.WORD_FONT_FILE, smallFile)
+        assert.are.equal(ns.Layout.WORD_SIZE, smallSize)
+        assert.is_true(smallSize >= 44, "PING/CHASSEUR doivent valoir au moins 44 px")
+        assert.is_true(bigSize > smallSize, "BOSS doit rester le plus gros mot")
+        -- AUCUN objet de police : sinon la taille reelle echapperait au test.
+        assert.is_nil(panel.word:GetFontObject())
+        assert.is_nil(panel.wordBig:GetFontObject())
     end)
 
     it("bouton CORRIGER : ramene aux trois choix, utilisable plusieurs fois", function()
@@ -520,7 +540,10 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.is_true(panel.ok:IsShown())
+        -- Le panneau porte l'illustration et RIEN d'autre : aucun bouton (le
+        -- bouton OK a disparu, `/gr inter ok` valide desormais).
+        assert.is_true(panel.placement:IsShown())
+        assert.is_nil(panel.ok)
         panel.closeCross:Click()
         assert.is_false(panel:IsShown())
         -- Annulation : le placement n'est PAS valide.
@@ -688,20 +711,48 @@ describe("chargement de l'addon", function()
             assert.are.equal("TOP", button.__point[1])
             assert.is_number(button.__point[2])
             assert.is_number(button.__point[3])
-            -- TAILLE : celle de l'IMAGE (ratio conserve), plus jamais un cadre fixe
-            -- et plus jamais mesuree depuis un libelle (il n'y en a plus).
-            local expectedWidth, expectedHeight = ns.Textures.displaySize(key, layout.CHOICE_IMAGE_MAX)
-            assert.are.equal(expectedWidth, button.__width, key .. " : largeur de l'image")
-            assert.are.equal(expectedHeight, button.__height, key .. " : hauteur de l'image")
-            -- LE BOUTON AFFICHE L'IMAGE DE SA COMPOSITION, et aucun texte.
-            assert.are.equal(ns.Textures.pathFor(key), button:GetNormalTexture():GetTexture(), key)
+            -- LE BOUTON EST UN ENCART A BORDS : un fond sombre discret et une
+            -- bordure fine (le style vient de Core/Layout.BUTTON_STYLES, il n'est
+            -- pas ecrit ici), AUCUN texte, et la taille = l'image ajustee PLUS le
+            -- padding du style de chaque cote.
+            local pictureWidth, pictureHeight = ns.Textures.displaySize(key, layout.CHOICE_IMAGE_MAX)
+            local padding = layout.cardPadding(layout.CHOICE_STYLE)
+            assert.is_true(padding > 0, "le style d'encart doit reserver une marge interieure")
+            assert.are.equal(pictureWidth + (2 * padding), button.__width, key .. " : largeur de l'encart")
+            assert.are.equal(pictureHeight + (2 * padding), button.__height, key .. " : hauteur de l'encart")
+            local style = layout.style(layout.CHOICE_STYLE)
+            assert.is_truthy(button.__backdrop, key .. " : l'encart n'a pas de fond")
+            assert.are.equal(style.edgeFile, button.__backdrop.edgeFile, key .. " : pas de bordure")
+            assert.are.equal(style.bgFile, button.__backdrop.bgFile, key .. " : pas de fond")
+            local br, bg, bb, ba = button:GetBackdropBorderColor()
+            assert.are.equal(style.border.r, br, key .. " : couleur de bordure au repos")
+            assert.are.equal(style.border.g, bg, key .. " : couleur de bordure au repos")
+            assert.are.equal(style.border.b, bb, key .. " : couleur de bordure au repos")
+            assert.are.equal(style.border.a, ba, key .. " : couleur de bordure au repos")
+            local bgR, bgG, bgB, bgA = button:GetBackdropColor()
+            assert.are.equal(style.background.r, bgR, key .. " : fond discret")
+            assert.are.equal(style.background.g, bgG, key .. " : fond discret")
+            assert.are.equal(style.background.b, bgB, key .. " : fond discret")
+            assert.are.equal(style.background.a, bgA, key .. " : fond discret")
+            -- L'IMAGE EST DESSINEE EN ENTIER, DANS la bordure : une texture ENFANT
+            -- du cadre, posee aux QUATRE coins a `padding` de la bordure.
+            assert.are.equal(ns.Textures.pathFor(key), button.picture:GetTexture(), key)
+            local points = button.picture.__points
+            assert.is_true(type(points) == "table" and #points == 2, key .. " : image non ancree aux 4 coins")
+            assert.are.equal("TOPLEFT", points[1][1], key .. " : coin haut-gauche")
+            assert.are.equal(padding, points[1][4], key .. " : image collee a la bordure")
+            assert.are.equal(-padding, points[1][5], key .. " : image collee a la bordure")
+            assert.are.equal("BOTTOMRIGHT", points[2][1], key .. " : coin bas-droite")
+            assert.are.equal(-padding, points[2][4], key .. " : image collee a la bordure")
+            assert.are.equal(padding, points[2][5], key .. " : image collee a la bordure")
             assert.are.equal("", button:GetText(), key .. " : un texte est dessine sur l'image")
         end
-        -- La croix est la (elle ferme le panneau) ; OK n'a rien a faire dans une
-        -- repetition (il valide une POSITION, pas un choix). La croix est du
-        -- "chrome" attache au coin du cadre, hors plan (Core ne la place pas).
+        -- La croix est la (elle ferme le panneau) ; OK a disparu (il valait une
+        -- POSITION et `/gr inter ok` le remplace : le panneau de placement
+        -- n'affiche plus aucun bouton). La croix est du "chrome" attache au coin
+        -- du cadre, hors plan (Core ne la place pas).
         assert.is_truthy(panel.closeCross)
-        assert.is_false(panel.ok:IsShown())
+        assert.is_nil(panel.ok)
         -- CHAQUE bouton remplit sa fonction : UN SEUL mot, celui du raid lead.
         local expected = {
             { state = "3V1R", word = "state.word.3V1R", big = false },
@@ -731,30 +782,80 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
     end)
 
-    it("placement : les trois images et OK, AUCUN texte a l'ecran", function()
+    it("encart a bords : au survol et au clic, SEULE la bordure s'eclaire - aucun son", function()
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("sim inter")
+        local panel = _G.GideonRaidIntermissionPanel
+        local style = ns.Layout.style(ns.Layout.CHOICE_STYLE)
+        local button = panel.buttons[1]
+        local soundsBefore = #stub.sounds
+        local width, height = button.__width, button.__height
+        -- AU REPOS : la bordure du style (un simple encart, rien de plus).
+        local rest = button:GetBackdropBorderColor()
+        assert.are.equal(style.border.r, rest, "bordure au repos")
+        assert.are.equal("", button:GetText(), "aucun texte dans le cadre")
+        -- SURVOL : la bordure S'ECLAIRE (c'est le SEUL retour visuel demande).
+        button:GetScript("OnEnter")(button)
+        assert.are.equal(style.borderHover.r, button:GetBackdropBorderColor(), "bordure au survol")
+        assert.is_true(style.borderHover.r > rest, "la bordure doit s'eclairer au survol")
+        -- APPUI : la bordure reste allumee.
+        button:GetScript("OnMouseDown")(button)
+        assert.are.equal(style.borderPressed.r, button:GetBackdropBorderColor(), "bordure a l'appui")
+        -- SORTIE : retour au repos.
+        button:GetScript("OnLeave")(button)
+        assert.are.equal(style.border.r, button:GetBackdropBorderColor(), "bordure apres la sortie")
+        -- AUCUN SON pour un survol, un appui ou une sortie : le son du raid lead
+        -- n'est joue qu'au CLIC d'un bouton de composition (jamais en automatique).
+        assert.are.equal(soundsBefore, #stub.sounds, "un survol ne doit JAMAIS jouer de son")
+        -- ... et RIEN d'autre n'a bouge : ni taille, ni texte, ni image.
+        assert.are.equal(width, button.__width, "la taille de l'encart ne bouge pas")
+        assert.are.equal(height, button.__height, "la taille de l'encart ne bouge pas")
+        assert.are.equal("", button:GetText(), "le survol n'ecrit aucun texte")
+        assert.are.equal(
+            ns.Textures.pathFor(ns.Layout.INTERMISSION_CHOICE_ORDER[1]),
+            button.picture:GetTexture(),
+            "le survol ne change pas l'image"
+        )
+        -- LE CLIC, lui, joue UN SEUL son (le bon fichier, une seule fois).
+        button:Click()
+        assert.are.equal(soundsBefore + 1, #stub.sounds, "le clic joue exactement un son")
+        assert.are.equal(
+            ns.Sound.pathFor(ns.Layout.INTERMISSION_CHOICE_ORDER[1]),
+            stub.sounds[#stub.sounds].path,
+            "le clic joue le son de SA composition"
+        )
+        assert.are.equal(ns.Sound.CHANNEL, stub.sounds[#stub.sounds].channel)
+        _G.SlashCmdList["GIDEONRAID"]("sim stop")
+    end)
+
+    it("placement : l'illustration SEULE, AUCUN texte et AUCUN bouton a l'ecran", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.is_true(panel.ok:IsShown(), "le bouton OK doit etre affiche en mode placement")
-        -- Le mode placement n'explique PLUS rien a l'ecran (raid lead : « enleve
-        -- tout le blabla ») : les trois images, OK, et c'est tout.
-        for _, gone in ipairs({ "body", "headline", "state", "title" }) do
+        -- Retour du raid lead : pendant le placement, le panneau n'affiche QUE
+        -- l'illustration de Gideon (repere visuel de la taille et de l'emplacement
+        -- de la fenetre). Aucun bouton, aucun texte, aucune composition.
+        assert.is_true(panel.placement:IsShown(), "l'illustration doit etre affichee en mode placement")
+        assert.are.equal(ns.Textures.placementPath(), panel.placement.picture:GetTexture())
+        assert.is_nil(panel.ok)
+        for _, gone in ipairs({ "body", "headline", "state", "title", "ok" }) do
             assert.is_nil(panel[gone], "l'element " .. gone .. " existe encore")
         end
         assert.is_false(panel.word:IsShown())
         assert.is_false(panel.wordBig:IsShown())
+        assert.is_false(panel.redo:IsShown())
         for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
-            assert.is_true(panel.buttons[index]:IsShown(), "les images restent visibles pendant le placement")
+            assert.is_false(panel.buttons[index]:IsShown(), "aucune composition pendant le placement")
         end
-        -- ... et OK valide vraiment : il sauvegarde la position et ferme.
-        panel.ok:Click()
+        -- ... et `/gr inter ok` valide vraiment : il sauvegarde la position et ferme.
+        _G.SlashCmdList["GIDEONRAID"]("inter ok")
         assert.is_false(panel:IsShown())
         assert.is_table(_G.GideonRaidDB.intermission.position)
         assert.matches("Placement saved", messages())
     end)
 
-    it("placement en FR : le panneau est traduit et AUCUN texte n'est dessine", function()
+    it("placement en FR : le panneau n'ecrit RIEN a l'ecran", function()
         _G.GetLocale = function()
             return "frFR"
         end
@@ -762,12 +863,15 @@ describe("chargement de l'addon", function()
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.are.equal("OK", panel.ok:GetText())
+        -- Plus AUCUN texte : ni titre, ni libelle, ni bouton. Seule la croix
+        -- (chrome du cadre) porte un glyphe, et c'est le « X ».
+        assert.is_nil(panel.ok)
         assert.are.equal("X", panel.closeCross:GetText())
         assert.is_nil(panel.close)
         assert.is_nil(panel.body)
         assert.is_false(panel.word:IsShown())
         assert.is_false(panel.wordBig:IsShown())
+        assert.are.equal(ns.Textures.placementPath(), panel.placement.picture:GetTexture())
         -- Les trois mots du raid lead en francais.
         assert.are.equal("Ping", ns.Locale.t("state.word.1V3R", "fr"))
         assert.are.equal("BOSS", ns.Locale.t("state.word.2V2R", "fr"))
@@ -1272,7 +1376,7 @@ describe("fermeture bornee du panneau d'intermission", function()
         -- Un placement peut durer : aucune fermeture surprise.
         stub.fireTickers(3000)
         assert.is_true(panel:IsShown(), "le mode placement ne doit pas se fermer tout seul")
-        panel.ok:Click()
+        _G.SlashCmdList["GIDEONRAID"]("inter ok")
         assert.is_false(panel:IsShown())
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         assert.is_true(panel:IsShown())

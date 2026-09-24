@@ -1196,41 +1196,17 @@ function Intermission.snapshot(state, pingMode, bindingResolver)
     return snap
 end
 
---[[ Pre-pull / placement content (NOT the combat panel).
+--[[ Pre-pull / placement: NO TEXT ANY MORE.
 
-     Flow requested by the raid lead:
-       a. before the pull, /gr opens the main panel and the player PLACES the
-          intermission panel (drag) -> position saved in the SavedVariables;
-       b. the player prepares their ping keybind and confirms with OK -> the
-          panel closes;
-       c. the boss is pulled, and the panel opens by itself shortly before each
-          intermission (pre-computed schedule, 1-2 s of lead time);
-       d. the player clicks their composition (REDO corrects a mistake);
-       e. the panel closes by itself at the end of the intermission.
+     The placement panel displays ONE thing - the Gideon illustration the raid
+     lead delivered (Core/Layout.placementPanel, Core/Textures.placement*) - and
+     nothing else. The former content builder (headline "BEFORE THE PULL - PLACE
+     THE PANEL", drag/keybind/procedure lines, the OK label) was DELETED with its
+     locale keys: it was the last title a player could read at the top of the
+     intermission window, and the raid lead asked for it to go for good. The
+     placement is validated by `/gr inter ok` (UI.IntermissionConfirmSetup), the
+     cross cancels and the picture is dragged to the wanted spot.
 ]]
---- @param options table|nil { leadSeconds = number|nil, pairs = number|nil }
---- @return table { headline, lines, okLabel, closeLabel }
-function Intermission.setupView(options)
-    local opts = type(options) == "table" and options or {}
-    local lead = clampInt(opts.leadSeconds or Intermission.LEAD_SECONDS, 0, 10)
-    local lines = {
-        Locale.t("ui.setup.drag"),
-        Locale.t("ui.setup.keys"),
-        Locale.format("ui.setup.ready", lead),
-    }
-    local pairsCount = tonumber(opts.pairs)
-    if pairsCount ~= nil and pairsCount > 0 then
-        lines[#lines + 1] = Locale.format("ui.setup.plan", pairsCount)
-    else
-        lines[#lines + 1] = Locale.t("ui.setup.noPlan")
-    end
-    return {
-        headline = Locale.t("ui.setup.headline"),
-        lines = lines,
-        okLabel = Locale.t("ui.ok"),
-        closeLabel = Locale.t("ui.close"),
-    }
-end
 
 --[[ Pre-computed intermission RUN: everything is timed from ENCOUNTER_START.
 

@@ -44,6 +44,37 @@
     languages, that no two blocks overlap, that no text runs over the borders,
     that no label touches the border of its button and that nothing is drawn
     under the close cross.
+
+    THE WORD AFTER A CLICK (raid-lead request: "5 notches bigger"). The word is
+    drawn by a FontString the ADDON creates, with an EXPLICIT font file and an
+    EXPLICIT size (UI applies Layout.WORD_FONT_FILE / Layout.WORD_SIZE*): no
+    Blizzard font object is used, because its size cannot be read out of game -
+    an inherited font object is exactly how "the biggest font of the window"
+    silently stopped being the biggest one. The sizes live here, ONCE, and the
+    frame is widened when the word needs it (see intermissionPanel), so
+    "Chasseur" and "BOSS" are never truncated nor pushed out of the frame in
+    French as in English.
+
+    THE PLACEMENT PANEL (/gr inter place): the panel displays ONE picture - the
+    illustration the raid lead delivered (Layout.placementPanel, Core/Textures.
+    placement*) - and NOTHING ELSE. No button, no label, no composition: the
+    picture is the visual reference of the window the player is about to place
+    (its size and its spot). It stays draggable, the close cross cancels and
+    `/gr inter ok` validates the position.
+
+    WHAT A PANEL MAY WRITE (the "no leftover title" rule). Each panel built here
+    carries its `panel` id, and Layout.violations() REFUSES any text block whose
+    id is not in the allow-list of that panel (Layout.INTERMISSION_TEXT_IDS, which
+    is the SIMULATION banner plus the one word; Layout.PLACEMENT_TEXT_IDS, which is
+    EMPTY). A future release can therefore not bring
+    a title back: every layout test in the suite asks for the violations of the
+    panel it just built.
+
+    THE STYLE OF A CARD IS A PARAMETER (Layout.BUTTON_STYLES). The image
+    "buttons" are simple CARDS: a thin border and a discreet dark background
+    behind the picture, no Blizzard button chrome, no text. ONE style is defined
+    today - the raid lead is still choosing - and a richer picker only has to
+    add an entry to Layout.BUTTON_STYLES and name it in Layout.CHOICE_STYLE.
 ----------------------------------------------------------------------------]]
 --
 --
@@ -76,6 +107,27 @@ ns.Layout = Layout
                   WIDE: a real line is never wider than the estimate, so a
                   layout validated out of game never overflows in game.
 ]]
+
+--[[ THE WORD WRITTEN AFTER A CLICK: EXPLICIT font file and EXPLICIT sizes.
+
+     WHY NOT A BLIZZARD FONT OBJECT: GameFontNormalLarge / GameFontNormalHuge
+     are font OBJECTS whose real size lives inside the client - an addon cannot
+     read it out of game, so "the biggest element of the window" was a promise
+     nobody could verify (and the raid lead asked for a word FIVE notches
+     bigger). The addon therefore creates its own FontString and calls
+     SetFont(file, size, ""): the file and the size come from HERE, once, and
+     both the measurement below and the rendering layer read the same numbers.
+]]
+Layout.WORD_FONT_FILE = "Fonts\\FRIZQT__.TTF"
+--- The two survival words ("Ping" / "Chasseur"), in pixels.
+Layout.WORD_SIZE = 44
+--- The middle composition ("BOSS"): the BIGGEST element of the window.
+Layout.WORD_SIZE_BIG = 64
+--- Conservative estimate of one capital's width, as a fraction of the font
+--- size (measured on FRIZQT__: a capital is never wider than 0.8 em). Used to
+--- size the frame around the word so "Chasseur" is never truncated.
+Layout.WORD_CHAR_RATIO = 0.8
+
 Layout.FONTS = {
     huge = { height = 34, charWidth = 20 },
     large = { height = 18, charWidth = 9 },
@@ -87,6 +139,11 @@ Layout.FONTS = {
     -- (the real client font is wider than that). Same reasoning for the height:
     -- a whole line, never less.
     button = { height = 16, charWidth = 7.5 },
+    -- THE TWO WORD STYLES: their height IS the size handed to SetFont (one
+    -- single source, asserted by tests/spec/layout_spec.lua), and their width
+    -- estimate scales with it.
+    word = { height = Layout.WORD_SIZE, charWidth = math.ceil(Layout.WORD_SIZE * Layout.WORD_CHAR_RATIO) },
+    wordBig = { height = Layout.WORD_SIZE_BIG, charWidth = math.ceil(Layout.WORD_SIZE_BIG * Layout.WORD_CHAR_RATIO) },
 }
 Layout.FONT_FALLBACK = "normal"
 
@@ -130,6 +187,73 @@ Layout.PING_HELP_WIDTH = 520
 Layout.CHOICE_IMAGE_MAX = 160
 Layout.CHOICE_GAP = 8
 
+--[[ THE CARD: a thin border and a discreet dark background behind a picture.
+
+     The raid lead asked for "just a frame with edges" around every image - no
+     Blizzard button chrome, no decoration, no text - and a RICHER PICKER LATER.
+     The style is therefore a PARAMETER: a name in Layout.CHOICE_STYLE selects a
+     table in Layout.BUTTON_STYLES, the layout carries that name on every image
+     block, and the rendering layer applies whatever table it is handed
+     (UI.ApplyCardStyle). Adding a style later is adding one entry here and
+     naming it - nothing else in the addon knows how a card looks.
+       padding        : transparent space between the border and the picture (the
+                        picture is ALWAYS drawn whole, inside the border);
+       edge/bg        : the client files of the border and of the background;
+       edgeSize       : border thickness, in pixels (thin by design);
+       background     : the discreet dark fill behind the picture;
+       border         : the border colour at rest;
+       borderHover    : the border colour under the mouse (the ONLY feedback);
+       borderPressed  : the border colour between press and release.
+     ONE style is defined (the raid lead is still choosing): "card".
+]]
+Layout.CHOICE_STYLE = "card"
+Layout.BUTTON_STYLES = {
+    card = {
+        id = "card",
+        padding = 6,
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 2,
+        background = { r = 0.05, g = 0.05, b = 0.07, a = 0.6 },
+        border = { r = 0.45, g = 0.45, b = 0.45, a = 1 },
+        borderHover = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
+        borderPressed = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
+    },
+}
+--- The style of a name, never nil: an unknown or missing name falls back to the
+--- configured one, so a layout can always be applied (no nil handed to
+--- SetBackdrop).
+--- @param name string|nil
+--- @return table style table
+function Layout.style(name)
+    local key = type(name) == "string" and name or Layout.CHOICE_STYLE
+    local style = Layout.BUTTON_STYLES[key]
+    if type(style) == "table" then
+        return style
+    end
+    return Layout.BUTTON_STYLES[Layout.CHOICE_STYLE]
+end
+
+--- Padding a card of `name` keeps between its border and its picture, in pixels.
+--- @param name string|nil
+--- @return number
+function Layout.cardPadding(name)
+    local style = Layout.style(name)
+    return tonumber(style.padding) or 0
+end
+
+--[[ THE PLACEMENT PANEL: the illustration, and nothing else.
+
+     LONGEST SIDE of the displayed illustration, in pixels. Core/Textures.lua
+     declares the file 384 px wide (its own box), so the client draws it 1:1.
+]]
+Layout.PLACEMENT_IMAGE_MAX = 384
+
+--- The illustration starts BELOW the close cross: it is wide (the frame is
+--- essentially its size), so a card drawn at the usual top margin would run under
+--- the "X" of the panel - which Layout.violations() refuses.
+Layout.PLACEMENT_MARGIN_TOP = Layout.CROSS_OFFSET + Layout.CROSS_SIZE + Layout.GAP
+
 --- THE FROZEN VERTICAL ORDER of the three image buttons, TOP TO BOTTOM (raid-lead
 --- request): 3 green + 1 red first, then 2 green + 2 red, then 1 green + 3 red.
 --- This list is the single source of the order: intermissionPanel() builds its
@@ -152,9 +276,54 @@ assert(
 Layout.INTERMISSION_BIG_WORD_STATE = "2V2R"
 
 --- Font style of the word written after a click: the biggest one for the BOSS
---- state, the large one for the two others.
-Layout.WORD_STYLE = "large"
-Layout.WORD_STYLE_BIG = "huge"
+--- state, the explicit 44 px one for the two others (see WORD_SIZE above). These
+--- keys index Layout.FONTS, and their height IS the size handed to SetFont.
+Layout.WORD_STYLE = "word"
+Layout.WORD_STYLE_BIG = "wordBig"
+
+--[[ WHAT A PANEL MAY WRITE, AND NOTHING ELSE.
+
+     Every panel built below carries its own id; Layout.violations() then
+     refuses, block by block, any TEXT whose id is not in the allow-list of that
+     panel. This is the structural answer to the raid-lead report "there is still
+     a title at the top of the intermission panel": the intermission panel may
+     write the SIMULATION banner (a rehearsal only) and the ONE word, the
+     placement panel may write NOTHING AT ALL, and any other text block is
+     reported by the existing layout tests.
+]]
+Layout.PANEL = {
+    MAIN = "main",
+    INTERMISSION = "intermission",
+    PLACEMENT = "placement",
+    PING_HELP = "pingHelp",
+}
+--- The ONLY text blocks the intermission panel may contain: the SIMULATION banner
+--- (rehearsal only, it is what tells a rehearsal from a real fight) and the ONE
+--- word written after a click.
+Layout.INTERMISSION_TEXT_IDS = {
+    simBanner = true,
+    word = true,
+    wordBig = true,
+}
+--- The placement panel writes NOTHING: the illustration speaks for itself.
+Layout.PLACEMENT_TEXT_IDS = {}
+--- The ONLY block of the placement panel, and the only kind it may use.
+Layout.PLACEMENT_BLOCK_ID = "placement"
+
+--- The allow-list of text ids of a panel (nil when the panel has none: a
+--- hand-made layout is never constrained). Layout.violations() applies it, so a
+--- title can not silently come back on a panel that must not have one.
+--- @param panel string|nil
+--- @return table|nil allow-list (id -> true)
+function Layout.panelTextIds(panel)
+    if panel == Layout.PANEL.INTERMISSION then
+        return Layout.INTERMISSION_TEXT_IDS
+    end
+    if panel == Layout.PANEL.PLACEMENT then
+        return Layout.PLACEMENT_TEXT_IDS
+    end
+    return nil
+end
 
 --- THE THEME: the ONLY color values of the addon live here. A color is never
 --- written again in a UI/ file (that is how a green drifts into a different green
@@ -343,15 +512,31 @@ end
      Frame:SetSize.
 ]]
 
---- Size of the image button of a state.
+--- Size of the PICTURE of a state, fitted in Layout.CHOICE_IMAGE_MAX (the card
+--- padding of the style is NOT included: this is what the client draws).
 --- @param state string|nil canonical state ("3V1R" | "2V2R" | "1V3R")
 --- @return number width, number height (0, 0 when the state is unknown)
-function Layout.imageButtonSize(state)
+function Layout.imageSize(state)
     return Textures.displaySize(state, Layout.CHOICE_IMAGE_MAX)
 end
 
+--- Size of the CARD that carries the picture of a state: the picture plus the
+--- padding of the style on both sides (the picture is drawn WHOLE inside the
+--- border, so the card is always a little bigger than the image it holds).
+--- @param state string|nil
+--- @param style string|nil style name (Layout.CHOICE_STYLE by default)
+--- @return number width, number height (0, 0 when the state is unknown)
+function Layout.imageButtonSize(state, style)
+    local width, height = Layout.imageSize(state)
+    if width <= 0 or height <= 0 then
+        return 0, 0
+    end
+    local padding = Layout.cardPadding(style)
+    return round(width + (2 * padding)), round(height + (2 * padding))
+end
+
 --- Font style of the word written after a click: the BIGGEST one for the middle
---- composition, the large one for the others. An unknown state gets the standard
+--- composition, the 44 px one for the others. An unknown state gets the standard
 --- style (never a nil style the client would refuse).
 --- @param state string|nil
 --- @return string style key
@@ -361,6 +546,24 @@ function Layout.wordStyle(state)
         return Layout.WORD_STYLE_BIG
     end
     return Layout.WORD_STYLE
+end
+
+--- Size, in pixels, of the word of a state: THE single source of the font size
+--- (the rendering layer hands this to SetFont, and nothing else). One constant
+--- per word, never a value read from the client.
+--- @param state string|nil
+--- @return number size in pixels
+function Layout.wordFontSize(state)
+    return font(Layout.wordStyle(state)).height
+end
+
+--- File and size the rendering layer hands to FontString:SetFont for the word of
+--- a state. Both come from THIS file, once: no Blizzard font object (its real
+--- size cannot be read out of game) and no literal in UI/.
+--- @param state string|nil
+--- @return string fontFile, number size
+function Layout.wordFont(state)
+    return Layout.WORD_FONT_FILE, Layout.wordFontSize(state)
 end
 
 --- Id of the element carrying the word: the two font sizes are two distinct
@@ -401,11 +604,11 @@ local function fixedWidth(raw, gap)
     end
     if raw.kind == "image" then
         -- An image button can not be wrapped either: the frame is at least as
-        -- wide as the picture it draws.
+        -- wide as the card it draws (the picture plus its padding).
         if type(raw.width) == "number" then
             return raw.width
         end
-        return Layout.imageButtonSize(raw.state)
+        return Layout.imageButtonSize(raw.state, raw.style)
     end
     if raw.kind == "row" then
         local items = raw.items or {}
@@ -422,6 +625,13 @@ local function fixedWidth(raw, gap)
             end
         end
         return total + ((#items - 1) * (tonumber(raw.gap) or gap))
+    end
+    if raw.kind == "text" and raw.nowrap then
+        -- A text that must NEVER be wrapped nor truncated (THE WORD written
+        -- after a click: "Chasseur" and "BOSS" have to be readable whole). The
+        -- frame grows until the widest estimated line fits, so the pure layout
+        -- proves the word can not be cut in either language.
+        return Layout.textWidth(raw.text, raw.style)
     end
     return nil
 end
@@ -490,6 +700,16 @@ local function measureBlock(raw, frameWidth, marginX, gap)
         align = raw.align or "left",
         style = raw.style or Layout.FONT_FALLBACK,
         text = raw.text,
+        -- OPTIONAL explicit font (file + size) of a text block: the rendering
+        -- layer hands exactly these two values to FontString:SetFont. The ONE
+        -- word written after a click uses it (Core decides the size, UI applies
+        -- it): no Blizzard font object, whose size we could not verify.
+        fontFile = raw.fontFile,
+        fontSize = raw.fontSize,
+        -- A text that must NEVER be wrapped nor truncated: the block carries the
+        -- flag so the rendering layer (and the tests) can SEE that the word stays
+        -- on ONE line - the frame is widened until it fits (fixedWidth above).
+        nowrap = raw.nowrap == true or nil,
     }
     if block.kind == "row" then
         block.width = frameWidth
@@ -508,23 +728,52 @@ local function measureBlock(raw, frameWidth, marginX, gap)
         return block
     end
     if block.kind == "image" then
-        -- AN IMAGE BUTTON: the picture IS the button (no label at all - the raid
-        -- lead's screenshots replaced the written composition). Its size comes
-        -- from the declared size of the texture, unless the caller measured it
-        -- itself; both are floored at 1 px so nothing can be handed as a size to
-        -- Frame:SetSize.
+        -- A CARD: the picture IS the content (no label at all - the raid lead's
+        -- screenshots replaced the written composition), inside a thin border
+        -- described by Layout.BUTTON_STYLES. The block therefore carries:
+        --   - imageWidth/imageHeight : the PICTURE, whose aspect ratio is the
+        --     one of the texture on disk (asserted by violations());
+        --   - padding                : the space the style keeps between the
+        --     border and the picture;
+        --   - width/height           : the CARD (picture + 2 x padding), i.e.
+        --     exactly what Frame:SetSize receives;
+        --   - style                  : the NAME of the style table to apply, so
+        --     the rendering layer never decides how a card looks;
+        --   - sourceWidth/sourceHeight : the declared size of the texture ON
+        --     DISK, so the aspect check below needs no file access.
+        local styleName = type(raw.style) == "string" and raw.style or Layout.CHOICE_STYLE
+        local padding = Layout.cardPadding(styleName)
         local state = Textures.resolveState(raw.state)
-        local width, height = Layout.imageButtonSize(state)
-        if type(raw.width) == "number" then
-            width = raw.width
+        local imageWidth, imageHeight
+        if type(raw.imageWidth) == "number" and type(raw.imageHeight) == "number" then
+            imageWidth, imageHeight = raw.imageWidth, raw.imageHeight
+        else
+            imageWidth, imageHeight = Layout.imageSize(state)
+            if type(raw.imageWidth) == "number" then
+                imageWidth = raw.imageWidth
+            end
+            if type(raw.imageHeight) == "number" then
+                imageHeight = raw.imageHeight
+            end
         end
-        if type(raw.height) == "number" then
-            height = raw.height
+        local sourceWidth, sourceHeight
+        if type(raw.sourceWidth) == "number" and type(raw.sourceHeight) == "number" then
+            sourceWidth, sourceHeight = raw.sourceWidth, raw.sourceHeight
+        elseif state ~= nil then
+            sourceWidth, sourceHeight = Textures.sizeFor(state)
         end
         block.state = state
+        block.style = styleName
+        block.padding = padding
         block.texture = type(raw.texture) == "string" and raw.texture or Textures.pathFor(state)
-        block.width = math.max(1, round(width))
-        block.height = math.max(1, round(height))
+        block.sourceWidth = sourceWidth
+        block.sourceHeight = sourceHeight
+        -- Both sizes are floored at 1 px so nothing can be handed as a size to
+        -- Frame:SetSize.
+        block.imageWidth = math.max(1, round(imageWidth))
+        block.imageHeight = math.max(1, round(imageHeight))
+        block.width = type(raw.width) == "number" and raw.width or (block.imageWidth + (2 * padding))
+        block.height = type(raw.height) == "number" and raw.height or (block.imageHeight + (2 * padding))
         if block.align == "center" then
             block.point = "TOP"
             block.x = 0
@@ -629,6 +878,11 @@ function Layout.build(spec)
     end
 
     return {
+        -- The panel this layout belongs to (Layout.PANEL): violations() uses it
+        -- to refuse any text block the panel is not allowed to write (the
+        -- "no leftover title" rule). nil for a hand-made layout: the text rule
+        -- is then simply not applied.
+        panel = source.panel,
         width = round(width),
         height = round(height),
         marginX = marginX,
@@ -722,7 +976,7 @@ local function underCross(layout, left, right, top, bottom)
 end
 
 --- Every layout defect, as readable strings (empty table = the layout is sound).
---- Three rules, the three families of bugs reported in game:
+--- Four rules, the four families of bugs reported in game:
 ---   - no block may be drawn without an anchor point (a nil point raised in the
 ---     client and the blocks placed after the faulty one never appeared: the
 ---     composition buttons and the OK button were simply missing on screen);
@@ -730,7 +984,10 @@ end
 ---     the SIMULATION banner);
 ---   - no block may run over the borders of the frame, nor under the close
 ---     cross, no unbreakable word may be wider than its block, and no button
----     label may be wider or taller than the button it is drawn in.
+---     label may be wider or taller than the button it is drawn in;
+---   - A PANEL ONLY WRITES WHAT IT IS ALLOWED TO (Layout.panelTextIds): any text
+---     block out of the allow-list of the panel - a leftover title - is reported,
+---     and the placement panel may contain nothing but its illustration.
 --- @param layout table
 --- @return table array of strings
 function Layout.violations(layout)
@@ -740,14 +997,46 @@ function Layout.violations(layout)
         return problems
     end
     local blocks = layout.blocks
+    local panelTextIds = Layout.panelTextIds(layout.panel)
     local function report(message)
         problems[#problems + 1] = message
+    end
+
+    -- THE PLACEMENT PANEL: ONE block, the illustration. No button, no row, no
+    -- label - the player is placing a WINDOW, not filling a form.
+    if layout.panel == Layout.PANEL.PLACEMENT then
+        if #blocks ~= 1 then
+            report(string.format("the placement panel must hold exactly ONE block (got %d)", #blocks))
+        end
+        for index = 1, #blocks do
+            local block = blocks[index]
+            if block.id ~= Layout.PLACEMENT_BLOCK_ID then
+                report(string.format("unexpected block '%s' on the placement panel", block.id))
+            end
+            if block.kind ~= "image" then
+                report(
+                    string.format("the placement panel may only draw its illustration (block '%s' is a %s)", block.id, tostring(block.kind))
+                )
+            end
+        end
     end
 
     for index = 1, #blocks do
         local block = blocks[index]
         if not isAnchored(block) then
             report(string.format("block '%s' has no anchor point", block.id))
+        end
+        -- A TITLE CAN NOT COME BACK: the panel only writes the text blocks its
+        -- allow-list names. `layout.panel` is nil for a hand-made layout, which
+        -- is then not constrained (the rule targets the real surfaces).
+        if block.kind == "text" and panelTextIds ~= nil and panelTextIds[block.id] ~= true then
+            report(
+                string.format(
+                    "text block '%s' is not allowed on the '%s' panel (a title must not come back)",
+                    block.id,
+                    tostring(layout.panel)
+                )
+            )
         end
         local left, right = Layout.bounds(block, layout)
         if left < 0 or right > layout.width then
@@ -796,29 +1085,42 @@ function Layout.violations(layout)
                 report(labelIssues[issue])
             end
         elseif block.kind == "image" then
-            -- AN IMAGE BUTTON with no picture is an invisible button: the player
-            -- would click on an empty rectangle during an intermission. A button
+            -- A CARD with no picture is an invisible target: the player would
+            -- click on an empty rectangle during an intermission. A picture
             -- whose aspect ratio no longer matches its texture is a STRETCHED
             -- orb, i.e. a composition that can be misread: both are defects.
             if type(block.texture) ~= "string" or block.texture == "" then
-                report(string.format("image button '%s' has no texture", block.id))
+                report(string.format("image '%s' has no texture", block.id))
             end
-            if block.width <= 0 or block.height <= 0 then
-                report(string.format("image button '%s' has no usable size", block.id))
-            end
-            local declaredWidth, declaredHeight = Textures.sizeFor(block.state)
-            if declaredWidth ~= nil and declaredHeight ~= nil and block.height > 0 then
-                local drawn = block.width / block.height
-                local expected = declaredWidth / declaredHeight
-                if math.abs(drawn - expected) > Layout.ASPECT_TOLERANCE then
-                    report(
-                        string.format(
-                            "image button '%s' does not keep the aspect ratio of its texture (%.3f instead of %.3f)",
-                            block.id,
-                            drawn,
-                            expected
+            local imageWidth = tonumber(block.imageWidth)
+            local imageHeight = tonumber(block.imageHeight)
+            if imageWidth == nil or imageHeight == nil or imageWidth <= 0 or imageHeight <= 0 then
+                report(string.format("image '%s' has no usable size", block.id))
+            elseif block.width <= 0 or block.height <= 0 then
+                report(string.format("card '%s' has no usable size", block.id))
+            else
+                -- The picture is drawn WHOLE: the card must be at least the
+                -- picture plus the padding of its style, otherwise the border
+                -- would eat a slice of the orb.
+                local padding = tonumber(block.padding) or 0
+                if block.width < (imageWidth + (2 * padding)) or block.height < (imageHeight + (2 * padding)) then
+                    report(string.format("card '%s' is smaller than its picture plus its padding", block.id))
+                end
+                -- The PICTURE keeps the aspect ratio of the file on disk.
+                local declaredWidth, declaredHeight = tonumber(block.sourceWidth), tonumber(block.sourceHeight)
+                if declaredWidth ~= nil and declaredHeight ~= nil and declaredHeight > 0 then
+                    local drawn = imageWidth / imageHeight
+                    local expected = declaredWidth / declaredHeight
+                    if math.abs(drawn - expected) > Layout.ASPECT_TOLERANCE then
+                        report(
+                            string.format(
+                                "image '%s' does not keep the aspect ratio of its texture (%.3f instead of %.3f)",
+                                block.id,
+                                drawn,
+                                expected
+                            )
                         )
-                    )
+                    end
                 end
             end
         elseif block.text ~= nil then
@@ -901,23 +1203,26 @@ function Layout.mainPanel(spec)
             gapBefore = id == "lock" and Layout.MAIN_PANEL_UTILITY_GAP or nil,
         }
     end
-    return Layout.build({ minWidth = Layout.MAIN_PANEL_WIDTH, blocks = blocks })
+    return Layout.build({ panel = Layout.PANEL.MAIN, minWidth = Layout.MAIN_PANEL_WIDTH, blocks = blocks })
 end
 
 --- Intermission panel (the combat surface). The raid lead's request, applied
---- as-is: BEFORE a click the panel shows the three IMAGE BUTTONS stacked
---- VERTICALLY (frozen order) and NOTHING ELSE - no title, no state line, no role
---- line, no action line, no key reminder; the close cross and the dragging are
---- chrome, not blocks. AFTER a click the three buttons give way to the ONE word
---- of the composition ("Ping" / "BOSS" / "Chasseur") plus CORRECT (and OK, in
---- placement mode).
+--- as-is: BEFORE a click the panel shows the three CARDS carrying the orb
+--- screenshots, stacked VERTICALLY (frozen order) and NOTHING ELSE - no title,
+--- no state line, no role line, no action line, no key reminder; the close cross
+--- and the dragging are chrome, not blocks. AFTER a click the three cards give
+--- way to the ONE word of the composition ("Ping" / "BOSS" / "Chasseur") plus
+--- CORRECT.
 --- The SIMULATION banner is the ONE text left, and only during a rehearsal (the
 --- raid lead wants the panel unmistakably marked as a simulation).
+--- The panel is WIDENED when the word needs it: `nowrap` makes the word an
+--- unwrappable element for build(), so "Chasseur" (FR) and "BOSS" (the biggest
+--- element of the window) are drawn whole, never truncated, in both languages.
 --- @param spec table|nil {
 ---   bannerLines = array|nil (SIMULATION banner: only during a rehearsal),
----   showChoices = boolean|nil (the three image buttons),
+---   showChoices = boolean|nil (the three image cards),
 ---   wordText = string|nil, wordState = string|nil (the one word + its state),
----   showRedo = boolean|nil, showOk = boolean|nil }
+---   showRedo = boolean|nil }
 function Layout.intermissionPanel(spec)
     local opts = type(spec) == "table" and spec or {}
     local blocks = {}
@@ -933,42 +1238,50 @@ function Layout.intermissionPanel(spec)
     end
 
     if opts.showChoices then
-        -- THE THREE IMAGE BUTTONS, STACKED VERTICALLY in the FROZEN order of
+        -- THE THREE CARDS, STACKED VERTICALLY in the FROZEN order of
         -- Layout.INTERMISSION_CHOICE_ORDER (3V1R on top, then 2V2R, then 1V3R).
         -- Each one draws its OWN screenshot (the texture of its state, resolved
-        -- by Core/Textures.lua) and carries NO label: a written composition
-        -- beside a picture of the same composition is exactly the noise the raid
-        -- lead asked to remove.
+        -- by Core/Textures.lua) inside the bare border of Layout.CHOICE_STYLE
+        -- and carries NO label: a written composition beside a picture of the
+        -- same composition is exactly the noise the raid lead asked to remove.
         for index = 1, #Layout.INTERMISSION_CHOICE_ORDER do
-            local state = Layout.INTERMISSION_CHOICE_ORDER[index]
-            blocks[#blocks + 1] = { id = "choice" .. index, kind = "image", align = "center", state = state }
+            blocks[#blocks + 1] = {
+                id = "choice" .. index,
+                kind = "image",
+                align = "center",
+                state = Layout.INTERMISSION_CHOICE_ORDER[index],
+                style = Layout.CHOICE_STYLE,
+            }
         end
     end
 
-    -- THE ONE WORD. Its size and its block id come from the STATE (the middle
-    -- composition is the big one), never from the text itself: the rendering
-    -- layer draws the word in the FontString Core names.
+    -- THE ONE WORD. Its size, its font FILE and its block id come from the STATE
+    -- (the middle composition is the big one), never from the text itself: the
+    -- rendering layer draws the word in the FontString Core names, with the
+    -- font size Core declares - a Blizzard font object would hide that size.
+    -- `nowrap` means: the frame grows until this word fits whole.
     if type(opts.wordText) == "string" and opts.wordText ~= "" then
+        local fontFile, fontSize = Layout.wordFont(opts.wordState)
         blocks[#blocks + 1] = {
             id = Layout.wordBlockId(opts.wordState),
             kind = "text",
             align = "center",
             style = Layout.wordStyle(opts.wordState),
             text = opts.wordText,
+            nowrap = true,
+            fontFile = fontFile,
+            fontSize = fontSize,
         }
     end
 
-    -- Action row: CORRECT on the left, OK (placement mode only) on the right.
-    -- NO Close button any more: the close cross ("X", chrome, always present)
-    -- closes the panel in every mode, and a second way to close it was one more
-    -- sentence on a surface read during a fight. The labels are MEASURED, never a
-    -- fixed width ("OK" / "REDO" / "CORRIGER" all fit, in both languages).
+    -- Action row: CORRECT, and nothing else. THERE IS NO OK BUTTON ANY MORE: the
+    -- raid lead asked the placement panel to show the illustration alone (no
+    -- button at all), and the placement is validated by `/gr inter ok` - which
+    -- saves the position exactly like the former button did. The close cross
+    -- ("X", chrome, always present) closes/cancels the panel in every mode.
     local actions = {}
     if opts.showRedo then
         actions[#actions + 1] = { id = "redo", align = "left", text = Locale.t("ui.redo") }
-    end
-    if opts.showOk then
-        actions[#actions + 1] = { id = "ok", align = "right", text = Locale.t("ui.ok") }
     end
     if #actions > 0 then
         local actionWidth, actionHeight = Layout.BUTTON_MIN_WIDTH, Layout.BUTTON_MIN_HEIGHT
@@ -988,7 +1301,42 @@ function Layout.intermissionPanel(spec)
         blocks[#blocks + 1] = { id = "actions", kind = "row", gap = Layout.CHOICE_GAP, items = actions }
     end
 
-    return Layout.build({ minWidth = Layout.INTERMISSION_WIDTH, blocks = blocks })
+    return Layout.build({ panel = Layout.PANEL.INTERMISSION, minWidth = Layout.INTERMISSION_WIDTH, blocks = blocks })
+end
+
+--- PLACEMENT panel (`/gr inter place`, the PLACE button of the main panel): the
+--- illustration the raid lead delivered, AND NOTHING ELSE.
+--- WHY: the placement step exists so the player SEES the size and the spot the
+--- window will occupy during the fight. A button row and a written procedure
+--- turned that screen into a form; the picture alone is the reference, and the
+--- frame it is drawn in IS the frame the fight will show.
+--- The panel stays DRAGGABLE (position saved on drag stop), the close cross
+--- CANCELS the placement and `/gr inter ok` validates it - no block needed for
+--- either. Layout.violations() refuses any other block on this panel, so a
+--- button or a title can never come back without a test failing.
+--- @return table the layout (one image block, nothing else)
+function Layout.placementPanel()
+    local imageWidth, imageHeight = Textures.placementDisplaySize(Layout.PLACEMENT_IMAGE_MAX)
+    local padding = Layout.cardPadding(Layout.CHOICE_STYLE)
+    return Layout.build({
+        panel = Layout.PANEL.PLACEMENT,
+        marginTop = Layout.PLACEMENT_MARGIN_TOP,
+        blocks = {
+            {
+                id = Layout.PLACEMENT_BLOCK_ID,
+                kind = "image",
+                align = "center",
+                style = Layout.CHOICE_STYLE,
+                texture = Textures.placementPath(),
+                imageWidth = imageWidth,
+                imageHeight = imageHeight,
+                sourceWidth = Textures.PLACEMENT_SIZE[1],
+                sourceHeight = Textures.PLACEMENT_SIZE[2],
+                width = imageWidth + (2 * padding),
+                height = imageHeight + (2 * padding),
+            },
+        },
+    })
 end
 
 --- Ping help window (a SHORT information frame: how to bind the ping keys and
@@ -1013,7 +1361,7 @@ function Layout.pingHelpPanel(spec)
         width = closeWidth,
         height = closeHeight,
     }
-    return Layout.build({ minWidth = Layout.PING_HELP_WIDTH, blocks = blocks })
+    return Layout.build({ panel = Layout.PANEL.PING_HELP, minWidth = Layout.PING_HELP_WIDTH, blocks = blocks })
 end
 
 return Layout
