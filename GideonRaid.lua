@@ -231,26 +231,43 @@ local function describeList(text)
     return text
 end
 
---- /gr boss (no argument): WHAT WILL OPEN AT THE NEXT PULL - the auto-open target
---- (allow-list of encounter ids + optional names), the manual override and the
---- encounter id log.
+--- THE DELIVERED TARGET of the addon (`Core/Config.lua`), in one line: the encounter
+--- id and the two names are MEASURED values shipped with the addon, so the raid lead
+--- always sees what a fresh guild member gets WITHOUT typing anything.
+--- @return string
+local function deliveredLine()
+    return ns.Locale.format("cmd.boss.delivered", ns.Config.deliveredIdsText(), ns.Config.deliveredNamesText())
+end
+
+--- `/gr boss` (no argument): WHAT WILL OPEN AT THE NEXT PULL - the EFFECTIVE
+--- auto-open target (the delivered default of the addon plus whatever a player
+--- added, or nothing after an explicit `/gr boss clear`), where it comes from, the
+--- manual override and the encounter id log.
 local function printBossTarget()
     local c = ns.Config.resolveIntermission(type(_G.GideonRaidDB) == "table" and _G.GideonRaidDB.intermission or nil)
     local word = ns.Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled")
     ns.UI.Print(ns.Locale.format("cmd.boss.status", ns.BossFilter.targetSummary(c), word))
+    ns.UI.Print(ns.BossFilter.sourceLine(c))
+    ns.UI.Print(deliveredLine())
     if not ns.BossFilter.hasTarget(c) then
-        -- SAFE DEFAULT: say it HERE too, with the exact procedure.
+        -- NOTHING will open: say it HERE too, with the exact procedure (this is the
+        -- state `/gr boss clear` leaves the player in - a deliberate choice).
         ns.UI.Print(ns.Locale.t("cmd.boss.noTarget"))
     elseif c.overrideEncounter then
         ns.UI.Print(ns.Locale.t("cmd.boss.overrideArmed"))
     end
 end
 
---- /gr boss <id>: ADDS one encounter id to the persisted allow-list (the PRIMARY
---- criterion: `ENCOUNTER_START` arg1, an integer, identical in every language).
+--- /gr boss <id>: ADDS one encounter id to the entries persisted for the player
+--- (the PRIMARY criterion: `ENCOUNTER_START` arg1, an integer, identical in every
+--- language). The EFFECTIVE target is `Config.resolveIntermission().bossIds`: the
+--- delivered default of the addon PLUS these entries, so adding an id never removes
+--- the target the addon ships with (and `/gr boss 3445` is idempotent). An explicit
+--- `/gr boss clear` is NOT undone by an addition: the marker stays, so the delivered
+--- default does not come back behind the back of the player.
 --- A value that is not a positive integer is REFUSED without persisting anything
 --- (same mechanics as /gr lang, /gr ping and /gr sound): nothing is invented, and
---- the id of the target boss is NOT guessed here - `/gr idlog on` reads it in game.
+--- the id of the target boss is never guessed here - `/gr idlog on` measures it.
 local function addBossTarget(raw)
     local id = ns.BossFilter.resolveId(raw)
     if id == nil then
@@ -288,8 +305,11 @@ local function addBossName(raw)
     return name
 end
 
---- /gr boss clear: empties BOTH lists. Back to the SAFE DEFAULT: nothing opens by
---- itself until a target is configured again.
+--- /gr boss clear: empties BOTH lists AND stamps the explicit-clear marker, so the
+--- DELIVERED default of the addon (encounter id + the two names) is dropped too.
+--- From then on, nothing opens by itself until a target is added again - the marker
+--- is what keeps "the player emptied the target on purpose" apart from "the addon
+--- was never configured" (which gets the delivered default).
 local function clearBossTarget()
     local block = intermissionBlock()
     if block == nil then
@@ -298,16 +318,21 @@ local function clearBossTarget()
     end
     block.bossIds = {}
     block.bossNames = {}
+    block.bossTargetCleared = true
     ns.UI.Print(ns.Locale.t("cmd.boss.cleared"))
 end
 
---- /gr boss list: the two allow-lists, the state of the manual override and the
---- encounters memorized by the idlog (newest first).
+--- /gr boss list: the two EFFECTIVE allow-lists with the PROVENANCE of each entry
+--- (delivered with the addon / added by a player), where the target comes from, the
+--- delivered default, the state of the manual override and the encounters memorized
+--- by the idlog (newest first).
 local function listBossTarget()
     local db = _G.GideonRaidDB
     local c = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
-    ns.UI.Print(ns.Locale.format("cmd.boss.list.ids", describeList(ns.BossFilter.describeIds(c.bossIds))))
-    ns.UI.Print(ns.Locale.format("cmd.boss.list.names", describeList(ns.BossFilter.describeNames(c.bossNames))))
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.ids", describeList(ns.BossFilter.annotateIds(c.bossIds, c.bossIdsOwn))))
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.names", describeList(ns.BossFilter.annotateNames(c.bossNames, c.bossNamesOwn))))
+    ns.UI.Print(ns.BossFilter.sourceLine(c))
+    ns.UI.Print(deliveredLine())
     ns.UI.Print(ns.Locale.format("cmd.boss.list.override", ns.Locale.t(c.overrideEncounter and "ui.wordEnabled" or "ui.wordDisabled")))
     local rawSeen = nil
     if type(db) == "table" and type(db.intermission) == "table" then
@@ -374,6 +399,11 @@ local function setIdlog(raw)
     return wanted
 end
 
+--- /gr diag: the HEALTH REPORT of the addon, in ONE read-only command (see
+--- Core/Diag.lua and UI.PrintDiag). It reads the SavedVariables, two sound CVars and
+--- - ONLY when the client is already silenced - checks each sound file with
+--- PlaySoundFile; it writes nothing, sends nothing, pings nothing and never makes a
+--- noise in a client whose sound is on.
 local function slashHandler(cmd)
     cmd = (cmd or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     -- Intermission declaration: any form accepted by Core ("3V1R", "2V2R",
@@ -434,6 +464,10 @@ local function slashHandler(cmd)
         printIdlog()
     elseif idlogArg ~= nil then
         setIdlog(idlogArg)
+    elseif cmd == "diag" then
+        -- HEALTH REPORT: sounds + effective target + idlog + ping, in one command.
+        -- Read-only and silent (see UI.PrintDiag / Core/Diag.lua).
+        ns.UI.PrintDiag()
     elseif cmd == "lock" then
         -- The main panel is movable by default; these three commands are the
         -- lock / unlock / reset-position entry points (same effect as the

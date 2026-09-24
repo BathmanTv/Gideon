@@ -66,7 +66,7 @@ describe("chargement de l'addon", function()
 
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(11, #files)
+        assert.are.equal(12, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
@@ -75,16 +75,22 @@ describe("chargement de l'addon", function()
         -- « etat -> fichier de son » du son d'assignation.
         assert.are.equal("Core/Sound.lua", files[3])
         -- Core/BossFilter.lua AVANT Config.lua : Config en resout l'allow-list
-        -- d'ids d'encounter du filtre d'ouverture auto (/gr boss <id>).
+        -- d'ids d'encounter du filtre d'ouverture auto (dont le DEFAUT LIVRE :
+        -- id 3445 + les deux noms, /gr boss <id>).
         assert.are.equal("Core/BossFilter.lua", files[4])
-        assert.are.equal("Core/Config.lua", files[5])
+        -- Core/Diag.lua juste apres BossFilter.lua : il ne depend que de Locale et
+        -- Sound (deja charges) et il porte le rapport de /gr diag. Il ne contient
+        -- AUCUN appel client : c'est UI/Panel.lua qui lui injecte les CVars et les
+        -- reponses de PlaySoundFile.
+        assert.are.equal("Core/Diag.lua", files[5])
+        assert.are.equal("Core/Config.lua", files[6])
         -- Core/Simulation.lua APRES Intermission.lua (il reutilise ses etats et
         -- ses libelles), Core/Layout.lua EN DERNIER des Core/ (il mesure les
         -- libelles), puis la couche de rendu (UI/) qui applique le tout.
-        assert.are.equal("Core/Simulation.lua", files[8])
-        assert.are.equal("Core/Layout.lua", files[9])
-        assert.are.equal("UI/Panel.lua", files[10])
-        assert.are.equal("UI/Intermission.lua", files[11])
+        assert.are.equal("Core/Simulation.lua", files[9])
+        assert.are.equal("Core/Layout.lua", files[10])
+        assert.are.equal("UI/Panel.lua", files[11])
+        assert.are.equal("UI/Intermission.lua", files[12])
     end)
 
     it("expose toutes les couches attendues", function()
@@ -92,6 +98,7 @@ describe("chargement de l'addon", function()
         assert.is_table(ns.Sound)
         assert.is_table(ns.Pairing)
         assert.is_table(ns.Config)
+        assert.is_table(ns.Diag)
         assert.is_table(ns.Intermission)
         assert.is_table(ns.Simulation)
         assert.is_table(ns.Layout)

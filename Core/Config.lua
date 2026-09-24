@@ -58,6 +58,38 @@ Config.DEFAULT_LEAD_SECONDS = 2
 --- SavedVariables must never produce an unbounded loop).
 Config.MAX_SCHEDULE_ENTRIES = 12
 
+--- ENCOUNTER ID OF THE TARGET BOSS, DELIVERED WITH THE ADDON (raid-lead decision):
+--- the intermission panel opens on this boss for EVERY player of the guild, with no
+--- command to type. MEASURED IN GAME by the raid lead on 2026-09-24, heroic pull
+--- with 20 players (`/gr idlog on`):
+---   encounter seen: id=3445  name=Sentinelles inhumées  difficulty=15  group=20
+--- `ENCOUNTER_START` arg1 is an INTEGER, identical on every client whatever the
+--- game language: it is the PRIMARY criterion of the auto-open filter
+--- (`Core/BossFilter.lua`, `/gr boss <id>` adds more ids).
+Config.DEFAULT_BOSS_IDS = { 3445 }
+
+--- NAMES OF THE TARGET BOSS, as a SECONDARY criterion (a SAFETY NET: the id above
+--- is what decides, a name never opens the panel on its own when the id of the
+--- encounter is readable). TWO names, because the encounter name is translated by
+--- the client and both clients are served:
+---   - "Entombed Sentinels"   : the official English name;
+---   - "Sentinelles inhumées" : the FRENCH name, copied EXACTLY from the idlog line
+---     measured in game on 2026-09-24 (cf. Config.DEFAULT_BOSS_IDS). THE ACCENT IS
+---     PART OF THE STRING: this file is UTF-8 and the name is compared
+---     case-insensitively as-is, never translated nor re-accented.
+--- `/gr boss name <text>` adds more names.
+Config.DEFAULT_BOSS_NAMES = { "Entombed Sentinels", "Sentinelles inhumées" }
+
+--- The DIFFICULTY IDS of the target boss, documented for the raid lead. The addon
+--- DELIBERATELY does not filter on the difficulty: the raid lead plays Heroic (15)
+--- today and Mythic (16) later, and EVERY difficulty must open the panel. The
+--- difficulty an encounter was pulled on is only LOGGED by the idlog - it NEVER
+--- takes part in the decision. If a difficulty filter is ever asked for,
+--- `BossFilter.evaluate` is the ONE place to add it.
+---   https://warcraft.wiki.gg/wiki/DifficultyID  (retail)
+---   14 = Raid Normal      15 = Raid Heroic     16 = Raid Mythic     17 = Raid LFR
+Config.BOSS_DIFFICULTIES = { 14, 15, 16, 17 }
+
 --- Anchor points accepted when reading a PERSISTED panel position. A hand-edited
 --- SavedVariables holding an unknown point name would make the client raise on
 --- SetPoint: the resolver only ever returns a value from this list.
@@ -118,14 +150,23 @@ function Config.defaultIntermission()
         -- composition. /gr sound on|off, /gr sound test 1v3r|2v2r|3v1r.
         soundEnabled = Sound.DEFAULT_ENABLED,
         -- AUTO-OPEN FILTER (see Core/BossFilter.lua): WHICH boss may open the
-        -- panel by itself. SAFE DEFAULT: an EMPTY allow-list means NO automatic
-        -- opening at all - the panel used to open on ANY boss (critical bug).
-        -- `/gr boss <id>` fills the ids (PRIMARY criterion: ENCOUNTER_START arg1,
-        -- an integer, identical in every language), `/gr boss name <text>` fills
-        -- the names (SECONDARY, depends on the client language: empty by
-        -- default, no translation ever guessed).
+        -- panel by itself. The DELIVERED default (Config.DEFAULT_BOSS_IDS /
+        -- Config.DEFAULT_BOSS_NAMES: encounter id 3445 + the two names of the
+        -- target boss) applies as soon as the player has NOT explicitly cleared the
+        -- target, so the panel opens on Entombed Sentinels for the whole guild with
+        -- no command typed at all.
+        -- These two lists hold ONLY what a PLAYER added (`/gr boss <id>`, `/gr boss
+        -- name <text>`); the EFFECTIVE target (delivered default + these entries)
+        -- is computed at read time by Config.resolveIntermission.
         bossIds = {},
         bossNames = {},
+        -- `/gr boss clear` MARKER. An exact `true` means the player EXPLICITLY
+        -- emptied the target, so the DELIVERED default must NOT come back: only
+        -- what the player adds afterwards counts (an explicit clear always wins
+        -- over the delivered default). An ABSENT field (a fresh install, an older
+        -- SavedVariables) is `false`: never configured = the delivered default
+        -- applies.
+        bossTargetCleared = false,
         -- `/gr idlog on|off`: prints and memorizes the encounters seen, which is
         -- how the real id of the target boss is captured in game.
         idlog = false,
@@ -368,12 +409,60 @@ function Config.recordSeen(db, entry)
     return stored
 end
 
+--- Raw text of the DELIVERED default target, for the chat (`/gr boss`, `/gr diag`):
+--- "3445" and "Entombed Sentinels, Sentinelles inhumées". NO display literal here:
+--- the labels around these strings come from Core/Locale.lua.
+--- @param list table|nil list of ids or names
+--- @return string
+local function joinText(list)
+    local parts = {}
+    if type(list) == "table" then
+        for index = 1, #list do
+            parts[#parts + 1] = tostring(list[index])
+        end
+    end
+    return table.concat(parts, ", ")
+end
+
+--- The DELIVERED encounter id(s) of the target boss, as text.
+--- @return string
+function Config.deliveredIdsText()
+    return joinText(Config.DEFAULT_BOSS_IDS)
+end
+
+--- The DELIVERED names of the target boss, as text (accents preserved).
+--- @return string
+function Config.deliveredNamesText()
+    return joinText(Config.DEFAULT_BOSS_NAMES)
+end
+
 --- PURE resolution of the module configuration: clamps, filters inconsistent
 --- types, never keeps a value that cannot be rendered.
 --- @param raw table|nil raw content of GideonRaidDB.intermission
 --- @return table usable configuration
 function Config.resolveIntermission(raw)
     local out = Config.defaultIntermission()
+    -- AUTO-OPEN FILTER - THE EFFECTIVE TARGET, resolved FIRST and even when the
+    -- whole block is absent, because it is what the panel opens on: the DELIVERED
+    -- default of the addon (`Config.DEFAULT_BOSS_IDS` / `Config.DEFAULT_BOSS_NAMES`)
+    -- added to the entries a player typed (`/gr boss <id>`, `/gr boss name <text>`),
+    -- UNLESS the player explicitly cleared the target (`/gr boss clear` sets
+    -- `bossTargetCleared`, which drops the delivered default). Nothing is invented
+    -- here: every value comes from the constants above or from the SavedVariables.
+    --   out.bossIds / out.bossNames ......... EFFECTIVE target (what decides)
+    --   out.bossIdsOwn / out.bossNamesOwn ... what the PLAYER added (provenance)
+    --   out.bossTargetCleared ............... explicit `/gr boss clear` marker
+    --   out.bossTargetSource ................ where the target comes from
+    local target = BossFilter.resolveTarget(raw, {
+        ids = Config.DEFAULT_BOSS_IDS,
+        names = Config.DEFAULT_BOSS_NAMES,
+    })
+    out.bossIds = target.ids
+    out.bossNames = target.names
+    out.bossIdsOwn = target.ownIds
+    out.bossNamesOwn = target.ownNames
+    out.bossTargetCleared = target.cleared
+    out.bossTargetSource = target.source
     if type(raw) ~= "table" then
         return out
     end
@@ -412,11 +501,10 @@ function Config.resolveIntermission(raw)
     -- "enabled", no schema bump is needed.
     out.soundEnabled = Sound.resolveEnabled(raw.soundEnabled)
 
-    -- AUTO-OPEN FILTER: pure and bounded resolution. An absent or hand-edited
-    -- list resolves to an EMPTY list, which is the SAFE DEFAULT: nothing opens by
-    -- itself. No id and no name is ever invented here.
-    out.bossIds = BossFilter.resolveIds(raw.bossIds)
-    out.bossNames = BossFilter.resolveNames(raw.bossNames)
+    -- AUTO-OPEN FILTER: the EFFECTIVE allow-lists were computed at the very top of
+    -- this function (delivered default + the entries of the player, or the entries
+    -- of the player alone after an explicit `/gr boss clear`): nothing to redo here,
+    -- and nothing is ever invented.
     -- IDLOG: only an exact `true` turns it on (it WRITES on every encounter).
     out.idlog = BossFilter.enabledOf(raw.idlog)
     -- MANUAL OVERRIDE: only an exact `true` arms it; it is consumed (set back to

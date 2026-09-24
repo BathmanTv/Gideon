@@ -423,6 +423,121 @@ function UI.PrintStatus()
     UI.Print(Locale.format("status.ok", #assignment.pairs))
 end
 
+--- ---------------------------------------------------------------------------
+--- /gr diag - HEALTH REPORT OF THE ADDON (read-only)
+---
+--- ONE command that answers "is the addon healthy right now?" before a pull: the
+--- four sound files (loaded and playable?), the EFFECTIVE auto-open target and
+--- where it comes from, the idlog state and the ping policy. The content and every
+--- rule live in Core/Diag.lua (PURE); this layer only READS the client (two sound
+--- CVars, one PlaySoundFile per file) and prints the lines Core computed.
+---
+--- NO NOISE, EVER: the audio probe is started ONLY when Core/Diag's silence gate
+--- proves it cannot be heard (Master channel ENABLED + volume exactly 0). With the
+--- sound on, `/gr diag` plays NOTHING and says so, with the exact procedure to make
+--- the check possible - an addon must never make noise in a raid.
+--- ---------------------------------------------------------------------------
+
+--- Client CVars the silence gate needs (API:GetCVar). They are READ ONLY: this
+--- diagnostic never changes a setting of the player.
+local DIAG_ALL_SOUND_CVAR = "Sound_EnableAllSound"
+local DIAG_VOLUME_CVAR = "Sound_MasterVolume"
+
+--- Reads ONE client CVar, read-only and under pcall. Out of game (no GetCVar, test
+--- harness) or on a client that refuses the name, the value is nil and the probe is
+--- then NOT started: an unknown sound state never makes us play anything.
+--- 12.x still exposes the global `GetCVar` alias AND `C_CVar.GetCVar`: both are
+--- tried, so the diagnostic works whichever one this client serves. Nothing is ever
+--- SET (no SetCVar anywhere in the addon): the player's settings are only read.
+--- @param name string CVar name
+--- @return string|nil
+local function readCVar(name)
+    if type(_G.GetCVar) == "function" then
+        local ok, value = pcall(_G.GetCVar, name)
+        if ok and type(value) == "string" then
+            return value
+        end
+    end
+    local handle = _G.C_CVar
+    if type(handle) == "table" and type(handle.GetCVar) == "function" then
+        local ok, value = pcall(handle.GetCVar, name)
+        if ok and type(value) == "string" then
+            return value
+        end
+    end
+    return nil
+end
+
+--- Probes ONE sound file WITHOUT emitting any noise, and reports whether the client
+--- WOULD have played it. `PlaySoundFile` returns `willPlay`
+--- (https://warcraft.wiki.gg/wiki/API:PlaySoundFile): true when the file is loaded
+--- and the channel accepts the playback, nil/false otherwise (missing file, file
+--- added after the client started, refused playback).
+--- THE CALL ONLY EVER HAPPENS ON A SILENT CHANNEL: Core/Diag.probeGate has already
+--- proven that the Master channel is ENABLED (so the answer means something) AND
+--- that its volume is 0 (so nothing can be heard). Under pcall, like every other
+--- client call of this addon.
+--- @param path string|nil client sound path
+--- @return boolean|string true/false = the client's answer, Diag.NO_ANSWER = no usable answer
+local function probeSoundFile(path)
+    if type(path) ~= "string" or path == "" then
+        return ns.Diag.NO_ANSWER
+    end
+    if type(_G.PlaySoundFile) ~= "function" then
+        return ns.Diag.NO_ANSWER
+    end
+    local ok, willPlay = pcall(_G.PlaySoundFile, path, ns.Diag.PROBE_CHANNEL)
+    if not ok or type(willPlay) ~= "boolean" then
+        -- The client refused the call (or answered something we cannot read): we say
+        -- "unknown", we NEVER accuse a file that may be perfectly fine.
+        return ns.Diag.NO_ANSWER
+    end
+    return willPlay
+end
+
+--- Runs the audio part of the diagnostic and returns the INJECTED context Core
+--- needs: the gate decision and one raw answer per sound file.
+--- @return table { gate = string, results = table }
+function UI.DiagSoundProbe()
+    local gate = ns.Diag.probeGate({
+        allSound = readCVar(DIAG_ALL_SOUND_CVAR),
+        masterVolume = readCVar(DIAG_VOLUME_CVAR),
+    })
+    local results = {}
+    if gate == ns.Diag.GATE.PROBE then
+        local entries = ns.Diag.soundEntries()
+        for index = 1, #entries do
+            results[index] = probeSoundFile(entries[index].path)
+        end
+    end
+    return { gate = gate, results = results }
+end
+
+--- `/gr diag`: the whole HEALTH REPORT in one command (see the block above).
+--- READ-ONLY: it writes nothing in the SavedVariables, sends nothing, pings
+--- nothing and - unless the client is already muted - plays nothing.
+--- @return table the lines printed (also handed back for the tests)
+function UI.PrintDiag()
+    local db = _G.GideonRaidDB
+    local c = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
+    local probe = UI.DiagSoundProbe()
+    local lines = ns.Diag.report({
+        target = ns.BossFilter.targetSummary(c),
+        source = ns.BossFilter.sourceLine(c),
+        delivered = Locale.format("cmd.boss.delivered", ns.Config.deliveredIdsText(), ns.Config.deliveredNamesText()),
+        idlog = Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled"),
+        pingMode = tostring(c.pingMode),
+        ping = ns.Intermission.pingPolicyLine(c.pingMode),
+        sound = Locale.t(c.soundEnabled and "ui.wordEnabled" or "ui.wordDisabled"),
+        gate = probe.gate,
+        results = probe.results,
+    })
+    for index = 1, #lines do
+        UI.Print(lines[index])
+    end
+    return lines
+end
+
 function UI.Initialize()
     ensurePanel()
     -- The persisted position is applied as soon as the panel exists: the player

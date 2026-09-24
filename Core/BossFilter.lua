@@ -12,24 +12,36 @@
 
       - the ID is `ENCOUNTER_START` arg1: an INTEGER, identical on every client
         whatever the game language. It is the PRIMARY criterion, and it is the
-        ONLY one the raid lead has to provide (`/gr boss <id>`);
+        one that decides;
       - a NAME (arg2) is accepted as a SECONDARY criterion, but it depends on the
         CLIENT LANGUAGE (the raid lead plays on a French client, so the name the
-        client displays is French): the name list is EMPTY by default, no
-        translation is ever guessed, and `/gr boss name <text>` fills it with the
-        exact text the player sees.
+        client displays is French): it is a SAFETY NET only (no id read at all, or
+        a new difficulty of the same boss), it is compared case-insensitively, no
+        translation is ever guessed, and `/gr boss name <text>` adds the exact text
+        the player sees. The DELIVERED default carries the two names of the guild's
+        boss, one per language (EN + FR).
 
-    SAFE DEFAULT (raid-lead decision): an EMPTY allow-list means NO automatic
-    opening at all. A panel that does not open is better than a panel that opens
-    on the wrong boss. `evaluate` therefore answers REFUSED, and the chat hands
-    the player the way to configure the right boss (`/gr idlog on` + `/gr boss
-    <id>`) - or to force the next encounter once (`/gr inter on`).
+    THE TARGET IS DELIVERED WITH THE ADDON (raid-lead decision): the encounter id
+    of the target boss - 3445, MEASURED IN GAME by the raid lead on 2026-09-24
+    (heroic pull, 20 players) - is part of the DEFAULT resolved configuration
+    (`Core/Config.lua`, `Config.DEFAULT_BOSS_IDS` / `Config.DEFAULT_BOSS_NAMES`,
+    injected into `resolveTarget` here). NO player has to type any command for the
+    panel to open on that boss, and EVERY difficulty opens it (the difficulty id
+    is only logged, it never decides).
 
-    BECAUSE THE ID IS NOT KNOWN YET, THE ADDON NEVER INVENTS ONE: `observeEncounter`
-    turns the raw event arguments into a plain, persistable OBSERVATION and the
-    idlog (`/gr idlog on`) prints it and memorizes the last
-    `BossFilter.MAX_SEEN` ones, so the raid lead can read the real id in game and
-    enter it (`docs/TESTPLAN.md`, in-game protocol 3.5e).
+    AN EXPLICIT CLEAR ALWAYS WINS over the delivered default: `/gr boss clear`
+    stamps `GideonRaidDB.intermission.bossTargetCleared = true`, and from then on
+    the delivered target is DROPPED (only what the player adds afterwards counts).
+    The two situations are therefore never confused:
+      - NEVER CONFIGURED (no marker, empty lists - a fresh install or an older
+        SavedVariables): the DELIVERED default applies (id 3445 + both names);
+      - EXPLICITLY CLEARED (marker set): NOTHING opens by itself, as the player
+        asked, until `/gr boss <id>` names a target again.
+
+    WHAT THE IDLOG IS STILL FOR: `/gr idlog on` prints and memorizes the raw
+    `ENCOUNTER_START` arguments (id, name, difficulty, group size), which is how
+    the delivered values above were captured and how any other boss is measured
+    later - nothing is ever invented.
 
     SECRET VALUES (12.x, https://warcraft.wiki.gg/wiki/Secret_Values): an argument
     of an instance event may be a SECRET value, and the smallest operation on it -
@@ -92,6 +104,20 @@ BossFilter.REASON = {
     NO_TARGET = "noTarget",
     NO_MATCH = "noMatch",
     UNREADABLE = "unreadable",
+}
+
+--- WHERE the EFFECTIVE target comes from - what `/gr boss`, `/gr boss list` and
+--- `/gr diag` report so the raid lead always knows WHY the panel opens (or not).
+--- ASCII identifiers, never displayed: the rendering layer picks the message.
+BossFilter.SOURCE = {
+    --- the DELIVERED default only: nothing was ever added by a player
+    DEFAULT = "default",
+    --- the DELIVERED default + entries added by the player (`/gr boss <id>`)
+    MIXED = "mixed",
+    --- the player's OWN entries only: they cleared the target first
+    OWN = "own",
+    --- explicitly cleared and nothing added since: the panel opens on NOTHING
+    CLEARED = "cleared",
 }
 
 --- Values accepted by `/gr idlog on|off` (STRICT: anything else yields nil and
@@ -286,6 +312,150 @@ function BossFilter.addName(list, raw)
     end
     table.sort(out)
     return out
+end
+
+--- PURE union of two ALREADY NORMALIZED lists: de-duplicated, SORTED ascending
+--- (deterministic, no pairs()) and bounded. It is how the DELIVERED default is
+--- added to the entries of the player without ever creating a duplicate.
+local function unionLists(primary, secondary, max)
+    local out = {}
+    for index = 1, #primary do
+        out[#out + 1] = primary[index]
+    end
+    for index = 1, #secondary do
+        local value = secondary[index]
+        local known = false
+        for seen = 1, #out do
+            if out[seen] == value then
+                known = true
+                break
+            end
+        end
+        if not known then
+            out[#out + 1] = value
+        end
+    end
+    table.sort(out)
+    return clampList(out, max)
+end
+
+--- Is the target EXPLICITLY cleared by the player (`/gr boss clear`)? Only an
+--- exact `true` counts (same mechanics as enabledOf), so a hand-edited
+--- SavedVariables can never drop the delivered default by accident.
+--- @param raw any persisted GideonRaidDB.intermission.bossTargetCleared
+--- @return boolean
+function BossFilter.isCleared(raw)
+    return raw == true
+end
+
+--- THE EFFECTIVE TARGET of the auto-opening: what `evaluate` compares, what
+--- `/gr boss` reports, what `/gr boss list` shows. PURE, TOTAL, deterministic.
+---   - the player's OWN entries are always read from the SavedVariables
+---     (`bossIds` / `bossNames`, which hold ONLY what a player added);
+---   - the DELIVERED default (`delivered.ids` / `delivered.names`) is the one built
+---     into the addon by `Core/Config.lua`; it is a PARAMETER, so this module owns
+---     no game data of its own;
+---   - the delivered default is ADDED to the player's entries, UNLESS the player
+---     explicitly cleared the target: `/gr boss clear` means "the player took the
+---     list over", so the delivered default is dropped and only what is added
+---     afterwards counts. An explicit clear therefore always wins, while a save
+---     that was NEVER configured (fresh install, older SavedVariables) gets the
+---     delivered default.
+--- @param raw table|nil persisted GideonRaidDB.intermission block
+--- @param delivered table|nil { ids = {...}, names = {...} } built into the addon
+--- @return table { ids, names, ownIds, ownNames, cleared, source }
+function BossFilter.resolveTarget(raw, delivered)
+    local data = type(raw) == "table" and raw or {}
+    local base = type(delivered) == "table" and delivered or {}
+    local target = {
+        ids = {},
+        names = {},
+        ownIds = BossFilter.resolveIds(data.bossIds),
+        ownNames = BossFilter.resolveNames(data.bossNames),
+        cleared = BossFilter.isCleared(data.bossTargetCleared),
+        source = BossFilter.SOURCE.DEFAULT,
+    }
+    local own = #target.ownIds > 0 or #target.ownNames > 0
+    if target.cleared then
+        target.ids = target.ownIds
+        target.names = target.ownNames
+        target.source = own and BossFilter.SOURCE.OWN or BossFilter.SOURCE.CLEARED
+        return target
+    end
+    target.ids = unionLists(target.ownIds, BossFilter.resolveIds(base.ids), BossFilter.MAX_IDS)
+    target.names = unionLists(target.ownNames, BossFilter.resolveNames(base.names), BossFilter.MAX_NAMES)
+    target.source = own and BossFilter.SOURCE.MIXED or BossFilter.SOURCE.DEFAULT
+    return target
+end
+
+--- One localized line saying WHERE the effective target comes from (`/gr boss`,
+--- `/gr boss list`, `/gr diag`). Pure formatting: it reads nothing, it only renders
+--- the source carried by the resolved configuration.
+--- @param config table|nil resolved configuration
+--- @return string
+function BossFilter.sourceLine(config)
+    local cfg = type(config) == "table" and config or {}
+    local source = cfg.bossTargetSource
+    if source == BossFilter.SOURCE.CLEARED then
+        return Locale.t("cmd.boss.source.cleared")
+    end
+    if source == BossFilter.SOURCE.OWN then
+        return Locale.t("cmd.boss.source.own")
+    end
+    if source == BossFilter.SOURCE.MIXED then
+        return Locale.t("cmd.boss.source.mixed")
+    end
+    -- The delivered default, or a hand-built table that carries no source: this is
+    -- what a save that was never configured resolves to.
+    return Locale.t("cmd.boss.source.default")
+end
+
+--- Labels ONE value with its provenance: "(addon default)" when it belongs to the
+--- delivered default of the addon, "(added by you)" when a player added it.
+--- @param value any id or name
+--- @param mine table set of the player's own entries
+--- @return string
+local function labelOf(value, mine)
+    local key = mine[value] and "cmd.boss.sourceOwn" or "cmd.boss.sourceDefault"
+    return tostring(value) .. " (" .. Locale.t(key) .. ")"
+end
+
+--- `"3445 (addon default), 1234 (added by you)"` (or `""` when nothing is
+--- targeted): the ids of `/gr boss list`, each one labelled with its provenance, so
+--- the raid lead can tell what the ADDON ships from what a PLAYER added.
+--- @param list table|nil effective ids (resolved configuration)
+--- @param own table|nil ids persisted by the player
+--- @return string
+function BossFilter.annotateIds(list, own)
+    local entries = BossFilter.resolveIds(list)
+    local mine = {}
+    local ownList = BossFilter.resolveIds(own)
+    for index = 1, #ownList do
+        mine[ownList[index]] = true
+    end
+    local parts = {}
+    for index = 1, #entries do
+        parts[#parts + 1] = labelOf(entries[index], mine)
+    end
+    return table.concat(parts, ", ")
+end
+
+--- Same for the (language-dependent) names.
+--- @param list table|nil effective names
+--- @param own table|nil names persisted by the player
+--- @return string
+function BossFilter.annotateNames(list, own)
+    local entries = BossFilter.resolveNames(list)
+    local mine = {}
+    local ownList = BossFilter.resolveNames(own)
+    for index = 1, #ownList do
+        mine[ownList[index]] = true
+    end
+    local parts = {}
+    for index = 1, #entries do
+        parts[#parts + 1] = labelOf(entries[index], mine)
+    end
+    return table.concat(parts, ", ")
 end
 
 --- STRICT resolution of the value typed after `/gr idlog` (`on` / `off`):
@@ -486,7 +656,10 @@ end
 --- Order of the rules (it matters):
 ---   1. the MANUAL OVERRIDE (`/gr inter on`): the player asked for the NEXT
 ---      encounter, whatever the boss -> OPEN (reason OVERRIDE);
----   2. an EMPTY allow-list: SAFE DEFAULT, NOTHING opens (reason NO_TARGET);
+---   2. an EMPTY allow-list: NOTHING opens (reason NO_TARGET). With the DELIVERED
+---      default (id 3445 + the two names, `Core/Config.lua`) this only happens when
+---      the player explicitly cleared the target (`/gr boss clear`, which drops the
+---      delivered default) or on a build without any delivered target at all;
 ---   3. the ID read on the encounter is in the allow-list -> OPEN (MATCH_ID). It
 ---      is the PRIMARY criterion: an integer, identical in every language;
 ---   4. the NAME read on the encounter is in the secondary list (case-insensitive)
@@ -645,8 +818,14 @@ function BossFilter.describeNames(list)
 end
 
 --- One-line summary of the configured target, used by `/gr boss` and by the
---- information messages: "ids 1234, 5678, names sentinelles ensevelies" or the
---- explicit "NONE" of the safe default.
+--- information messages: "ids 1234, 5678, names sentinelles inhumées". Three
+--- distinct states are NEVER confused:
+---   - a target is configured -> the ids and/or the names;
+---   - NO target at all (a bare table, or lists emptied by hand) -> "NONE - SAFE
+---     DEFAULT: the panel will NOT open by itself";
+---   - EXPLICITLY cleared (`bossTargetCleared`) -> "NONE - cleared on purpose with
+---     /gr boss clear", so the player reads back their own decision instead of
+---     believing the addon lost its target.
 --- @param config table|nil resolved configuration
 --- @return string
 function BossFilter.targetSummary(config)
@@ -661,6 +840,9 @@ function BossFilter.targetSummary(config)
         parts[#parts + 1] = Locale.format("cmd.boss.target.names", BossFilter.describeNames(names))
     end
     if #parts == 0 then
+        if cfg.bossTargetCleared == true then
+            return Locale.t("cmd.boss.target.cleared")
+        end
         return Locale.t("cmd.boss.target.none")
     end
     return table.concat(parts, ", ")

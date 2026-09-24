@@ -73,7 +73,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(11, #files)
+        assert.are.equal(12, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -108,6 +108,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             "Core/Locale.lua",
             "Core/Sound.lua",
             "Core/BossFilter.lua",
+            "Core/Diag.lua",
             "Core/Config.lua",
             "Core/Pairing.lua",
             "Core/Intermission.lua",
@@ -173,6 +174,24 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         assert.is_truthy(guard:find("playStartSound", 1, true) ~= nil, "UI/Intermission.lua doit jouer le son de debut")
     end)
 
+    it("garde /gr diag : le controle audio passe par la PORTE DU SILENCE de Core/", function()
+        -- PlaySoundFile est appele par le diagnostic pour SAVOIR si un fichier est
+        -- charge (il renvoie false/nil quand il ne sera pas joue). Comme cet appel
+        -- EST une lecture audio, il est interdit de le lancer quand le joueur entend
+        -- le jeu : la porte (Core/Diag.probeGate) decide, la couche de rendu obeit.
+        local core = stripComments(readFile("Core/Diag.lua"))
+        assert.is_truthy(core:find("probeGate", 1, true) ~= nil, "Core/Diag.lua doit porter la porte du silence")
+        assert.is_truthy(core:find("probeGate", 1, true) ~= nil, "Core/Diag.lua doit decider si la sonde peut tourner")
+        assert.is_truthy(core:find("GATE", 1, true) ~= nil, "Core/Diag.lua doit nommer les decisions de la porte")
+        local ui = stripComments(readFile("UI/Panel.lua"))
+        assert.is_truthy(ui:find("probeGate", 1, true) ~= nil, "UI/Panel.lua doit interroger la porte avant toute sonde")
+        assert.is_truthy(ui:find("GATE.PROBE", 1, true) ~= nil, "UI/Panel.lua ne doit sonder QUE sur decision PROBE")
+        assert.is_truthy(ui:find("GetCVar", 1, true) ~= nil, "UI/Panel.lua doit LIRE l'etat du son (lecture seule)")
+        -- La couche de rendu lit les CVars sous pcall et ne les ECRIT jamais.
+        local raw = stripComments(readFile("UI/Panel.lua"))
+        assert.is_nil(raw:find("SetCVar", 1, true), "UI/Panel.lua ne doit jamais MODIFIER un reglage du joueur")
+    end)
+
     it("lit le raccourci de ping UNIQUEMENT dans la couche de rendu et SOUS pcall", function()
         local found = false
         for _, file in ipairs(files) do
@@ -214,6 +233,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             "Core/Locale.lua",
             "Core/Sound.lua",
             "Core/BossFilter.lua",
+            "Core/Diag.lua",
             "Core/Config.lua",
             "Core/Pairing.lua",
             "Core/Intermission.lua",

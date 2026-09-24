@@ -1218,13 +1218,22 @@ function UI.BossDecision(encounter)
     return decision
 end
 
---- The chat line that says WHY nothing opens and WHAT to do about it: the SAFE
---- DEFAULT must never look like a bug. Pure formatting, no state.
+--- The chat line that says WHY nothing opens and WHAT to do about it: neither the
+--- cleared target (a deliberate choice) nor a missing one must look like a bug. Pure
+--- formatting, no state.
 --- @param decision table|nil
+--- @param resolved table|nil resolved configuration (to tell "cleared on purpose" from
+---   "no target at all")
 --- @return string message
-function UI.BossRefusalMessage(decision)
+function UI.BossRefusalMessage(decision, resolved)
     local reason = type(decision) == "table" and decision.reason or nil
     if reason == BossFilter.REASON.NO_TARGET then
+        local c = type(resolved) == "table" and resolved or {}
+        if c.bossTargetCleared == true then
+            -- `/gr boss clear` was used: the short message names the command that
+            -- brings the target back instead of repeating the whole procedure.
+            return Locale.t("cmd.boss.clearedHint")
+        end
         return Locale.t("cmd.boss.noTarget")
     end
     if reason == BossFilter.REASON.UNREADABLE then
@@ -1241,7 +1250,8 @@ end
 --- showing a fake number - and memorized NEWEST FIRST in the SavedVariables
 --- (`GideonRaidDB.intermission.seenEncounters`, bounded), so the raid lead can
 --- read the real id back after the pull. Nothing is sent anywhere, nothing is
---- invented: we do NOT know the id of Entombed Sentinels yet.
+--- invented: the id logged here IS the measured truth (the delivered default target
+--- comes from exactly such a line), and any other boss is measured the same way.
 --- @param encounter table|nil observation built by BossFilter.observeEncounter
 --- @return boolean recorded
 function UI.RecordSeenEncounter(encounter)
@@ -1261,14 +1271,21 @@ function UI.RecordSeenEncounter(encounter)
     return true
 end
 
---- Load-time warning (`PLAYER_LOGIN`): with the SAFE DEFAULT - no target boss
---- configured - the panel will never open by itself, and the player MUST know it,
---- otherwise the fix looks like a broken addon. Recomputed on every login: as soon
---- as a target is configured, the warning disappears.
+--- Load-time warning (`PLAYER_LOGIN`): when NOTHING can open by itself, the player
+--- MUST know it, otherwise the feature looks like a broken addon. Two different
+--- situations, and only the FIRST one is worth a warning:
+---   - no target at all (a build without any delivered default): warn;
+---   - the target was cleared ON PURPOSE (`/gr boss clear`, `bossTargetCleared`): the
+---     player knows what they did, and a warning at every login would read as if the
+---     addon had forgotten something - stay silent.
+--- Recomputed on every login: as soon as a target exists again, nothing is printed.
 --- @return boolean printed
 function UI.PrintBossFilterWarning()
     local c = config()
     if BossFilter.hasTarget(c) then
+        return false
+    end
+    if c.bossTargetCleared == true then
         return false
     end
     UI.Print(Locale.t("cmd.boss.noTarget"))
@@ -1302,14 +1319,17 @@ function UI.IntermissionOnEncounterStart(encounter)
 
     local decision = UI.BossDecision(encounter)
     if not decision.shouldOpen then
-        -- SAFE DEFAULT: nothing is armed for THIS encounter, and a schedule left
-        -- over by a previous fight is disarmed too, so the panel can never open
-        -- itself on the wrong boss.
+        -- NOTHING is armed for THIS encounter (the target boss is the ONLY one that
+        -- may open the panel by itself, and the delivered default of the addon makes
+        -- it work out of the box), and a schedule left over by a previous fight is
+        -- disarmed too, so the panel can never open itself on the wrong boss. The
+        -- refusal says WHICH case it is: cleared on purpose, no target at all, or
+        -- simply another boss.
         run = nil
         if not engineActive() then
             stopTicker()
         end
-        UI.Print(UI.BossRefusalMessage(decision))
+        UI.Print(UI.BossRefusalMessage(decision, c))
         return
     end
 

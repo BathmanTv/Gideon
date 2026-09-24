@@ -18,6 +18,11 @@ read_globals = {
     -- Ping keybind READ-ONLY: UI/ only, under pcall, to display the key the
     -- player bound to a native ping (the addon never pings).
     "GetBindingKey",
+    -- Sound CVars READ-ONLY: used ONLY by UI/ (`/gr diag`), under pcall, to read
+    -- the state of the Master channel BEFORE probing any sound file. Nothing is
+    -- ever SET: the diagnostic never changes a setting of the player, and it only
+    -- calls PlaySoundFile when the volume proves the playback cannot be heard.
+    "GetCVar", "PlaySoundFile",
     -- Misc
     "C_Timer",
     -- CLIENT clock: used ONLY by UI/ to timestamp the decision published in the

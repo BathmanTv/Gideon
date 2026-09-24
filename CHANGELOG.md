@@ -4,6 +4,77 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+**The target boss is now DELIVERED with the addon** — no player has to type a
+command for the intermission panel to open on *Entombed Sentinels* — and a new
+**read-only health report** validates the four sound files **in game** without ever
+making a noise in a raid.
+
+### Added
+
+- **The default target, shipped with the addon** (`Core/Config.lua`,
+  `Config.DEFAULT_BOSS_IDS` / `Config.DEFAULT_BOSS_NAMES`). The encounter id
+  **`3445`** is the one **MEASURED IN GAME** by the raid lead on **2026-09-24**
+  (heroic pull, 20 players, `/gr idlog on`):
+  `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20`. The
+  **id stays the primary criterion** (an integer, identical on every client
+  whatever the language) and the two names are shipped as a **secondary** safety
+  net: the official `Entombed Sentinels` **and** `Sentinelles inhumées`, the French
+  string of the raid lead's client, accent included (the file is UTF-8 and the
+  string is compared as-is, case-insensitively, never re-accented). **Every
+  difficulty** of that boss opens the panel (14 Normal / 15 Heroic / 16 Mythic / 17
+  LFR, documented in `Config.BOSS_DIFFICULTIES`): the difficulty is **deliberately
+  not filtered**, it is logged by the idlog and never takes part in the decision.
+- **`BossFilter.resolveTarget`** (`Core/BossFilter.lua`, pure): the *effective*
+  target = the player's own entries **plus** the delivered default. Two states are
+  now distinct and can never be confused:
+  - **never configured** (fresh install, empty SavedVariables) → the delivered
+    default applies (`bossTargetSource = "default"`), so the panel opens with no
+    command typed and **no warning is printed at login**;
+  - **cleared on purpose** (`/gr boss clear` → `bossTargetCleared = true`, an exact
+    `true` only) → the delivered default is **dropped too**: nothing opens by itself
+    any more until `/gr boss <id>` names a target again — an explicit choice is
+    never silently undone, and a lost configuration is never mistaken for a choice;
+  - **player addition** (`/gr boss 2594`) → added to the delivered default, never
+    replacing it; `/gr boss 3445` is idempotent.
+- **`/gr diag`** — the health report, in one read-only command: the **effective
+  auto-open target and where it comes from**, the delivered default, the idlog
+  state, the ping policy, and a **verdict per sound file** (the four of them).
+  The verdict comes from the **boolean returned by `PlaySoundFile`** (`true` = the
+  client **will** play the file, `false`/`nil` = missing file, file added after the
+  client started, or refused playback). That call **is** a playback, so it runs
+  behind a **silence gate** (`Core/Diag.probeGate`): the probe is only made when the
+  Master channel is **enabled** (a disabled channel answers "nothing will play" even
+  for a file that is there — the verdict would be a lie) **and** its volume is **0**
+  (mathematically inaudible). With the sound on, `/gr diag` plays **nothing** and
+  says so, with the procedure to get a verdict (`/console Sound_MasterVolume 0` →
+  `/gr diag` → restore) and the reminder that a file added after the client started
+  needs a **restart**, and that a file unlisted in `GideonRaid.toc` is never loaded.
+  A client that refuses to answer reads **UNKNOWN**, never a fake KO.
+- **`Core/Diag.lua`** (new PURE module: no client call at all — the rendering layer
+  injects the two CVars and the answers), and the guard test that keeps it that way.
+- `/gr boss` and `/gr boss list` now print the **source** of the effective target
+  and label every entry with its **provenance** (*addon default* / *added by you*);
+  the delivery is announced in the chat so the target is never a mystery.
+
+### Changed
+
+- The refusal message at an encounter that opens nothing **distinguishes the two
+  cases**: an explicitly cleared target (`/gr boss clear`, short message naming
+  `/gr boss 3445`) vs no target at all (the full procedure). The login warning is
+  only printed when **nothing** can open (it is silent on a fresh install now).
+- `/gr boss name <text>` still adds a name to the player's own list; the name
+  criterion is no longer empty by default (the two delivered names).
+- Test suite: **302 → 331 tests** (new `tests/spec/diag_spec.lua`, 19 tests; the
+  delivered-target states covered in `bossfilter_spec.lua` and
+  `intermission_spec.lua`); `.toc` entries **15 → 16** (12 Lua files + 4 sounds).
+  `make check` stays green (stylua + luacheck on **28** files + check_toc + busted).
+
+### Not in this release
+
+- **No tag, no packaging**: this entry is staged under `[Unreleased]`.
+
 ## [0.11.0] - 2026-09-24
 
 **Critical bug fixed** — *"the window opens by itself during ANY boss fight! It

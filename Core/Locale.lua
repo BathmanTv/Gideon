@@ -57,6 +57,7 @@ Locale.STRINGS = {
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
+            .. "  /gr diag (health report: the 4 sound files, the target boss, the idlog, the ping)\n"
             .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
@@ -65,6 +66,7 @@ Locale.STRINGS = {
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
+            .. "  /gr diag (bilan de sante : les 4 fichiers de son, le boss cible, l'idlog, le ping)\n"
             .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
             .. "  /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
@@ -218,6 +220,51 @@ Locale.STRINGS = {
         en = "NONE - SAFE DEFAULT: the panel will NOT open by itself",
         fr = "AUCUNE - DEFAUT SUR : le panneau ne s'ouvrira PAS tout seul",
     },
+    -- `/gr boss clear` is a DIFFERENT state from "no target at all": the player
+    -- explicitly dropped the target, including the one the addon ships with. Saying
+    -- so avoids reading a deliberate choice as a lost configuration.
+    ["cmd.boss.target.cleared"] = {
+        en = "NONE - cleared ON PURPOSE (/gr boss clear): the panel will NOT open by itself",
+        fr = "AUCUNE - effacee EXPRES (/gr boss clear) : le panneau ne s'ouvrira PAS tout seul",
+    },
+    -- WHERE the effective target comes from (`/gr boss`, `/gr boss list`, `/gr diag`):
+    -- a save that was never configured gets the target DELIVERED with the addon
+    -- (encounter id + the two names), a player who added ids gets both, and an
+    -- explicit `/gr boss clear` drops the delivered one.
+    ["cmd.boss.source.default"] = {
+        en = "Target source: the default DELIVERED with the addon (no player ever added anything).",
+        fr = "Origine de la cible : le defaut LIVRE avec l'addon (aucun joueur n'a rien ajoute).",
+    },
+    ["cmd.boss.source.mixed"] = {
+        en = "Target source: the default delivered with the addon PLUS the entries added by a player.",
+        fr = "Origine de la cible : le defaut livre avec l'addon PLUS les entrees ajoutees par un joueur.",
+    },
+    ["cmd.boss.source.own"] = {
+        en = "Target source: ONLY the entries added by a player (the delivered default was dropped by " .. "/gr boss clear).",
+        fr = "Origine de la cible : SEULEMENT les entrees ajoutees par un joueur (le defaut livre a ete " .. "retire par /gr boss clear).",
+    },
+    ["cmd.boss.source.cleared"] = {
+        en = "Target source: cleared ON PURPOSE (/gr boss clear): the panel will NOT open by itself until "
+            .. "/gr boss <id> names a target again.",
+        fr = "Origine de la cible : effacee EXPRES (/gr boss clear) : le panneau ne s'ouvrira PAS tout seul "
+            .. "tant que /gr boss <id> ne nomme pas une cible.",
+    },
+    -- Provenance of ONE entry of `/gr boss list`.
+    ["cmd.boss.sourceDefault"] = {
+        en = "addon default",
+        fr = "defaut de l'addon",
+    },
+    ["cmd.boss.sourceOwn"] = {
+        en = "added by you",
+        fr = "ajoute par toi",
+    },
+    -- THE TARGET THE ADDON SHIPS WITH: printed by `/gr boss` and `/gr diag` so the
+    -- raid lead always sees what a fresh guild member gets WITHOUT typing anything.
+    -- %s = the encounter id(s), %s = the name(s) (the French one keeps its accent).
+    ["cmd.boss.delivered"] = {
+        en = "Default delivered with the addon (it needs NO command and NO SavedVariables): id %s, names %s.",
+        fr = "Defaut livre avec l'addon (il ne demande AUCUNE commande et AUCUNE sauvegarde) : id %s, " .. "noms %s.",
+    },
     ["cmd.boss.target.ids"] = {
         en = "ids %s",
         fr = "ids %s",
@@ -246,20 +293,36 @@ Locale.STRINGS = {
         fr = "Nom d'encounter vide '%s' : ecris le nom exact affiche par ton client (/gr idlog on l'affiche), "
             .. "ou utilise plutot /gr boss <id>.",
     },
+    -- Printed when a pull is refused because the player CLEARED the target on purpose
+    -- (`/gr boss clear`): short, actionable, and the delivered default is named so the
+    -- id can be typed back as-is.
+    ["cmd.boss.clearedHint"] = {
+        en = "Auto-open target cleared on purpose (/gr boss clear): the panel does not open by itself. "
+            .. "/gr boss 3445 puts the target of the addon back, /gr boss <id> names another one, /gr inter on "
+            .. "opens the panel for the NEXT encounter.",
+        fr = "Cible de l'ouverture auto effacee expres (/gr boss clear) : le panneau ne s'ouvre pas tout "
+            .. "seul. /gr boss 3445 remet la cible de l'addon, /gr boss <id> en nomme une autre, /gr inter on "
+            .. "ouvre le panneau au PROCHAIN encounter.",
+    },
     ["cmd.boss.cleared"] = {
-        en = "Auto-open target cleared (no id, no name): the panel will NOT open by itself any more - SAFE "
-            .. "DEFAULT. /gr idlog on then /gr boss <id> to name the right boss.",
-        fr = "Cible de l'ouverture auto effacee (aucun id, aucun nom) : le panneau ne s'ouvrira plus tout "
-            .. "seul - DEFAUT SUR. /gr idlog on puis /gr boss <id> pour nommer le bon boss.",
+        en = "Auto-open target cleared: the default DELIVERED with the addon is dropped too, so the panel "
+            .. "will NOT open by itself any more. /gr boss <id> names a target again (the delivered id can "
+            .. "be typed back: /gr boss 3445), /gr inter on opens the panel on the next encounter.",
+        fr = "Cible de l'ouverture auto effacee : le defaut LIVRE avec l'addon est retire lui aussi, donc "
+            .. "le panneau ne s'ouvrira plus tout seul. /gr boss <id> nomme une cible a nouveau (l'id livre "
+            .. "peut etre retape : /gr boss 3445), /gr inter on ouvre le panneau au prochain encounter.",
     },
     ["cmd.boss.list.ids"] = {
         en = "Auto-open target ids: %s",
         fr = "Ids cibles de l'ouverture auto : %s",
     },
     ["cmd.boss.list.names"] = {
-        en = "Auto-open target names (SECONDARY criterion, depends on the client language, empty by default " .. "and never guessed): %s",
-        fr = "Noms cibles de l'ouverture auto (critere SECONDAIRE, depend de la langue du client, vide par "
-            .. "defaut et jamais devine) : %s",
+        en = "Auto-open target names (SECONDARY criterion - the id decides; the addon DELIVERS the English "
+            .. "and French names of the target boss, and `/gr boss name <text>` adds the exact text YOUR "
+            .. "client displays): %s",
+        fr = "Noms cibles de l'ouverture auto (critere SECONDAIRE - c'est l'id qui decide ; l'addon LIVRE "
+            .. "les noms anglais et francais du boss cible, et `/gr boss name <texte>` ajoute le texte exact "
+            .. "affiche par TON client) : %s",
     },
     ["cmd.boss.list.override"] = {
         en = "Manual override: %s (/gr inter on arms the panel for the NEXT encounter, whatever the boss; it "
@@ -292,13 +355,15 @@ Locale.STRINGS = {
     -- the right boss (or to force the next encounter once).
     ["cmd.boss.noTarget"] = {
         en = "No target boss configured: the intermission panel will NOT open by itself (SAFE DEFAULT - a "
-            .. "panel that does not open is better than a panel on the wrong boss). Turn /gr idlog on, pull "
-            .. "the boss, read the line 'encounter seen: id=<id> ...' and set it with /gr boss <id>. /gr "
-            .. "inter on opens the panel for the NEXT encounter, whatever the boss.",
+            .. "panel that does not open is better than a panel on the wrong boss). The addon DELIVERS a "
+            .. "target (encounter id 3445, Entombed Sentinels) unless it was cleared with /gr boss clear, and "
+            .. "/gr boss <id> names one (the real id is measured in game with /gr idlog on). /gr inter on "
+            .. "opens the panel for the NEXT encounter, whatever the boss.",
         fr = "Aucun boss cible configure : le panneau d'intermission ne s'ouvrira PAS tout seul (DEFAUT SUR - "
-            .. "mieux vaut un panneau qui ne s'ouvre pas qu'un panneau sur le mauvais boss). Active /gr idlog "
-            .. "on, pull le boss, lis la ligne 'encounter vu : id=<id> ...' et definis-la avec /gr boss <id>. "
-            .. "/gr inter on ouvre le panneau au PROCHAIN encounter, quel que soit le boss.",
+            .. "mieux vaut un panneau qui ne s'ouvre pas qu'un panneau sur le mauvais boss). L'addon LIVRE "
+            .. "une cible (id d'encounter 3445, Entombed Sentinels) sauf si elle a ete effacee avec /gr boss "
+            .. "clear, et /gr boss <id> en nomme une (l'id reel se mesure en jeu avec /gr idlog on). /gr inter "
+            .. "on ouvre le panneau au PROCHAIN encounter, quel que soit le boss.",
     },
     ["cmd.boss.notTarget"] = {
         en = "Encounter %s is NOT the configured target: the panel stays closed. /gr boss <id> to change the "
@@ -354,6 +419,110 @@ Locale.STRINGS = {
     ["cmd.idlog.unknown"] = {
         en = "Unknown value '%s': accepted values are on, off.",
         fr = "Valeur inconnue '%s' : valeurs acceptees on, off.",
+    },
+
+    -- ------------------------------------------------------------- /gr diag ---
+    -- THE HEALTH REPORT, in ONE command: are the four sound files really loaded and
+    -- playable, what is the effective auto-open target, is the idlog on, which ping
+    -- policy is active. READ-ONLY: nothing is written, nothing is sent, no macro, no
+    -- ping, and NOTHING IS PLAYED in a client whose sound is on (see the two gate
+    -- lines below). The verdict markers are ASCII ("[OK]", "[KO]") on purpose: the
+    -- default game font renders accented glyphs badly.
+    ["cmd.diag.header"] = {
+        en = "--- DIAGNOSTIC (read-only: nothing is written, nothing is sent, nothing is played) ---",
+        fr = "--- DIAGNOSTIC (lecture seule : rien n'est ecrit, rien n'est envoye, rien n'est joue) ---",
+    },
+    ["cmd.diag.target"] = {
+        en = "auto-open target: %s",
+        fr = "cible de l'ouverture auto : %s",
+    },
+    ["cmd.diag.idlog"] = {
+        en = "encounter id log: %s",
+        fr = "journal des ids d'encounter : %s",
+    },
+    ["cmd.diag.ping"] = {
+        en = "intermission ping policy: %s - %s",
+        fr = "politique de ping intermission : %s - %s",
+    },
+    ["cmd.diag.soundPref"] = {
+        en = "assignment sound preference: %s",
+        fr = "preference de son d'assignation : %s",
+    },
+    ["cmd.diag.sounds"] = {
+        en = "sound files of the addon (%d) - each one checked for being LOADED and PLAYABLE:",
+        fr = "fichiers de son de l'addon (%d) - chacun verifie comme CHARGE et JOUABLE :",
+    },
+    ["cmd.diag.sound.playable"] = {
+        en = "  %s: present and playable [OK]",
+        fr = "  %s: present et jouable [OK]",
+    },
+    ["cmd.diag.sound.notPlayable"] = {
+        en = "  %s: NOT playable [KO] - the file is missing from Sound/, or not listed in GideonRaid.toc "
+            .. "(an unlisted file is NEVER loaded), or it was added AFTER the client started (WoW must be "
+            .. "RESTARTED: a /reload does not load a new sound file)",
+        fr = "  %s: NON jouable [KO] - le fichier manque dans Sound/, ou n'est pas liste dans "
+            .. "GideonRaid.toc (un fichier non liste n'est JAMAIS charge), ou il a ete ajoute APRES le "
+            .. "lancement du client (WoW doit etre RELANCE : un /reload ne charge pas un nouveau fichier de son)",
+    },
+    ["cmd.diag.sound.notTested"] = {
+        en = "  %s: NOT TESTED (the check would have made noise: see the reason below)",
+        fr = "  %s: NON TESTE (le test aurait fait du bruit : voir la raison ci-dessous)",
+    },
+    ["cmd.diag.sound.unknown"] = {
+        en = "  %s: verdict UNKNOWN (the client refused the test call)",
+        fr = "  %s: verdict INCONNU (le client a refuse l'appel de test)",
+    },
+    -- All four files "not playable" at once: the channel probably refuses every
+    -- playback (a muted channel answers the same thing for a file that IS there).
+    ["cmd.diag.caveat"] = {
+        en = "careful: ALL FOUR files came back as not playable. Before hunting four files, check that the "
+            .. "Master channel really accepts a playback (put the master volume back above 0 and hear one "
+            .. "with /gr sound test 1v3r): a channel that refuses everything answers 'not playable' even for "
+            .. "a file that is there.",
+        fr = "attention : les QUATRE fichiers reviennent comme non jouables. Avant de chercher quatre "
+            .. "fichiers, verifie que le canal Master accepte vraiment une lecture (remonte le volume "
+            .. "general au-dessus de 0 et ecoutes-en un avec /gr sound test 1v3r) : un canal qui refuse tout "
+            .. "repond 'non jouable' meme pour un fichier present.",
+    },
+    ["cmd.diag.gate.probe"] = {
+        en = "the check DID run for real: the Master channel was ENABLED with its volume at 0, so the client "
+            .. "answered for every file while NOTHING was audible.",
+        fr = "le test a VRAIMENT tourne : le canal Master etait ACTIF avec un volume a 0, donc le client a "
+            .. "repondu pour chaque fichier sans que RIEN soit audible.",
+    },
+    ["cmd.diag.gate.soundOn"] = {
+        en = "the audio check did NOT run: the game sound is ON, and this diagnostic NEVER plays a sound (no "
+            .. "noise during a fight). To check the four files WITHOUT noise: set the master volume to 0 "
+            .. "(Options > Sound, or /console Sound_MasterVolume 0), run /gr diag again, then put it back "
+            .. "(/console Sound_MasterVolume 1). To HEAR a file on purpose: /gr sound test 1v3r|2v2r|3v1r|start.",
+        fr = "le test audio n'a PAS tourne : le son du jeu est ACTIF, et ce diagnostic ne joue JAMAIS de son "
+            .. "(aucun bruit pendant un combat). Pour verifier les quatre fichiers SANS bruit : mets le "
+            .. "volume general a 0 (Options > Son, ou /console Sound_MasterVolume 0), relance /gr diag, puis "
+            .. "remets-le (/console Sound_MasterVolume 1). Pour ENTENDRE un fichier expres : "
+            .. "/gr sound test 1v3r|2v2r|3v1r|start.",
+    },
+    ["cmd.diag.gate.soundOff"] = {
+        en = "the audio check did NOT run: the sound is OFF (or unreadable) in this client, and a DISABLED "
+            .. "channel answers 'nothing will play' even for a file that is really there - the verdict would "
+            .. "be a lie. Turn the sound on (Ctrl+S, or Options > Sound) and run /gr diag again, or hear the "
+            .. "files on purpose with /gr sound test 1v3r|2v2r|3v1r|start.",
+        fr = "le test audio n'a PAS tourne : le son est COUPE (ou illisible) dans ce client, et un canal "
+            .. "DESACTIVE repond 'rien ne sera joue' meme pour un fichier bien present - le verdict serait un "
+            .. "mensonge. Remets le son (Ctrl+S, ou Options > Son) et relance /gr diag, ou ecoute les "
+            .. "fichiers expres avec /gr sound test 1v3r|2v2r|3v1r|start.",
+    },
+    ["cmd.diag.reminders"] = {
+        en = "reminder: a sound file added AFTER the client started is NOT loaded before a RESTART, and a "
+            .. "file that is not listed in GideonRaid.toc is NEVER loaded. The four files of this addon ARE "
+            .. "listed there (checked out of game by make check, and by tests/spec/sound_spec.lua).",
+        fr = "rappel : un fichier de son ajoute APRES le lancement du client n'est pas charge avant un "
+            .. "REDEMARRAGE, et un fichier non liste dans GideonRaid.toc n'est JAMAIS charge. Les quatre "
+            .. "fichiers de cet addon y SONT listes (verifie hors jeu par make check et par "
+            .. "tests/spec/sound_spec.lua).",
+    },
+    ["cmd.diag.howToTest"] = {
+        en = "to hear a file on purpose: /gr sound test 1v3r | 2v2r | 3v1r | start - those DO play a sound, " .. "/gr diag never does.",
+        fr = "pour entendre un fichier expres : /gr sound test 1v3r | 2v2r | 3v1r | start - eux JOUENT un " .. "son, /gr diag jamais.",
     },
 
     -- -------------------------------------------------------------- ping policy

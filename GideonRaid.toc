@@ -21,7 +21,20 @@
 # the module order below.
 # Core/BossFilter.lua also comes BEFORE Config.lua: Config resolves the auto-open
 # allow-list (encounter ids + names, `/gr boss <id>`) with it, and the UI layer
-# asks it WHICH boss may open the panel by itself (empty list = nothing opens).
+# asks it WHICH boss may open the panel by itself (the DELIVERED default target is
+# encounter id 3445, with the English and French names as a secondary criterion).
+# Core/Diag.lua comes right AFTER Core/BossFilter.lua: it builds the report of
+# `/gr diag` (the four sound files + the effective target + the idlog + the ping)
+# and depends only on Locale and Sound, both already loaded. It contains NO client
+# call: the rendering layer (UI/Panel.lua) injects the CVars and the answers of
+# PlaySoundFile into it.
+# Core/Diag.lua is PURE: it never plays a sound itself. The silence gate it owns
+# (ProbeGate) is what keeps `/gr diag` from making any noise in a raid.
+# Core/Config.lua holds the DELIVERED DEFAULT of the auto-open target
+# (Config.DEFAULT_BOSS_IDS / Config.DEFAULT_BOSS_NAMES): encounter id 3445,
+# measured in game by the raid lead on 2026-09-24 (heroic pull, 20 players), plus
+# the English and French names of the boss. Every difficulty of that boss opens the
+# panel: the difficulty is deliberately NOT part of the filter.
 # Core/Simulation.lua comes AFTER Core/Intermission.lua (it reuses the canonical
 # states, the ping labels and the binding candidates) and BEFORE the UI/ files.
 # Core/Layout.lua comes LAST among the Core/ modules: it computes the DISPOSITION
@@ -33,6 +46,7 @@ GideonRaid.lua
 Core\Locale.lua
 Core\Sound.lua
 Core\BossFilter.lua
+Core\Diag.lua
 Core\Config.lua
 Core\Pairing.lua
 Core\Intermission.lua

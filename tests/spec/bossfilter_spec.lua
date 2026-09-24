@@ -10,19 +10,26 @@
       1. Core/BossFilter.lua (PUR) : la DECISION « ce combat est-il le boss
          cible ? » - allow-list d'IDS d'encounter (critere PRINCIPAL, entier,
          identique dans toutes les langues) + allow-list de NOMS (critere
-         SECONDAIRE, dependant de la langue du client : VIDE par defaut, jamais
-         devine), liste vide = AUCUNE ouverture, et la lecture des arguments sous
-         pcall (une valeur SECRETE en 12.x leve au moindre acces : une valeur
-         illisible ne correspond a RIEN) ;
-      2. le CABLAGE (stub) : le defaut sur, la persistance des commandes
-         (`/gr boss <id>`, `/gr boss list`, `/gr boss clear`, refus sans rien
-         ecrire), l'IDLOG (`/gr idlog on|off`) qui MESURE l'id reel du boss en
-         jeu, et l'override manuel `/gr inter on` (un encounter, consomme a la
-         fin).
+         SECONDAIRE, dependant de la langue du client), liste vide = AUCUNE
+         ouverture, et la lecture des arguments sous pcall (une valeur SECRETE en
+         12.x leve au moindre acces : une valeur illisible ne correspond a RIEN) ;
+      2. le CABLAGE (stub) : le DEFAUT LIVRE (encounter id 3445 + les deux noms, il
+         ouvre le panneau sans qu'aucun joueur ne tape une commande), la
+         persistance des commandes (`/gr boss <id>`, `/gr boss list`,
+         `/gr boss clear`, refus sans rien ecrire), l'IDLOG (`/gr idlog on|off`)
+         qui MESURE l'id reel du boss en jeu, et l'override manuel `/gr inter on`
+         (un encounter, consomme a la fin).
 
-    L'id REEL d'Entombed Sentinels n'est PAS connu et n'est donc pas invente ici :
-    c'est `/gr idlog on` en jeu qui le donne (voir docs/TESTPLAN.md).
+    L'id de la CIBLE est MESURE EN JEU (raid lead, 2026-09-24, pull heroique 20
+    joueurs) : `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15
+    group=20`. Il est donc LIVRE avec l'addon, en dur, dans Core/Config.lua
+    (Config.DEFAULT_BOSS_IDS), avec les DEUX noms du boss (anglais officiel +
+    francais du client du raid lead) comme filet SECONDAIRE. DEUX etats ne sont
+    JAMAIS confondus : « jamais configure » (le defaut livre s'applique) et
+    « vide explicitement par /gr boss clear » (rien ne s'ouvre, et le defaut livre
+    ne revient pas tout seul : c'est le marqueur `bossTargetCleared`).
 ----------------------------------------------------------------------------]]
+--
 --
 --
 local stub = require("tests.support.wowapi_stub")
@@ -333,6 +340,12 @@ end)
 -- ===========================================================================
 describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", function()
     local BOSS_ARGS = { TARGET_ID, TARGET_NAME, 16, 20 }
+    -- LE DEFAUT LIVRE DE L'ADDON, mesure en jeu par le raid lead le 2026-09-24 sur un
+    -- pull heroique a 20 joueurs : id=3445, nom du client FRANCAIS du raid lead,
+    -- difficulte 15 (Heroique). Le nom anglais officiel est l'autre filet.
+    local DELIVERED_ID = 3445
+    local DELIVERED_EN_NAME = "Entombed Sentinels"
+    local DELIVERED_FR_NAME = "Sentinelles inhumées"
     local ns
 
     before_each(function()
@@ -369,28 +382,129 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         stub.mainFrame():Fire(event, ...)
     end
 
-    -- ----------------------------------------------------------- DEF AUT SUR ---
-    it("DEFAUT SUR : liste vide = le panneau ne s'ouvre sur AUCUN boss", function()
+    -- ------------------------------------------------- DEFAUT LIVRE / CLEAR ---
+    it("JAMAIS CONFIGURE : le defaut LIVRE ouvre le panneau, sans aucune commande", function()
+        -- Rien n'a jamais ete configure par un joueur : la sauvegarde est vierge.
         assert.are.same({}, _G.GideonRaidDB.intermission.bossIds)
         assert.are.same({}, _G.GideonRaidDB.intermission.bossNames)
         assert.is_false(_G.GideonRaidDB.intermission.overrideEncounter)
         assert.is_false(_G.GideonRaidDB.intermission.idlog)
+        assert.is_false(_G.GideonRaidDB.intermission.bossTargetCleared)
 
-        -- N'IMPORTE QUEL boss, n'importe quelle difficulte : rien ne s'ouvre, et
-        -- le planning n'est meme pas arme.
+        -- ... et pourtant le panneau S'OUVRE sur le boss cible, tel qu'il a ete
+        -- MESURE en jeu (pull heroique : id 3445, nom francais du client, 15, 20).
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_FR_NAME, 15, 20)
+        assert.is_true(contains(messages(), "armed: 4 intermission"), messages())
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "le defaut livre doit ouvrir le panneau sans commande")
+    end)
+
+    it("le defaut LIVRE couvre les DEUX langues et TOUTES les difficultes", function()
+        -- Nom ANGLAIS officiel, difficulte Mythique (16).
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_EN_NAME, 16, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "le nom anglais et la difficulte 16 doivent ouvrir")
+        fire("ENCOUNTER_END")
+
+        -- Nom FRANCAIS du client du raid lead, difficulte Heroique (15) : c'est la
+        -- ligne REELLE mesuree en jeu, caractere pour caractere.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_FR_NAME, 15, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "la ligne mesuree en jeu doit ouvrir")
+        fire("ENCOUNTER_END")
+
+        -- L'id seul suffit (nom vide ou different) : c'est le critere PRINCIPAL.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        fire("ENCOUNTER_START", DELIVERED_ID, "Nom totalement different", 17, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "l'id decide, le nom n'est qu'un filet")
+    end)
+
+    it("un AUTRE boss n'ouvre pas, meme avec le defaut livre (aucune ouverture aveugle)", function()
         fire("ENCOUNTER_START", OTHER_ID, "Some Other Boss", 16, 20)
         stub.fireTickers(2000)
         assert.is_false(panel():IsShown(), "BUG CRITIQUE : le panneau s'ouvre sur n'importe quel boss")
-        assert.is_true(contains(messages(), "No target boss configured"), messages())
-        assert.is_true(contains(messages(), "will NOT open by itself"), messages())
+        assert.is_true(contains(messages(), "is NOT the configured target"), messages())
+        assert.is_true(contains(messages(), "/gr boss <id>"), messages())
     end)
 
-    it("le defaut sur est ANNONCE au chargement (sinon il ressemble a une panne)", function()
+    it("/gr boss 3445 (l'id du defaut livre) est IDEMPOTENT : le panneau reste ouvert", function()
+        slash("boss " .. tostring(DELIVERED_ID))
+        assert.are.same({ DELIVERED_ID }, _G.GideonRaidDB.intermission.bossIds, "l'ajout du joueur est persiste")
+        -- Rejouer la MEME commande ne cree aucun doublon (idempotent).
+        slash("boss " .. tostring(DELIVERED_ID))
+        assert.are.same({ DELIVERED_ID }, _G.GideonRaidDB.intermission.bossIds, "aucun doublon")
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_FR_NAME, 15, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "la cible explicite reste la cible du defaut livre")
+    end)
+
+    it("le defaut livre est ANNONCE (jamais un mystere) et aucun faux avertissement", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         fire("PLAYER_LOGIN")
-        assert.is_true(contains(lastMessage(), "No target boss configured"), tostring(lastMessage()))
-        assert.is_true(contains(lastMessage(), "/gr boss <id>"), tostring(lastMessage()))
-        assert.is_true(contains(lastMessage(), "/gr inter on"), tostring(lastMessage()))
+        -- Rien a signaler : la cible existe (elle est livree), donc pas d'avertissement.
+        assert.is_false(contains(messages(), "No target boss configured"), messages())
+
+        -- `/gr boss` montre la cible EFFECTIVE et son ORIGINE, plus le defaut livre.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss")
+        assert.is_true(contains(messages(), "3445"), messages())
+        assert.is_true(contains(messages(), "delivered with the addon"), messages())
+        assert.is_true(contains(messages(), "Encounter id log: disabled"), messages())
+
+        -- `/gr boss list` dit d'ou chaque entree vient.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss list")
+        assert.is_true(contains(messages(), "Auto-open target ids: 3445 (addon default)"), messages())
+        assert.is_true(contains(messages(), "Target source: the default DELIVERED with the addon"), messages())
+    end)
+
+    it("CLEAR EXPLICITE : /gr boss clear neutralise le defaut livre (les deux etats sont distincts)", function()
+        -- Un joueur efface la cible expres : le defaut livre ne doit PAS revenir.
+        slash("boss clear")
+        assert.is_true(_G.GideonRaidDB.intermission.bossTargetCleared, "l'effacement explicite doit etre marque")
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss")
+        assert.is_true(contains(messages(), "cleared ON PURPOSE"), messages())
+        assert.is_true(contains(messages(), "No target boss configured"), messages())
+
+        -- Le boss du defaut livre n'ouvre PLUS rien, et le refus dit pourquoi.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_FR_NAME, 15, 20)
+        stub.fireTickers(2000)
+        assert.is_false(panel():IsShown(), "efface = aucune ouverture, meme sur le boss du defaut livre")
+        assert.is_true(contains(messages(), "cleared on purpose"), messages())
+        assert.is_true(contains(messages(), "/gr boss 3445"), messages())
+
+        -- ... et `/gr boss list` le dit AUSSI.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss list")
+        assert.is_true(contains(messages(), "Auto-open target ids: none"), messages())
+        assert.is_true(contains(messages(), "cleared ON PURPOSE"), messages())
+
+        -- Un id ajoute APRES le clear redonne une cible (au joueur, pas au defaut).
+        slash("boss " .. tostring(TARGET_ID))
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss list")
+        assert.is_true(contains(messages(), "Auto-open target ids: 2594 (added by you)"), messages())
+        assert.is_true(contains(messages(), "Target source: ONLY the entries added by a player"), messages())
+        fire("ENCOUNTER_START", TARGET_ID, TARGET_NAME, 16, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown())
+    end)
+
+    it("avec une cible ajoutee par un joueur, le defaut livre RESTE (union, jamais un ecrasement)", function()
+        slash("boss " .. tostring(TARGET_ID))
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("boss list")
+        assert.is_true(contains(messages(), "2594 (added by you)"), messages())
+        assert.is_true(contains(messages(), "3445 (addon default)"), messages())
+        assert.is_true(contains(messages(), "Target source: the default delivered with the addon PLUS"), messages())
+        -- Les deux cibles ouvrent : la cible du joueur ne remplace pas celle livree.
+        fire("ENCOUNTER_START", DELIVERED_ID, DELIVERED_FR_NAME, 16, 20)
+        stub.fireTickers(450)
+        assert.is_true(panel():IsShown(), "le defaut livre reste actif")
     end)
 
     it("avec une cible configuree, l'avertissement de chargement disparait", function()
@@ -576,12 +690,13 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(contains(messages(), "Manual override consumed"), messages())
         assert.is_false(panel():IsShown())
 
-        -- L'encounter suivant repart du filtre : un boss inconnu n'ouvre plus.
+        -- L'encounter suivant repart du filtre : un boss inconnu n'ouvre plus (le
+        -- defaut livre est bien la, mais ce n'est pas lui).
         _G.DEFAULT_CHAT_FRAME.messages = {}
         fire("ENCOUNTER_START", OTHER_ID, "Some Other Boss", 16, 20)
         stub.fireTickers(2000)
         assert.is_false(panel():IsShown())
-        assert.is_true(contains(messages(), "No target boss configured"), messages())
+        assert.is_true(contains(messages(), "is NOT the configured target"), messages())
     end)
 
     it("/gr inter off desarme aussi l'override (rien ne peut s'ouvrir plus tard)", function()

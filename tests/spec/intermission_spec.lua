@@ -1155,6 +1155,81 @@ describe("Config : bloc intermission", function()
         -- L'ancien champ de macro a disparu : plus aucune trace dans les defaults.
         assert.is_nil(c.macroTargetToken)
     end)
+
+    -- ------------------------------------------------------------------
+    -- CIBLE DE BOSS LIVREE AVEC L'ADDON (mesuree en jeu par le raid lead)
+    -- ------------------------------------------------------------------
+    it("livre la cible mesuree EN JEU : id 3445 + les deux noms du boss", function()
+        -- La mesure reelle (raid lead, 2026-09-24, pull heroique 20 joueurs) :
+        --   encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20
+        assert.are.same({ 3445 }, Config.DEFAULT_BOSS_IDS)
+        assert.are.same({ "Entombed Sentinels", "Sentinelles inhumées" }, Config.DEFAULT_BOSS_NAMES)
+        -- L'ACCENT du nom francais est preserve, caractere pour caractere : c'est la
+        -- chaine exacte affichee par le client du raid lead (fichier UTF-8).
+        assert.are.equal("Sentinelles inhumées", Config.DEFAULT_BOSS_NAMES[2])
+        -- 21 OCTETS pour 20 caracteres : le "é" final est encode sur deux octets en
+        -- UTF-8, et il fait partie de la chaine comparee (jamais re-accentue).
+        assert.are.equal(21, #Config.DEFAULT_BOSS_NAMES[2])
+        assert.are.equal("é", string.sub(Config.DEFAULT_BOSS_NAMES[2], 18, 19))
+        assert.are.equal("3445", Config.deliveredIdsText())
+        assert.are.equal("Entombed Sentinels, Sentinelles inhumées", Config.deliveredNamesText())
+
+        -- Les difficultes du boss sont documentees et le filtre n'en depend PAS :
+        -- le raid lead joue Heroique (15) aujourd'hui, Mythique (16) plus tard.
+        assert.are.same({ 14, 15, 16, 17 }, Config.BOSS_DIFFICULTIES)
+        assert.is_nil(Config.resolveIntermission({})["BOSS_DIFFICULTIES"])
+    end)
+
+    it("JAMAIS CONFIGURE : la cible effective est celle livree, sans rien ecrire", function()
+        for _, raw in ipairs({ nil, {}, { bossIds = {} }, { bossIds = "bidon", bossNames = 12 } }) do
+            local c = Config.resolveIntermission(raw)
+            assert.are.same({ 3445 }, c.bossIds)
+            assert.are.same({ "entombed sentinels", "sentinelles inhumées" }, c.bossNames)
+            assert.are.same({}, c.bossIdsOwn, "aucune entree de joueur")
+            assert.is_false(c.bossTargetCleared)
+            assert.are.equal("default", c.bossTargetSource)
+        end
+    end)
+
+    it("VIDE EXPLICITEMENT (/gr boss clear) : plus de cible, et le defaut ne revient pas", function()
+        local c = Config.resolveIntermission({ bossIds = {}, bossNames = {}, bossTargetCleared = true })
+        assert.are.same({}, c.bossIds, "efface = aucune cible : le panneau ne s'ouvre sur rien")
+        assert.are.same({}, c.bossNames)
+        assert.is_true(c.bossTargetCleared)
+        assert.are.equal("cleared", c.bossTargetSource)
+
+        -- Seul un `true` EXACT compte : une sauvegarde bricolee a la main ne peut pas
+        -- desactiver le defaut livre par accident.
+        for _, junk in ipairs({ "oui", 1, 0, "true" }) do
+            local j = Config.resolveIntermission({ bossTargetCleared = junk })
+            assert.are.same({ 3445 }, j.bossIds, "valeur douteuse = le defaut livre s'applique")
+            assert.is_false(j.bossTargetCleared)
+        end
+    end)
+
+    it("AJOUT D'UN JOUEUR : union avec le defaut livre, et provenance distincte", function()
+        local c = Config.resolveIntermission({ bossIds = { 2594 }, bossNames = { "Autre Boss" } })
+        assert.are.same({ 2594, 3445 }, c.bossIds, "l'union est triee")
+        assert.are.same({ 2594 }, c.bossIdsOwn, "l'entree du joueur est conservee telle quelle")
+        assert.are.same({ "autre boss" }, c.bossNamesOwn)
+        assert.are.same({ 3445 }, Config.DEFAULT_BOSS_IDS, "les constantes livrees ne bougent pas")
+        assert.are.equal("mixed", c.bossTargetSource)
+
+        -- Apres un clear explicite, un ajout ne fait PAS revenir le defaut livre :
+        -- c'est le joueur qui reprend la main.
+        local after = Config.resolveIntermission({
+            bossIds = { 2594 },
+            bossTargetCleared = true,
+        })
+        assert.are.same({ 2594 }, after.bossIds)
+        assert.are.equal("own", after.bossTargetSource)
+        assert.is_true(after.bossTargetCleared, "le marqueur reste : le defaut ne revient pas en douce")
+
+        -- Un doublon de l'id livre n'en cree pas deux.
+        local dup = Config.resolveIntermission({ bossIds = { 3445 } })
+        assert.are.same({ 3445 }, dup.bossIds)
+        assert.are.equal("mixed", dup.bossTargetSource)
+    end)
 end)
 
 describe("Config : panneau principal (position persistee + verrou)", function()

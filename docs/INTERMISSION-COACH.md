@@ -400,12 +400,13 @@ the panel opens by itself, 2 s before the intermission — and **once per
 | the actual playback | `UI/Intermission.lua` (`playStartSound` → `playSoundFile`, `UI.SoundTestStart`) | `PlaySoundFile` stays confined to `UI/`, on the `Master` channel, under `pcall` |
 | the trigger | `UI.beginIntermission` (real flow, the token is `enc:<encounter>:i<rank>`) and `UI.SimulationInterStart` (token `sim:<n>`) | the sound follows the **opening of the panel**, in the real flow as in the rehearsal |
 | the test entry | `/gr sound test start` | hear the file on request, without waiting for a pull; the test bypasses the gate and never consumes an intermission |
+| the **health check** | `/gr diag` (see §2.8) | verifies **in game** that the four files are loaded and playable (the boolean returned by `PlaySoundFile`) **without making any noise**, and prints the verdict per file |
 
 The file is **listed in `GideonRaid.toc`** — an unlisted sound is not loaded by the
 client and `PlaySoundFile` then fails silently — and a test checks the entry and
 the file on disk (magic bytes `OggS`).
 
-### 2.8 Which boss may open the panel (`/gr boss`) — safe default: NONE
+### 2.8 Which boss may open the panel (`/gr boss`) — the target is DELIVERED
 
 **Reported bug, critical:** *"the window opens by itself during ANY boss fight! It
 must be limited to the boss we want."* The auto-open used to fire on **every**
@@ -441,26 +442,61 @@ Order of the rules (it matters):
 | the persisted allow-lists | `GideonRaidDB.intermission.bossIds` / `bossNames` (`Core/Config.lua` resolves them totally: positive integers, sorted, de-duplicated, 12 max) | an older or hand-edited SavedVariables can never make the panel open on a wrong boss |
 | the idlog | `Core/BossFilter.rememberSeen` / `toList` + `UI.RecordSeenEncounter` + `Config.recordSeen` | the **measurement** mechanism: it is how the **real** id of the target boss is obtained in game, and it never invents a value |
 
-**Default (safe) behaviour:** with no target configured, the panel **never opens by
-itself**; the chat says so **once at login** and again at every encounter that opens
-nothing, with the exact procedure (`/gr idlog on` → pull → read `id=…` → `/gr boss
-<id>`, or `/gr inter on` to open the panel on the next encounter whatever the boss).
-A panel that does not open is better than a panel on the wrong boss.
+**Default behaviour — the target is DELIVERED, so it works with no command:** the
+allow-list is not empty out of the box. `Core/Config.lua` ships the target measured
+in game by the raid lead (`Config.DEFAULT_BOSS_IDS = { 3445 }`,
+`Config.DEFAULT_BOSS_NAMES = { "Entombed Sentinels", "Sentinelles inhumées" }`), and
+`Core/BossFilter.resolveTarget` adds it to whatever a player configured. The panel
+therefore opens by itself on *Entombed Sentinels* **for every player of the guild**,
+**on every difficulty** (14 Normal / 15 Heroic — the raid lead's pull of 2026-09-24
+— / 16 Mythic / 17 LFR: the difficulty is logged by the idlog but **never** enters
+the decision; `Config.BOSS_DIFFICULTIES` documents the table and
+`BossFilter.evaluate` is the single place a difficulty filter could be added).
 
-**Measuring the id in game (the id of Entombed Sentinels is NOT guessed):**
+**Two states are NEVER confused:**
+
+| State | Stored as | Effect | Reported as |
+| --- | --- | --- | --- |
+| **never configured** (fresh install, empty SavedVariables) | `bossIds = {}`, `bossNames = {}`, `bossTargetCleared = false` | the **delivered default** applies: id `3445` + the two names open the panel | `/gr diag` → *"the default DELIVERED with the addon"* |
+| **cleared on purpose** (`/gr boss clear`) | `bossTargetCleared = true` | the delivered default is **dropped too**: nothing opens by itself any more, until `/gr boss <id>` names a target again | `/gr boss` → *"cleared ON PURPOSE"*, and the refusal message at a pull names `/gr boss 3445` to put it back |
+| **player addition** (`/gr boss 2594`) | `bossIds = { 2594 }` | **added to** the delivered default: both open | `/gr boss list` labels each entry *added by you* / *addon default* |
+
+Only an exact `bossTargetCleared = true` counts (same strictness as every other
+boolean of the addon), so a hand-edited SavedVariables can never neutralise the
+delivered default by accident, and a deliberate clear can never be mistaken for a
+lost configuration. `/gr boss` prints the effective target **and where it comes
+from**; `/gr boss list` adds the provenance of every entry.
+
+**Measuring the id of ANOTHER boss (this is how the delivered id was obtained):**
 
 1. `/reload`, then `/gr idlog on` (persisted);
-2. pull Entombed Sentinels: the chat prints
-   `encounter seen: id=2594 name=Entombed Sentinels difficulty=16 group=20` — each
+2. pull the boss: the chat prints
+   `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20` — each
    field is read under `pcall`, and an unreadable one prints `unreadable` instead of
    a fake number;
 3. read the `id=…` back with `/gr boss list` (the last 10 encounters seen are
    memorized, newest first) — no screenshot needed;
-4. `/gr boss <id>` **once**: the panel now opens **only** on that boss; `/gr boss`
-   confirms the target and `/gr boss list` shows the ids configured.
+4. `/gr boss <id>` **once**: the panel now opens on that boss **too**; `/gr boss`
+   confirms the target and `/gr boss list` shows the provenance.
 
-The idlog is a **measurement tool**, not a decision: it prints and memorizes even
-when the coach is disabled and when no target is configured. Nothing is ever sent
+**`/gr diag` (READ-ONLY health report, one command):** the effective target and its
+source, the delivered default, the idlog state, the ping policy, and a verdict per
+sound file (the four of them), obtained from the **boolean returned by
+`PlaySoundFile`** (*`true`* = the client **will** play the file, *`false`/`nil`* =
+missing file / file added after the client started / refused playback). That call
+**is** a playback, so it is only made when it **cannot be heard**: Master channel
+**enabled** (otherwise a disabled channel answers "nothing will play" even for a
+file that is there — the verdict would be a lie) **and** its volume at 0. With the
+sound on, `/gr diag` plays **nothing** and says so, with the procedure to get the
+verdict (`/console Sound_MasterVolume 0` → `/gr diag` → `/console
+Sound_MasterVolume 1`) or to hear a file **on purpose** (`/gr sound test
+1v3r|2v2r|3v1r|start`). A client that refuses to answer reads **UNKNOWN**, never a
+fake *KO*. The whole rule is `Core/Diag.probeGate` (pure, covered by
+`tests/spec/diag_spec.lua`); the rendering layer only injects the two CVars and the
+answers.
+
+The idlog stays a **measurement tool**, not a decision: it prints and memorizes even
+when the coach is disabled and when the target is cleared. Nothing is ever sent
 anywhere.
 
 ## 3. What the addon does / can NOT do (to be told to the players as is)
@@ -682,16 +718,26 @@ preference** and the **panel preferences** (positions + lock):
                           OVERRIDE: the panel opens on the NEXT encounter whatever
                           the boss (consumed at the end of that encounter)
 /gr inter status          module state + timeline + schedule + auto-open target
-/gr boss                  which boss may open the panel by itself + idlog state
+/gr boss                  the EFFECTIVE auto-open target + WHERE it comes from + idlog
 /gr boss <id>             ADDS an encounter id to the target allow-list (persisted;
                           anything that is not a POSITIVE INTEGER is refused and
-                          nothing is written) - empty list = nothing opens
+                          nothing is written). The DELIVERED target (id 3445,
+                          Entombed Sentinels) stays active unless it was cleared
 /gr boss name <text>      adds the exact encounter NAME (secondary criterion,
-                          language-dependent, empty by default)
-/gr boss list             the two lists + the manual override + the last encounters seen
-/gr boss clear            empties both lists -> back to the safe default (nothing opens)
+                          language-dependent; the addon already delivers the EN and
+                          FR names of the target boss)
+/gr boss list             the two lists WITH their provenance (addon default /
+                          added by you) + the manual override + the last encounters
+/gr boss clear            empties both lists AND drops the DELIVERED default -> nothing
+                          opens any more until an id is added again (`/gr boss 3445`)
 /gr idlog [on|off]        logs every encounter seen (id / name / difficulty / group)
                           and memorizes the last 10 (persisted)
+/gr diag                  READ-ONLY health report: the effective target + its source,
+                          the delivered default, the idlog state, the ping policy,
+                          and a verdict per sound file (the 4 of them). It NEVER
+                          plays a sound when the game sound is on: the audio check
+                          runs only with the Master channel enabled and its volume
+                          at 0 (see §9 item 21)
 /gr sim                   simulation help (what it does, how to leave)
 /gr sim inter             SIMULATION: the panel opens RIGHT AWAY, no boss (aliases: group, groupe)
                           -> ONE rehearsal, YOU close it (X or Close)
@@ -709,8 +755,11 @@ dominant color: the module never guesses the composition from the number.
 `/gr sound test <state>` refuses a state that is not `1v3r` / `2v2r` / `3v1r` /
 `start` (nothing is played).
 `/gr boss <value>` refuses anything that is not a **positive integer** (`abc`,
-`0`, `-3`, `12.5`, `1e3`) **without persisting anything** — the raid lead's id is
-never guessed — and `/gr idlog <value>` accepts only `on` or `off`.
+`0`, `-3`, `12.5`, `1e3`) **without persisting anything** — no encounter id is ever
+guessed, and the one the addon delivers is the one **measured in game** (`/gr idlog
+on`, raid lead, 2026-09-24) — and `/gr idlog <value>` accepts only `on` or `off`.
+`/gr diag` takes no argument: it is a read-only report, it writes nothing and it
+never plays a sound when the game sound is on.
 `/gr inter macro` **no longer exists**: the macro route is dead (see §4).
 
 A **binding** `GIDEONRAID_INTERMISSION` (no default key) is declared in
@@ -720,22 +769,28 @@ the panel; the ping keybinds are the client's own (ping system).
 ## 8. Out-of-game tests
 
 ```bash
-busted                                    # 302 tests: 84 for this module, 49 for the real loading
-                                          # (panels, close cross, simulations, button order,
-                                          #  placement OK button, rehearsal composition buttons),
-                                          # 40 for the AUTO-OPEN BOSS FILTER (pure allow-list of
-                                          #  encounter ids: good/wrong/unreadable id, empty list,
-                                          #  empty name, difficulty, /gr boss + /gr idlog wiring,
-                                          #  idlog ring, manual override),
+busted                                    # 331 tests: 88 for this module (including the
+                                          #  DELIVERED target: never configured vs explicit
+                                          #  /gr boss clear vs player addition), 49 for the real
+                                          #  loading (panels, close cross, simulations, button
+                                          #  order, placement OK button, rehearsal buttons),
+                                          # 45 for the AUTO-OPEN BOSS FILTER (the delivered
+                                          #  default target id 3445 + the EN/FR names, every
+                                          #  difficulty, explicit clear vs never configured,
+                                          #  good/wrong/unreadable id, empty name, /gr boss +
+                                          #  /gr idlog wiring, idlog ring, manual override),
                                           # 31 for the SOUNDS (starter table state -> file,
                                           #  .toc + files on disk + packaging, bounded /gr sound
                                           #  preference, one playback per assignment, one playback
                                           #  per intermission for the start sound, survival to a
                                           #  failing or absent PlaySoundFile),
-                                          # 21 for the language, 20 for the ping policy,
                                           # 22 for the pure panel geometry + button sizing (EN + FR),
+                                          # 21 for the language, 20 for the ping policy,
+                                          # 19 for /gr diag (silence gate, verdict per sound file,
+                                          #  report lines, and NO sound played when the client is
+                                          #  audible),
                                           # 14 for the rehearsal + ping help (pure),
-                                          # 11 for the pairing, 10 for the anti-API guard
+                                          # 11 for the pairing, 11 for the anti-API guard
 lua5.1 tools/intermission_cli.lua all     # the 3 states + action lines
 lua5.1 tools/intermission_cli.lua roles   # the 3 states under the 3 ping policies
 lua5.1 tools/intermission_cli.lua 3V1R    # one state
@@ -750,7 +805,7 @@ lua5.1 tools/intermission_cli.lua plan Velna [fixture] [anchors|color|none]
 translated. The key it prints is SIMULATED — the real key is read in game with
 `GetBindingKey`.)
 
-Covered by `tests/spec/intermission_spec.lua` (84 tests):
+Covered by `tests/spec/intermission_spec.lua` (88 tests):
 
 - the three color states (label, green/red counts, possible numbers, ping,
   complement, role, button label, the **ONE action line**) and their
@@ -1006,20 +1061,29 @@ they are kept here as a record and are no longer open questions.
     once the raid lead has dropped his three recordings in `Sound/` (same names,
     Ogg Vorbis, `README.md` §3.3): after replacing them there is **nothing to
     rebuild**, only a `/reload`.
-19. **THE AUTO-OPEN FILTER (critical bug fix) — to be confirmed in game, and it
-    needs ONE measurement** (see §2.8 and `docs/TESTPLAN.md` §3.5e):
-    - the **id of Entombed Sentinels is measured, never guessed**: `/gr idlog on`,
-      pull the boss, read `encounter seen: id=…` (or `/gr boss list`), then
-      `/gr boss <id>`. Until that id is set, the panel **does not open by itself**
-      (safe default) and the chat says so;
-    - check that a **different boss** of the same evening does **not** open the
-      panel (the bug), while the configured target does, in real flow (panel 2 s
-      before the intermission, closing at the end, reopening at the next one);
-    - check the **warning at login** and the **refusal message** at an unrelated
-      encounter (they must read as an explanation, not as a bug);
+19. **THE AUTO-OPEN FILTER (critical bug fix) — CONFIRMED IN GAME (2026-09-24), and
+    the target is now DELIVERED** (see §2.8 and `docs/TESTPLAN.md` §3.5e):
+    - **the measurement is DONE**: `/gr idlog on` + a heroic pull (20 players) gave
+      `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20`.
+      That id is now **shipped with the addon** (`Config.DEFAULT_BOSS_IDS`), with
+      the FR name measured in game **and** the official EN name as a secondary
+      criterion — so the panel opens on the right boss **with no command typed by
+      anybody**;
+    - what is **left to check in game**: (a) `/gr boss` and `/gr diag` really show
+      *"the default DELIVERED with the addon"* on a client that never configured
+      anything; (b) the panel opens on the **Mythic (16)** pull of the same boss
+      (the difficulty is deliberately **not** filtered: Heroic 15 is validated, 16
+      is not yet); (c) a **different boss** of the same evening does **not** open
+      the panel (the bug), in real flow (2 s before the intermission, closing at the
+      end, reopening at the next one);
+    - check that **no warning appears at login** any more (there is a target again),
+      and that after `/gr boss clear` the refusal message explains itself (it names
+      `/gr boss 3445` to put the target back);
     - check `/gr inter on` really opens the panel on the **next** encounter,
       whatever the boss, and that it is **consumed** at the end of that encounter
-      (the one after it must not open).
+      (the one after it must not open);
+    - **restart the client** before judging: a sound file added after the launch is
+      not loaded (see item 20).
 20. **The intermission START sound in the client** (`Sound/intermission-start.ogg`,
     §2.7): `/gr sound test start` plays the raid lead's recording and names the
     file; then, on the target boss, the sound must be heard **exactly once** at the
@@ -1028,3 +1092,23 @@ they are kept here as a record and are no longer open questions.
     **real audio mix**: is it loud enough at the start of the intermission (the
     `Master` channel follows the game volume), and is 3.22 s the right length
     before the panel becomes the thing to read?
+21. **`/gr diag`, the audio verdict — the ONE thing that really needs a client**
+    (`docs/TESTPLAN.md` §3.5f): the report is provable out of game (331 tests,
+    `tests/spec/diag_spec.lua`), but the **meaning of the boolean returned by
+    `PlaySoundFile`** can only be confirmed in a client. What to check:
+    - with the game sound **on**, `/gr diag` must play **NOTHING** and print the four
+      files as *NOT TESTED* + the procedure (this is the "no noise in a raid"
+      promise, and the only case that runs in a normal raid);
+    - with the master volume at **0** (channel enabled), `/gr diag` must print four
+      *present and playable [OK]* — that is the confirmation that a **volume of 0**
+      does **not** make the client answer *nothing will play* (if it does, the
+      report's own caveat fires: "ALL FOUR files came back as not playable"); the
+      fallback is then `/gr sound test 1v3r|2v2r|3v1r|start` plus a **restart**, and
+      the gate is the single place to adjust (`Core/Diag.probeGate`);
+    - with the sound **off/disabled** (Ctrl+S), `/gr diag` must print four *NOT
+      TESTED* and explain that a disabled channel would lie;
+    - to see a real **KO**, temporarily rename one file in `Sound/` (say
+      `assign-3v1r.ogg`), **restart the client**, run `/gr diag` → that one line must
+      read *NOT playable [KO]* while the other three read *[OK]*, then restore the
+      file and restart again. This is the only way to validate the negative case,
+      and it costs one restart.

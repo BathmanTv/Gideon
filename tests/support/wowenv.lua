@@ -40,6 +40,12 @@ function wowenv.loadCore()
     -- noms (SECONDARY, dependante de la langue) et la DECISION pure « ce combat
     -- est-il le boss cible ? » (liste vide = aucune ouverture automatique).
     wowenv.load("Core/BossFilter.lua", ns)
+    -- Core/Diag.lua vient juste APRES BossFilter.lua (meme ordre que le .toc) : il ne
+    -- depend que de Locale et Sound, deja charges, et il porte le RAPPORT de
+    -- `/gr diag` (les 4 fichiers de son + la cible effective + l'idlog + le ping).
+    -- Il est PUR : aucun appel client, c'est UI/Panel.lua qui lui injecte les CVars
+    -- et les reponses de PlaySoundFile.
+    wowenv.load("Core/Diag.lua", ns)
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
     wowenv.load("Core/Intermission.lua", ns)

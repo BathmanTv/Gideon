@@ -321,11 +321,30 @@ A task is finished if, **and only if**:
    fails if the call leaves `UI/` or loses its guard.
 9. **Which boss may open the panel is a PURE decision** (`Core/BossFilter.lua`,
    `/gr boss`): an **allow-list of encounter ids** (the primary, language-independent
-   criterion) plus an optional list of **names** (secondary, **empty by default**:
-   the client translates names, nothing is ever guessed), with **an empty list
-   meaning NOTHING opens** (safe default). The rendering layer **renders** that
-   decision (under `pcall`) and never compares an id or a name itself; the id of a
-   boss is **measured** with `/gr idlog on`, never invented.
+   criterion) plus an optional list of **names** (secondary: the client translates
+   names, nothing is ever guessed), resolved by `BossFilter.resolveTarget` into the
+   **effective** target = the delivered default **plus** the entries of the player.
+   The **delivered default** (`Config.DEFAULT_BOSS_IDS` = `{ 3445 }`,
+   `Config.DEFAULT_BOSS_NAMES` = the official EN name + the FR name **measured in
+   game**) is what makes the panel open with **no command typed**; the id is
+   **measured** with `/gr idlog on`, never invented. An **explicit**
+   `/gr boss clear` (`bossTargetCleared`, an exact `true` only) **drops** the
+   delivered default: the two states are never confused, so an empty allow-list
+   still means **NOTHING opens** and a deliberate choice is never undone. The
+   rendering layer **renders** that decision (under `pcall`) and never compares an
+   id or a name itself. **The difficulty is never part of the decision** (every
+   difficulty of the target boss opens the panel): `Config.BOSS_DIFFICULTIES`
+   documents the table, unfiltered on purpose.
+10. **A diagnostic reads, it never plays** (`Core/Diag.lua`, `/gr diag`). The
+    report is pure (the rendering layer injects the CVars and the answers) and the
+    audio check is behind the **silence gate** `Diag.probeGate`: `PlaySoundFile` is
+    only called when the Master channel is **enabled** (a disabled channel answers
+    "nothing will play" even for a present file, so the verdict would be a lie)
+    **and** its volume is exactly **0** (the playback is then inaudible). With the
+    sound on, the diagnostic must print **NOT TESTED** and play **nothing**: an
+    in-game health check that makes noise during a raid is a bug. The CVars are
+    **read-only** (`GetCVar` under `pcall`, never `SetCVar`), and a client that
+    cannot answer yields **UNKNOWN**, never a fake KO.
 
 ---
 
