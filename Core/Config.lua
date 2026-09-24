@@ -19,6 +19,12 @@ local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Con
 --- and the BOUNDED resolvers of the assignment-sound preference (/gr sound).
 local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before Core/Config.lua")
 
+--- Core/BossFilter.lua is loaded BEFORE this file by the .toc: it owns the
+--- allow-list of encounter ids (PRIMARY criterion, `/gr boss <id>`) and of names
+--- (SECONDARY, language dependent), the bounded resolvers of the auto-open filter
+--- and the SAFE DEFAULT (an empty list opens nothing).
+local BossFilter = assert(ns.BossFilter, "Core/BossFilter.lua must be loaded before Core/Config.lua")
+
 local Config = {}
 ns.Config = Config
 
@@ -111,6 +117,23 @@ function Config.defaultIntermission()
         -- sound per canonical state, played ONCE when the player declares their
         -- composition. /gr sound on|off, /gr sound test 1v3r|2v2r|3v1r.
         soundEnabled = Sound.DEFAULT_ENABLED,
+        -- AUTO-OPEN FILTER (see Core/BossFilter.lua): WHICH boss may open the
+        -- panel by itself. SAFE DEFAULT: an EMPTY allow-list means NO automatic
+        -- opening at all - the panel used to open on ANY boss (critical bug).
+        -- `/gr boss <id>` fills the ids (PRIMARY criterion: ENCOUNTER_START arg1,
+        -- an integer, identical in every language), `/gr boss name <text>` fills
+        -- the names (SECONDARY, depends on the client language: empty by
+        -- default, no translation ever guessed).
+        bossIds = {},
+        bossNames = {},
+        -- `/gr idlog on|off`: prints and memorizes the encounters seen, which is
+        -- how the real id of the target boss is captured in game.
+        idlog = false,
+        -- MANUAL OVERRIDE (`/gr inter on`): arms the panel for the NEXT encounter
+        -- whatever the boss; consumed at the end of that encounter.
+        overrideEncounter = false,
+        -- The last encounters seen by the idlog (newest first, bounded).
+        seenEncounters = {},
         position = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 },
     }
 end
@@ -323,6 +346,28 @@ function Config.recordDecision(db, record)
     return entry
 end
 
+--- Publishes ONE encounter observation into the SavedVariables (the IDLOG,
+--- `/gr idlog on`): `db.intermission.seenEncounters` keeps the LAST observations,
+--- NEWEST FIRST, bounded to `BossFilter.MAX_SEEN`. This is the field the raid
+--- lead reads back after a pull to get the REAL encounter id of the target boss -
+--- nothing is invented, nothing is sent.
+--- The entry is normalized (Core/BossFilter.toEntry): only known fields, checked
+--- values, so a hand-edited or malformed entry can never break the list.
+--- @param db table SavedVariables
+--- @param entry table observation { id, idStatus, name, ..., at, clock }
+--- @return table|nil stored entry
+function Config.recordSeen(db, entry)
+    if type(db) ~= "table" or type(entry) ~= "table" then
+        return nil
+    end
+    if type(db.intermission) ~= "table" then
+        db.intermission = Config.defaultIntermission()
+    end
+    local stored = BossFilter.toEntry(entry)
+    db.intermission.seenEncounters = BossFilter.rememberSeen(db.intermission.seenEncounters, stored)
+    return stored
+end
+
 --- PURE resolution of the module configuration: clamps, filters inconsistent
 --- types, never keeps a value that cannot be rendered.
 --- @param raw table|nil raw content of GideonRaidDB.intermission
@@ -366,6 +411,17 @@ function Config.resolveIntermission(raw)
     -- migration of the existing saves is exactly this: a missing field means
     -- "enabled", no schema bump is needed.
     out.soundEnabled = Sound.resolveEnabled(raw.soundEnabled)
+
+    -- AUTO-OPEN FILTER: pure and bounded resolution. An absent or hand-edited
+    -- list resolves to an EMPTY list, which is the SAFE DEFAULT: nothing opens by
+    -- itself. No id and no name is ever invented here.
+    out.bossIds = BossFilter.resolveIds(raw.bossIds)
+    out.bossNames = BossFilter.resolveNames(raw.bossNames)
+    -- IDLOG: only an exact `true` turns it on (it WRITES on every encounter).
+    out.idlog = BossFilter.enabledOf(raw.idlog)
+    -- MANUAL OVERRIDE: only an exact `true` arms it; it is consumed (set back to
+    -- false) at the end of the encounter it opened.
+    out.overrideEncounter = raw.overrideEncounter == true
 
     local pos = raw.position
     if type(pos) == "table" then

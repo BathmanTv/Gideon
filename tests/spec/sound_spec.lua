@@ -31,6 +31,39 @@ local function contains(text, needle)
     return string.find(tostring(text), needle, 1, true) ~= nil
 end
 
+--- Le boss CIBLE du harness : le filtre d'ouverture auto est une allow-list d'ids
+--- persistee et VIDE par defaut (defaut sur : aucune ouverture automatique). Un
+--- test qui veut le flux REEL nomme donc la cible, puis tire ce boss, avec les
+--- arguments reels d'ENCOUNTER_START (id, nom, difficulte, taille de groupe).
+local BOSS_ID = 1234
+local function pullTargetBoss()
+    _G.GideonRaidDB.intermission.bossIds = { BOSS_ID }
+    stub.mainFrame():Fire("ENCOUNTER_START", BOSS_ID, "Entombed Sentinels", 16, 20)
+end
+
+--- Les sons d'ASSIGNATION (assign-*.ogg) reellement joues. Le son de DEBUT
+--- d'intermission (intermission-start.ogg) est compte a PART : il part a
+--- l'ouverture du panneau, pas au clic (voir le bloc dedie plus bas).
+local function assignSounds()
+    local out = {}
+    for index = 1, #stub.sounds do
+        if contains(stub.sounds[index].path, "assign-") then
+            out[#out + 1] = stub.sounds[index]
+        end
+    end
+    return out
+end
+
+local function startSounds()
+    local out = {}
+    for index = 1, #stub.sounds do
+        if contains(stub.sounds[index].path, "intermission-start") then
+            out[#out + 1] = stub.sounds[index]
+        end
+    end
+    return out
+end
+
 local function readFile(path)
     local handle = assert(io.open(path, "r"), path .. " introuvable")
     local content = handle:read("*a")
@@ -87,6 +120,13 @@ describe("Sound : table pure etat -> fichier de son", function()
             assert.is_string(Sound.pathFor(state), state)
         end
         assert.are.equal(3, #Sound.FILE_NAMES)
+        -- Le son de DEBUT d'intermission est un QUATRIEME fichier, hors des trois
+        -- etats canoniques : il est liste AVEC eux (ALL_FILE_NAMES), ce que
+        -- verifient le .toc, le disque et le packaging plus bas.
+        assert.are.equal("intermission-start.ogg", Sound.START_FILE)
+        assert.are.equal(4, #Sound.ALL_FILE_NAMES)
+        assert.are.equal("Sound/intermission-start.ogg", "Sound/" .. Sound.START_FILE)
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\intermission-start.ogg", Sound.startPath())
     end)
 
     it("donne a chaque etat SON fichier (minuscules, sans accents, stables)", function()
@@ -225,11 +265,11 @@ describe("Sound : fichiers livres et packaging", function()
     local ns = wowenv.loadCore()
     local Sound = ns.Sound
 
-    it("liste les TROIS sons dans le .toc (un son non liste n'est pas charge)", function()
+    it("liste les QUATRE sons livres dans le .toc (un son non liste n'est pas charge)", function()
         local entries = wowenv.tocEntries()
-        for index = 1, #Sound.STATES do
-            local state = Sound.STATES[index]
-            local expected = "Sound/" .. Sound.fileName(state)
+        for index = 1, #Sound.ALL_FILE_NAMES do
+            local file = Sound.ALL_FILE_NAMES[index]
+            local expected = "Sound/" .. file
             local found = false
             for entry = 1, #entries do
                 if entries[entry] == expected then
@@ -238,13 +278,17 @@ describe("Sound : fichiers livres et packaging", function()
             end
             assert.is_true(found, expected .. " doit etre liste dans GideonRaid.toc")
         end
+        -- Le son de DEBUT d'intermission est bien liste lui aussi : sans entree au
+        -- .toc, le client ne le charge pas et PlaySoundFile echoue en silence.
+        assert.is_true(#entries >= 14, "le .toc doit lister 11 fichiers lua + 4 sons")
         -- Le chemin CLIENT et l'entree du .toc decrivent le meme fichier.
         assert.are.equal("Interface\\AddOns\\GideonRaid\\" .. "Sound\\assign-1v3r.ogg", Sound.pathFor("1V3R"))
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\intermission-start.ogg", Sound.startPath())
     end)
 
-    it("les trois fichiers existent sur disque et sont de vrais Ogg Vorbis", function()
-        for index = 1, #Sound.FILE_NAMES do
-            local file = Sound.FILE_NAMES[index]
+    it("les fichiers livres existent sur disque et sont de vrais Ogg Vorbis", function()
+        for index = 1, #Sound.ALL_FILE_NAMES do
+            local file = Sound.ALL_FILE_NAMES[index]
             local exists, size, content = fileExists("Sound/" .. file)
             assert.is_true(exists, "Sound/" .. file .. " est absent du depot")
             assert.is_true(size > 0, "Sound/" .. file .. " est vide")
@@ -252,9 +296,9 @@ describe("Sound : fichiers livres et packaging", function()
         end
     end)
 
-    it("les trois noms sont en minuscules, sans accent ni espace", function()
-        for index = 1, #Sound.FILE_NAMES do
-            local file = Sound.FILE_NAMES[index]
+    it("les noms livres sont en minuscules, sans accent ni espace", function()
+        for index = 1, #Sound.ALL_FILE_NAMES do
+            local file = Sound.ALL_FILE_NAMES[index]
             assert.is_truthy(file:match("^[a-z0-9%.%-]+$") ~= nil, file .. " : nom non conforme")
             assert.are.equal(file:lower(), file, file)
         end
@@ -401,81 +445,87 @@ describe("Sound : le son part au clic, une seule fois", function()
         return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
     end
 
-    it("flux reel : aucun son avant la declaration, puis UNE fois le bon fichier", function()
-        stub.mainFrame():Fire("ENCOUNTER_START")
+    it("flux reel : aucun son d'assignation avant la declaration, puis UNE fois le bon fichier", function()
+        pullTargetBoss()
         stub.fireTickers(450) -- le panneau s'ouvre avant la 1re intermission
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.are.equal(0, #stub.sounds, "aucun son tant qu'aucune composition n'est declaree")
+        assert.are.equal(0, #assignSounds(), "aucun son d'assignation tant qu'aucune composition n'est declaree")
 
         panel.buttons[1]:Click() -- 1V3R
-        assert.are.equal(1, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", stub.sounds[1].path)
-        assert.are.equal("Master", stub.sounds[1].channel)
+        assert.are.equal(1, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", assignSounds()[1].path)
+        assert.are.equal("Master", assignSounds()[1].channel)
         assert.are.equal("1V3R", panel.state:GetText())
 
         -- Ni les ticks du panneau, ni un re-rendu ne rejouent quoi que ce soit.
         stub.fireTickers(30)
-        assert.are.equal(1, #stub.sounds, "pas de double lecture")
+        assert.are.equal(1, #assignSounds(), "pas de double lecture")
 
         -- Redeclarer la MEME composition (commande, sans CORRIGER) ne rejoue pas.
         _G.SlashCmdList["GIDEONRAID"]("inter 1V3R")
-        assert.are.equal(1, #stub.sounds)
+        assert.are.equal(1, #assignSounds())
 
         -- Une AUTRE composition est un nouveau choix : son son part.
         _G.SlashCmdList["GIDEONRAID"]("inter 3V1R")
-        assert.are.equal(2, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", stub.sounds[2].path)
+        assert.are.equal(2, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", assignSounds()[2].path)
     end)
 
     it("CORRIGER puis recliquer rejoue le son de la nouvelle composition", function()
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click()
-        assert.are.equal(1, #stub.sounds)
+        assert.are.equal(1, #assignSounds())
         panel.redo:Click() -- CORRIGER
-        assert.are.equal(1, #stub.sounds, "CORRIGER ne joue aucun son")
+        assert.are.equal(1, #assignSounds(), "CORRIGER ne joue aucun son")
         panel.buttons[2]:Click() -- 2V2R
-        assert.are.equal(2, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", stub.sounds[2].path)
+        assert.are.equal(2, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", assignSounds()[2].path)
         -- La MEME composition apres CORRIGER est un nouveau choix : elle rejoue.
         panel.redo:Click()
         panel.buttons[2]:Click()
-        assert.are.equal(3, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", stub.sounds[3].path)
+        assert.are.equal(3, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", assignSounds()[3].path)
     end)
 
     it("rejoue a l'intermission SUIVANTE (la garde est rearmee)", function()
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[3]:Click() -- 3V1R, 1re intermission
-        assert.are.equal(1, #stub.sounds)
+        assert.are.equal(1, #assignSounds())
         stub.fireTickers(260) -- fin de l'intermission : fermeture automatique
         assert.is_false(panel:IsShown())
         stub.fireTickers(760) -- 2e intermission : reouverture
         assert.is_true(panel:IsShown())
         panel.buttons[3]:Click() -- la MEME composition, nouvelle intermission
-        assert.are.equal(2, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", stub.sounds[2].path)
+        assert.are.equal(2, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-3v1r.ogg", assignSounds()[2].path)
+        -- Et le son de DEBUT a bien accompagne les DEUX intermissions (une fois
+        -- chacune, jamais deux pour la meme).
+        assert.are.equal(2, #startSounds())
     end)
 
     it("repetition /gr sim inter : meme son, une fois, sans rien publier", function()
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        assert.are.equal(0, #stub.sounds, "la repetition ne joue rien avant le clic")
+        assert.are.equal(0, #assignSounds(), "la repetition ne joue rien avant le clic")
+        assert.are.equal(1, #startSounds(), "le son de debut part a l'ouverture de la repetition")
         panel.buttons[1]:Click()
-        assert.are.equal(1, #stub.sounds)
-        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", stub.sounds[1].path)
+        assert.are.equal(1, #assignSounds())
+        assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-1v3r.ogg", assignSounds()[1].path)
         assert.is_nil(_G.GideonRaidDB.intermission.lastDecision, "une repetition ne publie rien")
         panel.buttons[1]:Click() -- les trois choix sont masques, mais un clic force ne double pas
-        assert.are.equal(1, #stub.sounds)
+        assert.are.equal(1, #assignSounds())
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
-        -- Une NOUVELLE repetition rearme la garde.
+        -- Une NOUVELLE repetition rearme la garde (et rejoue le son de debut : la
+        -- repetition est une nouvelle intermission).
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         _G.GideonRaidIntermissionPanel.buttons[1]:Click()
-        assert.are.equal(2, #stub.sounds)
+        assert.are.equal(2, #assignSounds())
+        assert.are.equal(2, #startSounds())
     end)
 
     it("preference off : le clic ne joue plus rien, le rendu reste complet", function()

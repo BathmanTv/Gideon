@@ -85,6 +85,22 @@ Sound.FILES_BY_STATE = {
 --- used by the tests that check the .toc entries and the files on disk.
 Sound.FILE_NAMES = { "assign-1v3r.ogg", "assign-2v2r.ogg", "assign-3v1r.ogg" }
 
+--- THE INTERMISSION START SOUND (raid-lead recording): played ONCE at the very
+--- BEGINNING of every intermission - i.e. when the panel opens by itself, 2 s
+--- before the intermission, which IS the beginning of the intermission - and once
+--- per `/gr sim inter` rehearsal. See Sound.takeIntermissionStart.
+Sound.START_FILE = "intermission-start.ogg"
+
+--- EVERY sound file of the addon, built from the two constants above (a new file
+--- can therefore never be forgotten here): the tests check the .toc entries, the
+--- files on disk and the packaging against this list.
+local ALL_FILE_NAMES = {}
+for index = 1, #Sound.FILE_NAMES do
+    ALL_FILE_NAMES[#ALL_FILE_NAMES + 1] = Sound.FILE_NAMES[index]
+end
+ALL_FILE_NAMES[#ALL_FILE_NAMES + 1] = Sound.START_FILE
+Sound.ALL_FILE_NAMES = ALL_FILE_NAMES
+
 --- Default of the player preference: the sound is ENABLED (the raid lead
 --- requested it; `/gr sound off` mutes it).
 Sound.DEFAULT_ENABLED = true
@@ -236,6 +252,71 @@ function Sound.takeAssignSound(assigner, declaration, enabled)
         state = state,
         fileName = Sound.FILES_BY_STATE[state],
         path = Sound.pathFor(state),
+        channel = Sound.CHANNEL,
+    },
+        Sound.REASON.PLAY
+end
+
+--[[ INTERMISSION START SOUND (raid-lead recording, `Sound/intermission-start.ogg`)
+
+     Requested by the raid lead: ONE playback at the very BEGINNING of every
+     intermission - that is the moment the intermission panel opens by itself
+     (it opens 2 s BEFORE the intermission: it IS the beginning of the
+     intermission) - and once per `/gr sim inter` rehearsal.
+
+     The rule "ONE playback per intermission" is enforced HERE, in the pure
+     module, as an IDENTITY: the wiring hands a TOKEN that names the intermission
+     (the encounter + the rank of the intermission inside it, or the rehearsal).
+       - the SAME token can never sound twice: a refresh, a tick, a double opening
+         or a second call with the same token is refused (REASON.ALREADY);
+       - a NEW token always sounds again: the next intermission of the same
+         encounter, the first intermission of the NEXT encounter, the next
+         rehearsal - the gate re-arms itself with no other call needed.
+     The one-playback-per-assignment gate above uses the same idea with the state
+     of the declared composition.
+]]
+
+--- CLIENT path of the INTERMISSION START sound, exactly what the rendering layer
+--- hands to PlaySoundFile and exactly what GideonRaid.toc lists.
+--- @return string client path
+function Sound.startPath()
+    return Sound.FOLDER .. Sound.START_FILE
+end
+
+--- Creates the ONE-PLAYBACK-PER-INTERMISSION gate of the start sound
+--- (`{ token = nil }`): plain data, no API, no clock.
+--- @return table gate
+function Sound.newStartGate()
+    return { token = nil }
+end
+
+--- PURE decision: must the INTERMISSION START sound be played for the intermission
+--- identified by `token`?
+--- Refusals (nil + reason): "disabled" (the player turned the sound off and the
+--- test can never contradict the setting) and "already" (this VERY intermission
+--- already sounded: the sound is never doubled). A missing gate or a nil token is
+--- "unknown": nothing is played, nothing is guessed.
+--- `enabled` is the RESOLVED preference, injected by the wiring (Core/ never reads
+--- the SavedVariables): nil counts as enabled.
+--- @param gate table|nil gate created by newStartGate
+--- @param token string|number|nil identity of the intermission
+--- @param enabled boolean|nil resolved preference (false = muted)
+--- @return table|nil request { fileName, path, channel }
+--- @return string reason (Sound.REASON.*)
+function Sound.takeIntermissionStart(gate, token, enabled)
+    if enabled == false then
+        return nil, Sound.REASON.DISABLED
+    end
+    if type(gate) ~= "table" or token == nil then
+        return nil, Sound.REASON.UNKNOWN
+    end
+    if gate.token == token then
+        return nil, Sound.REASON.ALREADY
+    end
+    gate.token = token
+    return {
+        fileName = Sound.START_FILE,
+        path = Sound.startPath(),
         channel = Sound.CHANNEL,
     },
         Sound.REASON.PLAY

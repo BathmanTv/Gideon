@@ -4,6 +4,118 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [Unreleased]
+
+**Critical bug fixed** — *"the window opens by itself during ANY boss fight! It
+must be limited to the boss we want."*: the intermission panel used to open on
+**every** `ENCOUNTER_START` of every raid. The auto-open is now filtered by a
+**persisted allow-list of encounter ids**, with a **safe default: an empty list
+opens nothing**. Plus the raid lead's **intermission start sound**
+(`Sound/intermission-start.ogg`), played **once** at the beginning of every
+intermission.
+
+### Fixed
+
+- **The panel only opens on the target boss** (`Core/BossFilter.lua`, new PURE
+  module: no WoW API, no clock). The decision is
+  `BossFilter.evaluate(observation, configuration) -> { shouldOpen, reason, id, name }`,
+  in this order: the **manual override** (`/gr inter on`), then an **empty
+  allow-list = REFUSAL** (safe default, `noTarget`), then the **encounter id**
+  (`ENCOUNTER_START` arg1, an integer, identical in every client language),
+  then the optional **name** criterion (case-insensitive), otherwise `noMatch`
+  (or `unreadable` when a value could not be read). A schedule left over by a
+  previous fight is disarmed too, so the panel can never open on the wrong boss.
+- **Every `ENCOUNTER_START` argument is read under `pcall`, and only to compare**:
+  in 12.x an argument may be a **secret** value, whose smallest operation raises.
+  The reader is **injected** by the wiring layer (Core/ never touches an event), a
+  value that fails to read is reported as `unreadable` and is **never a match**,
+  and the decision itself is called through `pcall` (`UI.BossDecision`): the worst
+  case is a panel that does not open, **never** a Lua error and **never** an
+  automatic opening on an unknown boss.
+- A stale `ENCOUNTER_START` schedule is **disarmed** when an encounter is not the
+  target, and `/gr inter off` clears the manual override, so nothing can fire
+  later on.
+
+### Added
+
+- **`/gr boss`** — which boss may open the panel by itself:
+  - `/gr boss` prints the auto-open target, the idlog state and, when the list is
+    empty, the **safe-default warning** with the exact procedure;
+  - `/gr boss <id>` **adds an encounter id** to the persisted allow-list (the
+    **primary** criterion). Anything that is not a **positive integer** (`abc`,
+    `0`, `-3`, `12.5`, `1e3`) is **REFUSED without persisting anything** (same
+    mechanics as `/gr lang`, `/gr ping` and `/gr sound`) — the id of the target
+    boss is **measured**, never guessed;
+  - `/gr boss name <text>` adds the **secondary** criterion: the exact encounter
+    NAME. It depends on the **client language** (the raid lead plays on a French
+    client), so the list is **EMPTY by default** and no translated name is ever
+    written for the player;
+  - `/gr boss list` shows both lists, the manual override and the encounters
+    memorized by the idlog; `/gr boss clear` empties both lists (back to the safe
+    default).
+- **`/gr idlog on|off`** (persisted) — the **measurement** mechanism requested by
+  the raid lead: at **every** `ENCOUNTER_START` the chat prints
+  `encounter seen: id=… name=… difficulty=… group=…` (each value read under
+  `pcall`; an unreadable value prints `unreadable` instead of a fake number) and
+  the **last 10** observations are memorized in the SavedVariables
+  (`GideonRaidDB.intermission.seenEncounters`, newest first). This is how the real
+  id of *Entombed Sentinels* is captured in game: `/gr idlog on`, pull the boss,
+  `/gr boss list` (or the chat line), then `/gr boss <id>`. Nothing is sent
+  anywhere.
+- **The safe default is announced**: with no target configured, the chat says so
+  **once at login** and again at every encounter that opens nothing — the panel is
+  not silently broken, it tells the player how to configure the right boss. A
+  panel that does not open is better than a panel on the wrong boss.
+- **`/gr inter on` is the MANUAL OVERRIDE** (and stays the enable command): it
+  arms the panel for the **NEXT** encounter, whatever the boss, and that arm is
+  **consumed at the end of that encounter** (`/gr inter off` clears it) — the only
+  way to open the panel on a boss that is not the configured target.
+- **The intermission START sound** (`Sound/intermission-start.ogg`, the raid
+  lead's own recording, already in the repository and **listed in
+  `GideonRaid.toc`** — an unlisted sound is not loaded by the client). It is
+  played **once at the very beginning of every intermission** — the moment the
+  panel opens by itself, 2 s before the intermission — and **once per
+  `/gr sim inter` rehearsal`. The rule is an **identity** carried by the caller
+  (`Sound.newStartGate` / `Sound.takeIntermissionStart`: the wiring hands a token
+  naming the intermission), so the same intermission can **never** sound twice
+  while the next one always sounds, with no explicit re-arm. Same channel
+  (`Master`), same preference (`/gr sound on|off`) and same `pcall` protection as
+  the soundboards.
+- **`/gr sound test start`** plays that file on request and names it in the chat,
+  without waiting for a pull.
+- `tests/spec/bossfilter_spec.lua` (40 tests): the pure decision (good id, wrong
+  id, **unreadable** id via an injected reader that raises, empty list, empty
+  name, difficulty which **never decides**, override), the strict resolvers and
+  the total ones (a hand-edited SavedVariables can never open the panel), the
+  idlog ring (bounded, newest first, empty observations dropped), and the wiring
+  (`/gr boss`, `/gr boss name`, `/gr boss list`, `/gr boss clear`, refusals
+  without persisting, `/gr idlog`, the login warning, the manual override consumed
+  at the end of the encounter, and a Core decision that raises staying a refusal).
+- The intermission start sound is covered end to end: its pure gate (one playback
+  per intermission, a new token plays again, `/gr sound off` silences it), the real
+  flow (**two intermissions = two sounds**), the rehearsal (one per cycle), the
+  `.toc` entry and the file on disk (real Ogg Vorbis).
+
+### Changed
+
+- `GideonRaid.lua`: the event handler now passes the `ENCOUNTER_START` arguments
+  to `ns.BossFilter.observeEncounter` (they were ignored before) — still no combat
+  API, no combat log event, no ping, no macro.
+- `GideonRaid.toc`: `Core/BossFilter.lua` (loaded **before** `Core/Config.lua`)
+  and `Sound/intermission-start.ogg` are listed.
+- `Core/Config.lua` resolves the new persisted fields (`bossIds`, `bossNames`,
+  `idlog`, `seenEncounters`, `overrideEncounter`) and publishes one observation
+  into the idlog ring; `Core/Sound.lua` owns the start sound (one playback per
+  intermission); `UI/Intermission.lua` owns the playback and the warning messages.
+- Docs: `README.md` (§3.2 flow, §3.3 start sound, §3.4 `/gr boss` + the ID capture
+  procedure, §5 structure, §6 reference `make check` output), `docs/INTERMISSION-COACH.md`
+  (§2.7 start sound, §2.8 the auto-open filter, §6 configuration, §7 commands,
+  §8 test counts, §9 items 19-20), `docs/TESTPLAN.md` (§1g, Step 2 items 28-29,
+  protocols §3.5d/§3.5e, coverage matrix).
+- Test suite: **260 → 302 tests**; `.toc` entries **13 → 15** (11 Lua files + 4
+  sounds). `make check` stays green (stylua + luacheck on 26 files + check_toc +
+  busted).
+
 ## [0.10.0] - 2026-09-23
 
 **Assignment soundboards** requested by the raid lead: the moment a player

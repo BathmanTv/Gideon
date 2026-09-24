@@ -45,9 +45,28 @@ describe("chargement de l'addon", function()
         return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
     end
 
+    --- Le boss CIBLE du test. Depuis la correction du bug critique (« le panneau
+    --- s'ouvre sur n'importe quel boss ») l'ouverture automatique est filtree par
+    --- une allow-list d'ids d'ENCOUNTER_START, persistee et VIDE par defaut (defaut
+    --- sur : aucune ouverture). Les tests du flux reel nomment donc la cible puis
+    --- tirent CE boss, avec les arguments reels de l'evenement (id, nom, difficulte,
+    --- taille de groupe).
+    local BOSS_ID = 1234
+    local BOSS_NAME = "Entombed Sentinels"
+
+    local function setBossTarget(ids)
+        _G.GideonRaidDB.intermission.bossIds = ids or { BOSS_ID }
+    end
+
+    --- Pull du boss CIBLE : la seule maniere normale d'armer le planning.
+    local function pullTargetBoss()
+        setBossTarget()
+        stub.mainFrame():Fire("ENCOUNTER_START", BOSS_ID, BOSS_NAME, 16, 20)
+    end
+
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(10, #files)
+        assert.are.equal(11, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
@@ -55,14 +74,17 @@ describe("chargement de l'addon", function()
         -- resout la preference bornee (/gr sound), et il porte la table pure
         -- « etat -> fichier de son » du son d'assignation.
         assert.are.equal("Core/Sound.lua", files[3])
-        assert.are.equal("Core/Config.lua", files[4])
+        -- Core/BossFilter.lua AVANT Config.lua : Config en resout l'allow-list
+        -- d'ids d'encounter du filtre d'ouverture auto (/gr boss <id>).
+        assert.are.equal("Core/BossFilter.lua", files[4])
+        assert.are.equal("Core/Config.lua", files[5])
         -- Core/Simulation.lua APRES Intermission.lua (il reutilise ses etats et
         -- ses libelles), Core/Layout.lua EN DERNIER des Core/ (il mesure les
         -- libelles), puis la couche de rendu (UI/) qui applique le tout.
-        assert.are.equal("Core/Simulation.lua", files[7])
-        assert.are.equal("Core/Layout.lua", files[8])
-        assert.are.equal("UI/Panel.lua", files[9])
-        assert.are.equal("UI/Intermission.lua", files[10])
+        assert.are.equal("Core/Simulation.lua", files[8])
+        assert.are.equal("Core/Layout.lua", files[9])
+        assert.are.equal("UI/Panel.lua", files[10])
+        assert.are.equal("UI/Intermission.lua", files[11])
     end)
 
     it("expose toutes les couches attendues", function()
@@ -180,9 +202,13 @@ describe("chargement de l'addon", function()
         assert.is_false(panel:IsShown())
     end)
 
-    it("ENCOUNTER_START arme le planning sans ouvrir le panneau ni lire ses arguments", function()
+    it("ENCOUNTER_START du boss CIBLE arme le planning sans ouvrir le panneau", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START", 1234, "Entombed Sentinels", 16, 20)
+        -- Le filtre d'ouverture auto est une allow-list d'ids persistee, vide par
+        -- defaut : le test NOMME donc la cible avant de tirer, comme le raid lead
+        -- le fera en jeu (/gr boss <id>), et les arguments lus sont ceux reels de
+        -- l'evenement.
+        pullTargetBoss()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_false(panel:IsShown(), "le panneau ne s'ouvre qu'avant l'intermission")
         assert.matches("armed: 4 intermission", messages())
@@ -191,7 +217,7 @@ describe("chargement de l'addon", function()
 
     it("le panneau s'ouvre TOUT SEUL avant la 1re intermission (44,3 s) et ferme a la fin", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         local panel = _G.GideonRaidIntermissionPanel
         -- 40 s : toujours ferme (ouverture a 44,3 s).
         stub.fireTickers(400)
@@ -216,7 +242,7 @@ describe("chargement de l'addon", function()
 
     it("clic sur une composition : etat en gros, role, PING et UNE action", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         assert.matches("2 green %+ 2 red", panel.buttons[2]:GetText())
@@ -236,7 +262,7 @@ describe("chargement de l'addon", function()
 
     it("bouton CORRIGER : ramene aux trois choix, utilisable plusieurs fois", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click()
@@ -266,7 +292,7 @@ describe("chargement de l'addon", function()
             end
             return nil
         end
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click()
@@ -277,7 +303,7 @@ describe("chargement de l'addon", function()
     it("sans raccourci bindi (ou GetBindingKey absent) : demande un raccourci", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         assert.is_nil(_G.GetBindingKey, "le harnais ne definit PAS GetBindingKey")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click()
@@ -290,7 +316,7 @@ describe("chargement de l'addon", function()
         _G.GetBindingKey = function()
             error("GetBindingKey a leve")
         end
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         panel.buttons[1]:Click()
@@ -299,7 +325,7 @@ describe("chargement de l'addon", function()
 
     it("rouvre le panneau a l'intermission SUIVANTE (cycle complet)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         local panel = _G.GideonRaidIntermissionPanel
         stub.fireTickers(450) -- 1re intermission, panneau ouvert
         assert.is_true(panel:IsShown())
@@ -316,7 +342,7 @@ describe("chargement de l'addon", function()
 
     it("ENCOUNTER_END ferme le panneau et desarme le planning", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown())
         stub.mainFrame():Fire("ENCOUNTER_END")
@@ -352,7 +378,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
         assert.matches("disabled", _G.DEFAULT_CHAT_FRAME.messages[#_G.DEFAULT_CHAT_FRAME.messages])
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(600)
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown(), "desactive = aucune ouverture automatique")
     end)
@@ -405,7 +431,7 @@ describe("chargement de l'addon", function()
 
     it("la croix de l'intermission ferme, et le tour reste intact (fermeture + reouverture auto)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         local panel = _G.GideonRaidIntermissionPanel
         stub.fireTickers(450)
         assert.is_true(panel:IsShown())
@@ -485,7 +511,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter start")
         assert.matches("Refused: a simulation is already running", messages())
         -- ENCOUNTER_START ferme la repetition et arme le planning normalement.
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         assert.matches("Encounter started", messages())
         assert.matches("armed: 4 intermission", messages())
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
@@ -506,7 +532,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown(), "l'aide au ping ne bloque pas le placement")
         _G.GideonRaidIntermissionPanel.close:Click()
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         assert.is_false(help:IsShown())
         assert.matches("Encounter started", messages())
     end)
@@ -567,7 +593,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter status")
         assert.matches("phase IDLE", messages())
         -- ... et le flux reel fonctionne encore normalement apres la repetition.
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         assert.matches("armed: 4 intermission", messages())
         stub.fireTickers(450)
         assert.is_true(panel:IsShown())
@@ -953,7 +979,7 @@ describe("chargement de l'addon", function()
     -- ------------------------------------------------------------------------
     it("apres le clic, les trois boutons disparaissent, CORRIGER seul reste", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
-        stub.mainFrame():Fire("ENCOUNTER_START")
+        pullTargetBoss()
         stub.fireTickers(450)
         local panel = _G.GideonRaidIntermissionPanel
         -- Avant le clic : les trois choix, pas de CORRIGER.

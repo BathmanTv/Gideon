@@ -35,6 +35,11 @@ function wowenv.loadCore()
     -- assignation » et les resolveurs BORNES de la preference /gr sound.
     -- Core/Config.lua le lit, il doit donc etre charge avant lui.
     wowenv.load("Core/Sound.lua", ns)
+    -- Core/BossFilter.lua vient egalement AVANT Config.lua : il porte la
+    -- allow-list d'ids d'encounter (critere PRINCIPAL, /gr boss <id>), celle des
+    -- noms (SECONDARY, dependante de la langue) et la DECISION pure « ce combat
+    -- est-il le boss cible ? » (liste vide = aucune ouverture automatique).
+    wowenv.load("Core/BossFilter.lua", ns)
     wowenv.load("Core/Config.lua", ns)
     wowenv.load("Core/Pairing.lua", ns)
     wowenv.load("Core/Intermission.lua", ns)

@@ -26,17 +26,36 @@
     READS the key the player bound (GetBindingKey, under pcall) only to DISPLAY
     it, and never pings, never prepares a macro.
 
-    FLOW OF A RAID EVENING (no argument of any combat event is ever read):
+    FLOW OF A RAID EVENING (only the ENCOUNTER_START arguments are read, and ALWAYS
+    under pcall - see the boss filter block further down):
       a. before the pull, /gr -> "PLACE INTERMISSION PANEL": the frame is shown
          in placement mode, dragged where the player wants it and the position is
          saved in the SavedVariables;
       b. the player prepares the ping keybind and confirms with OK -> panel closed;
-      c. ENCOUNTER_START arms the pre-computed schedule (it is only a starting
-         gun): the panel opens BY ITSELF shortly before each intermission;
+      c. ENCOUNTER_START decides: IF the encounter is the configured target boss
+         (allow-list of encounter ids, `/gr boss <id>`) OR the manual override is
+         armed (/gr inter on), the pre-computed schedule is armed and the panel
+         opens BY ITSELF shortly before each intermission. On any other boss
+         NOTHING opens (safe default) and the chat says how to configure the right
+         boss;
       d. the player clicks the composition they see (REDO corrects a mistake);
       e. at the end of the intermission the panel closes BY ITSELF;
       f. the next intermission follows the same cycle, automatically.
     THIS REAL FLOW IS UNCHANGED by the simulation mode below.
+
+    WHICH BOSS: the allow-list of ENCOUNTER_START ids is the PRIMARY criterion (an
+    integer, identical in every game language) and it is EMPTY by default, so the
+    panel NEVER opens on its own until the raid lead names the right boss. The id
+    of Entombed Sentinels is NOT known yet: `/gr idlog on` prints and memorizes
+    what ENCOUNTER_START reports ("encounter seen: id=<id> name=<n> difficulty=<d>
+    group=<g>"), and that line is what `/gr boss <id>` is given. The names are a
+    SECONDARY criterion, language dependent, therefore empty by default too.
+
+    INTERMISSION START SOUND (raid-lead recording, `Sound/intermission-start.ogg`):
+    played ONCE at the very beginning of every intermission - the moment the panel
+    opens (it opens 2 s BEFORE the intermission) - and once per rehearsal. Never
+    twice for the same intermission: the identity of the intermission is handed to
+    Core/Sound.lua, which owns the pure gate.
 
     CLOSE CROSS ("X", top right) on BOTH panels (the main one, UI/Panel.lua, and
     this one). During the placement it CANCELS the placement (same effect as the
@@ -84,6 +103,13 @@ local Simulation = assert(ns.Simulation, "Core/Simulation.lua must be loaded bef
 --- the bounded preference. THIS layer is the only one that plays anything.
 local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before UI/Intermission.lua")
 
+--- Core/BossFilter.lua is loaded BEFORE this file by the .toc: it owns the PURE
+--- decision "is this encounter the target boss?" (allow-list of encounter ids +
+--- optional names, SAFE DEFAULT = nothing opens) and the observation of the
+--- ENCOUNTER_START arguments. THIS layer only renders the decision and reads the
+--- event; the decision itself is never taken here.
+local BossFilter = assert(ns.BossFilter, "Core/BossFilter.lua must be loaded before UI/Intermission.lua")
+
 local UI = ns.UI or {}
 ns.UI = UI
 
@@ -98,6 +124,22 @@ local panel, ticker, state, run, setupMode
 --- repeated declaration of the SAME composition is sounded once, and a new
 --- declaration plays the sound of the NEW composition (documented behaviour).
 local soundAssigner = Sound.newAssigner()
+
+--- ONE-PLAYBACK-PER-INTERMISSION gate of the INTERMISSION START sound
+--- (Core/Sound.lua, `Sound/intermission-start.ogg`): the sound is played ONCE the
+--- moment the intermission panel opens - i.e. at the very beginning of the
+--- intermission - and once per `/gr sim inter` rehearsal. The identity of the
+--- intermission is the TOKEN handed to the gate (never the same twice), so a
+--- re-render, a tick or a double opening can never double the sound.
+local startGate = Sound.newStartGate()
+
+--- Identity counters: the token of an intermission is built from the encounter (or
+--- the manual/rehearsal session) and the rank of the intermission inside it. A new
+--- encounter, a manual start or a rehearsal always yields a NEW token, hence a new
+--- sound; the same intermission keeps its token, hence a single sound.
+local encounterSeq = 0
+local manualSeq = 0
+local rehearsalSeq = 0
 
 --- SIMULATION MODE owns its OWN run and state (see the block further down): the
 --- rehearsal can therefore never arm, disarm or move the real flow. The ping
@@ -180,7 +222,25 @@ function UI.PlayAssignSound(declaration)
     return playSoundFile(request.path, request.channel)
 end
 
---- Forgets the current assignment (CORRECT, `/gr inter stop`, every new
+--- THE INTERMISSION START SOUND (`Sound/intermission-start.ogg` - the raid lead's
+--- own recording), played ONCE "at the beginning of the intermission": the panel
+--- opens `leadSeconds` BEFORE the intermission, so the opening IS the beginning of
+--- the intermission, and this is the only place the sound is fired.
+--- `token` identifies the intermission (Core/Sound.takeIntermissionStart): the
+--- SAME intermission can never sound twice, the next one always does. Honours the
+--- player preference (`/gr sound on|off`) and stays silent - without an error -
+--- when the file is missing or the client refuses.
+--- @param token string|number identity of the intermission
+--- @return boolean played
+local function playStartSound(token)
+    local request = Sound.takeIntermissionStart(startGate, token, config().soundEnabled)
+    if request == nil then
+        return false
+    end
+    return playSoundFile(request.path, request.channel)
+end
+
+--- Remembers the current assignment (CORRECT, `/gr inter stop`, every new
 --- intermission and every rehearsal): the NEXT click plays the sound of the
 --- composition it declares - the natural behaviour after a correction.
 function UI.ResetAssignSound()
@@ -188,14 +248,38 @@ function UI.ResetAssignSound()
     return soundAssigner
 end
 
---- `/gr sound test <1v3r|2v2r|3v1r>`: plays ONE soundboard on request, so the
---- raid lead can hear and identify the three files WITHOUT waiting for a fight.
---- BOUNDED: an unknown state is REFUSED (nothing is played), and the player
+--- `/gr sound test start`: plays the INTERMISSION START sound on request, so the
+--- raid lead can check it WITHOUT waiting for a pull. The player preference is
+--- honoured, exactly like the three assignment soundboards: a muted sound stays
+--- silent and says so, so a test can never contradict the setting.
+--- @return boolean played
+function UI.SoundTestStart()
+    local c = config()
+    if not c.soundEnabled then
+        UI.Print(Locale.t("cmd.sound.testDisabled"))
+        return false
+    end
+    local played = playSoundFile(Sound.startPath(), Sound.CHANNEL)
+    if not played then
+        UI.Print(Locale.format("cmd.sound.failed", tostring(Sound.START_FILE)))
+        return false
+    end
+    UI.Print(Locale.format("cmd.sound.testStart", tostring(Sound.START_FILE)))
+    return true
+end
+
+--- `/gr sound test <1v3r|2v2r|3v1r|start>`: plays ONE sound on request, so the
+--- raid lead can hear and identify the files WITHOUT waiting for a fight.
+--- BOUNDED: an unknown value is REFUSED (nothing is played), and the player
 --- preference is honoured - a muted sound stays silent and says so, so a test can
 --- never contradict the setting.
---- @param raw string|nil state written by the player ("1v3r", "2V2R", ...)
+--- @param raw string|nil state written by the player ("1v3r", "2V2R", "start")
 --- @return boolean played
 function UI.SoundTest(raw)
+    local flat = type(raw) == "string" and raw:lower():gsub("%s+", "") or ""
+    if flat == "start" or flat == "intermission-start" then
+        return UI.SoundTestStart()
+    end
     local resolved = Sound.resolveState(raw)
     if resolved == nil then
         UI.Print(Locale.format("cmd.sound.unknownState", tostring(raw)))
@@ -779,8 +863,12 @@ function UI.SimulationInterStart(options)
         UI.Print(Locale.format("ui.intermissionError", tostring(startErr)))
         return
     end
-    -- NEW REHEARSAL: the soundboard gate is re-armed (see beginIntermission).
+    -- NEW REHEARSAL: the soundboard gate is re-armed (see beginIntermission) and
+    -- the INTERMISSION START sound is played once, exactly like a real
+    -- intermission (its own identity: a rehearsal is a new intermission).
     UI.ResetAssignSound()
+    rehearsalSeq = rehearsalSeq + 1
+    playStartSound("sim:" .. tostring(rehearsalSeq))
     UI.IntermissionShow()
     UI.Print(Locale.t("cmd.sim.inter"))
 end
@@ -893,10 +981,13 @@ function UI.IntermissionToggle()
     UI.IntermissionShow()
 end
 
---- Starts ONE intermission (silent): state machine in PENDING, then VISIBLE...
---- Used by the schedule (step c) and by the manual commands.
+--- Starts ONE intermission (silent apart from the INTERMISSION START sound): state
+--- machine in PENDING, then VISIBLE... Used by the schedule (step c) and by the
+--- manual commands.
+--- @param c table resolved configuration
+--- @param token string|nil identity of the intermission (see the start gate)
 --- @return boolean started
-local function beginIntermission(c)
+local function beginIntermission(c, token)
     if state == nil then
         state = ns.Intermission.newState()
     end
@@ -909,9 +1000,18 @@ local function beginIntermission(c)
         UI.Print(Locale.format("ui.intermissionError", tostring(err)))
         return false
     end
+    -- MANUAL opening (no token given): its own identity, so its sound plays too.
+    if token == nil then
+        manualSeq = manualSeq + 1
+        token = "manual:" .. tostring(manualSeq)
+    end
     -- NEW INTERMISSION: the assignment soundboard gate is re-armed, so the SAME
     -- composition declared at the next intermission plays its sound again.
     UI.ResetAssignSound()
+    -- THE BEGINNING OF THE INTERMISSION: the panel has just opened, `leadSeconds`
+    -- before the intermission itself. The start sound is fired HERE, once per
+    -- intermission (the token is its identity).
+    playStartSound(token)
     ensureTicker()
     UI.IntermissionShow()
     return true
@@ -967,7 +1067,10 @@ function UI.IntermissionTick(dt)
     if run ~= nil then
         local _, opened = ns.Intermission.advanceRun(run, dt)
         if opened ~= nil then
-            beginIntermission(config())
+            -- The identity of this intermission: the encounter it belongs to (a NEW
+            -- encounter always yields a NEW token, hence a new sound) and its rank
+            -- in the schedule (no two intermissions of a run share a rank).
+            beginIntermission(config(), "enc" .. tostring(encounterSeq) .. ":i" .. tostring(opened))
         end
         if ns.Intermission.runFinished(run) then
             run = nil
@@ -1074,11 +1177,109 @@ function UI.IntermissionRedo()
     UI.IntermissionRefresh()
 end
 
---- ENCOUNTER_START is an instance event, not a combat log one. Its arguments
---- are NOT read (no secret value risk): it is only the STARTING GUN of the
---- pre-computed schedule. The panel then opens by itself shortly before each
---- intermission and closes at the end of each one.
-function UI.IntermissionOnEncounterStart()
+--[[ WHICH BOSS MAY OPEN THE PANEL (critical bug, fixed here) ------------------
+
+     REPORTED BY THE RAID LEAD: "the window opens by itself during ANY boss fight!
+     It must be limited to the boss we want."
+
+     The panel used to be armed on EVERY `ENCOUNTER_START`. The decision is now a
+     PURE FUNCTION of Core/BossFilter.lua:
+
+       - the target is an ALLOW-LIST OF ENCOUNTER IDS (`ENCOUNTER_START` arg1: an
+         INTEGER, the same on every client whatever the game language) plus an
+         optional allow-list of NAMES (arg2, which the CLIENT translates: it stays
+         EMPTY by default and is never guessed);
+       - an EMPTY allow-list means NO AUTOMATIC OPENING (SAFE DEFAULT). A panel
+         that does not open is better than a panel that opens on the wrong boss -
+         and the chat says how to configure the right boss;
+       - `/gr inter on` stays the MANUAL OVERRIDE: it arms the panel for the NEXT
+         encounter whatever the boss, and it is CONSUMED at the end of it;
+       - the arguments are read UNDER pcall (in 12.x an argument may be a SECRET
+         value, and comparing one raises): an id that cannot be read is simply NOT
+         a match, hence no opening - never a Lua error, never the wrong boss;
+       - `/gr idlog on` is the MEASUREMENT mechanism: the real id of the target
+         boss is read in game ("encounter seen: id=<id> ..."), never invented.
+
+     Everything else of the flow is unchanged: the schedule arms on the pull, the
+     panel opens `leadSeconds` before each intermission, closes at the end and
+     opens again at the next one.
+]]
+
+--- The PURE decision of Core/BossFilter.lua, called UNDER pcall: the comparison
+--- itself must be protected (a SECRET value raises on the smallest operation), and
+--- ANY failure is a REFUSAL - never an automatic opening on an unknown boss.
+--- @param encounter table|nil observation built by BossFilter.observeEncounter
+--- @return table decision { shouldOpen, reason, id, name }
+function UI.BossDecision(encounter)
+    local ok, decision = pcall(BossFilter.evaluate, encounter, config())
+    if not ok or type(decision) ~= "table" then
+        return { shouldOpen = false, reason = BossFilter.REASON.UNREADABLE }
+    end
+    return decision
+end
+
+--- The chat line that says WHY nothing opens and WHAT to do about it: the SAFE
+--- DEFAULT must never look like a bug. Pure formatting, no state.
+--- @param decision table|nil
+--- @return string message
+function UI.BossRefusalMessage(decision)
+    local reason = type(decision) == "table" and decision.reason or nil
+    if reason == BossFilter.REASON.NO_TARGET then
+        return Locale.t("cmd.boss.noTarget")
+    end
+    if reason == BossFilter.REASON.UNREADABLE then
+        return Locale.t("cmd.boss.unreadable")
+    end
+    if type(decision) == "table" and decision.id ~= nil then
+        return Locale.format("cmd.boss.notTarget", BossFilter.idText(decision.id))
+    end
+    return Locale.t("cmd.boss.notTargetNoId")
+end
+
+--- IDLOG (`/gr idlog on`): the measurement mechanism. Every `ENCOUNTER_START` is
+--- printed - each value read under pcall, an unreadable value says so instead of
+--- showing a fake number - and memorized NEWEST FIRST in the SavedVariables
+--- (`GideonRaidDB.intermission.seenEncounters`, bounded), so the raid lead can
+--- read the real id back after the pull. Nothing is sent anywhere, nothing is
+--- invented: we do NOT know the id of Entombed Sentinels yet.
+--- @param encounter table|nil observation built by BossFilter.observeEncounter
+--- @return boolean recorded
+function UI.RecordSeenEncounter(encounter)
+    UI.Print(BossFilter.seenLine(encounter))
+    local db = _G.GideonRaidDB
+    if type(db) ~= "table" then
+        return false
+    end
+    local entry = BossFilter.toEntry(encounter)
+    if type(time) == "function" then
+        entry.at = time()
+    end
+    if type(date) == "function" then
+        entry.clock = date("%Y-%m-%d %H:%M:%S")
+    end
+    ns.Config.recordSeen(db, entry)
+    return true
+end
+
+--- Load-time warning (`PLAYER_LOGIN`): with the SAFE DEFAULT - no target boss
+--- configured - the panel will never open by itself, and the player MUST know it,
+--- otherwise the fix looks like a broken addon. Recomputed on every login: as soon
+--- as a target is configured, the warning disappears.
+--- @return boolean printed
+function UI.PrintBossFilterWarning()
+    local c = config()
+    if BossFilter.hasTarget(c) then
+        return false
+    end
+    UI.Print(Locale.t("cmd.boss.noTarget"))
+    return true
+end
+
+--- ENCOUNTER_START is an instance event, not a combat log one. IT IS THE ONLY
+--- place the auto-opening is decided: the schedule is armed ONLY when this
+--- encounter is the configured target (or when the manual override is armed).
+--- @param encounter table|nil observation built by Core/BossFilter.observeEncounter
+function UI.IntermissionOnEncounterStart(encounter)
     -- A rehearsal must NEVER compete with a real fight: it is stopped the moment
     -- the encounter starts. This arms/disarms nothing by itself: the timeline
     -- below is armed exactly as before.
@@ -1087,17 +1288,50 @@ function UI.IntermissionOnEncounterStart()
         UI.Print(Locale.t("sim.stoppedByEncounter"))
     end
     local c = config()
+
+    -- IDLOG: measured BEFORE any decision, and even when the coach is disabled -
+    -- the player asked for it explicitly and it is a measurement tool, not a
+    -- decision. The id logged here is what `/gr boss <id>` will be given.
+    if c.idlog then
+        UI.RecordSeenEncounter(encounter)
+    end
+
     if not c.enabled or not c.startOnEncounterStart then
         return
     end
+
+    local decision = UI.BossDecision(encounter)
+    if not decision.shouldOpen then
+        -- SAFE DEFAULT: nothing is armed for THIS encounter, and a schedule left
+        -- over by a previous fight is disarmed too, so the panel can never open
+        -- itself on the wrong boss.
+        run = nil
+        if not engineActive() then
+            stopTicker()
+        end
+        UI.Print(UI.BossRefusalMessage(decision))
+        return
+    end
+
+    encounterSeq = encounterSeq + 1
     run = ns.Intermission.newRun(c.scheduleSeconds, c.leadSeconds)
     ensureTicker()
+    if decision.reason == BossFilter.REASON.OVERRIDE then
+        UI.Print(Locale.t("cmd.boss.overrideUsed"))
+    end
     UI.Print(Locale.format("ui.armed", ns.Intermission.runRemaining(run), c.leadSeconds))
 end
 
 function UI.IntermissionOnEncounterEnd()
     run = nil
     UI.IntermissionStop()
+    -- The MANUAL OVERRIDE lasts ONE encounter: it is consumed here, so the next
+    -- encounter falls back to the configured target only.
+    local db = _G.GideonRaidDB
+    if type(db) == "table" and type(db.intermission) == "table" and db.intermission.overrideEncounter == true then
+        db.intermission.overrideEncounter = false
+        UI.Print(Locale.t("cmd.boss.overrideConsumed"))
+    end
 end
 
 function UI.IntermissionSetEnabled(enabled)
@@ -1107,7 +1341,15 @@ function UI.IntermissionSetEnabled(enabled)
         return
     end
     db.intermission.enabled = enabled and true or false
+    -- `/gr inter on` IS THE MANUAL OVERRIDE (raid-lead decision): besides enabling
+    -- the module it arms the auto-opening for the NEXT encounter, WHATEVER the
+    -- boss, and that arm is consumed at the end of the encounter. Disabling clears
+    -- it, so it can never fire later on.
+    db.intermission.overrideEncounter = enabled and true or false
     UI.Print(Locale.t(enabled and "ui.enabled" or "ui.disabledState"))
+    if enabled then
+        UI.Print(Locale.t("cmd.boss.overrideArmed"))
+    end
 end
 
 function UI.IntermissionStatus()
@@ -1125,6 +1367,9 @@ function UI.IntermissionStatus()
     UI.Print(Locale.format("ui.pingPolicyLine", c.pingMode, snap.policyLine))
     UI.Print(Locale.format("ui.scheduleLine", #c.scheduleSeconds, c.leadSeconds))
     UI.Print(Locale.format("ui.soundLine", Locale.t(c.soundEnabled and "ui.wordEnabled" or "ui.wordDisabled")))
+    -- WHICH BOSS may open the panel by itself: the allow-list of encounter ids (and
+    -- names) of the auto-open filter, plus the state of the idlog.
+    UI.Print(Locale.format("ui.bossLine", BossFilter.targetSummary(c), Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled")))
 end
 
 --- `/gr inter ping`: which ping to use and which key to press, plus the binding

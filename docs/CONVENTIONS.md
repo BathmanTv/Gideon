@@ -93,9 +93,12 @@ GideonRaid/                      <- REPOSITORY ROOT = ADDON ROOT
 │                                   in the .toc (see §10)
 ├── Core/
 │   ├── Locale.lua               <- in-game strings (en/fr) + language resolution
-│   ├── Sound.lua                <- assignment soundboards (PURE): state -> .ogg
-│   │                               file, one playback per assignment, bounded
-│   │                               /gr sound preference
+│   ├── Sound.lua                <- sounds (PURE): state -> .ogg file, one playback
+│   │                               per assignment, one playback per intermission
+│   │                               for the START sound, bounded /gr sound preference
+│   ├── BossFilter.lua           <- WHICH boss may open the panel (PURE): allow-list
+│   │                               of encounter ids (`/gr boss`), optional name list,
+│   │                               every event argument read under pcall
 │   ├── Config.lua               <- defaults + SavedVariables
 │   ├── Pairing.lua              <- pairing engine (PURE)
 │   └── Intermission.lua         <- Intermission Coach (PURE)
@@ -103,10 +106,11 @@ GideonRaid/                      <- REPOSITORY ROOT = ADDON ROOT
 │   ├── Panel.lua                <- rendering
 │   └── Intermission.lua         <- intermission panel rendering + the ONLY audio
 │                                   call of the addon (PlaySoundFile, under pcall)
-├── Sound/                       <- the three soundboards, LISTED in the .toc
+├── Sound/                       <- the sound files, ALL LISTED in the .toc
 │   ├── assign-1v3r.ogg
 │   ├── assign-2v2r.ogg
-│   └── assign-3v1r.ogg
+│   ├── assign-3v1r.ogg
+│   └── intermission-start.ogg   <- the raid lead's recording: never renamed
 ├── libs/                        <- embedded libraries (externals), never edited
 ├── tests/
 │   ├── spec/*_spec.lua          <- busted
@@ -280,9 +284,14 @@ A task is finished if, **and only if**:
    listed in the `.toc`.
 4. **No combat API value in the module**: no aura, no health, no resource, no
    target. Only the name of our own unit (`UnitName("player")`) and the strings
-   from `GideonRaidDB` enter it. The **arguments of `ENCOUNTER_START` are never
-   read** (they are secret values): the event is only the starting gun of the
-   pre-computed schedule.
+   from `GideonRaidDB` enter it. The arguments of `ENCOUNTER_START` are **the only
+   event arguments the addon reads**, and they are read **under `pcall`**, by
+   `Core/BossFilter.lua` (through an **injected reader**: `Core/` never touches an
+   event), **only to compare** the encounter id (and the optional name) with the
+   configured allow-list. In 12.x an argument may be a **secret value** whose
+   smallest operation raises: a value that cannot be read is reported as
+   `unreadable` and is **never a match**, so it can neither open the panel nor
+   raise a Lua error — the worst case is a panel that does not open.
 5. **Time is injected.** `Core/Intermission.tick(state, dt)` and
    `Core/Intermission.advanceRun(run, dt)` receive a constant time step provided
    by the wiring: no `GetTime()` in `Core/`.
@@ -296,16 +305,27 @@ A task is finished if, **and only if**:
    darkening. Same rule for the vestigial messages: **never** point the player to
    a command that does not exist (the absent out-of-game plan is reported by a
    single discreet line, or not at all).
-8. **The assignment soundboard is played by the RENDERING layer only.**
+8. **The sounds are played by the RENDERING layer only.**
    `PlaySoundFile` (<https://warcraft.wiki.gg/wiki/API_PlaySoundFile>) is called
    **in `UI/` only**, **under `pcall`** and behind a `type()` guard, on the
    `Master` channel. `Core/Sound.lua` decides **which** file and **when** (pure
    table `state -> file`, one-playback-per-assignment gate, bounded `/gr sound`
    preference) and **never plays anything**: a missing file or a refused call must
    leave the addon silent, without a Lua error and without interrupting the
-   rendering. The three files are **listed in `.toc`** (the client does not load
-   an unlisted sound) and must **never** be excluded by `.pkgmeta`;
-   `tests/spec/guard_spec.lua` fails if the call leaves `UI/` or loses its guard.
+   rendering. The same rule covers the **intermission START sound**
+   (`intermission-start.ogg`, `Sound.newStartGate` / `Sound.takeIntermissionStart`:
+   **one playback per intermission**, the wiring hands a token naming it, so the
+   same intermission can never sound twice and the next one always sounds). The
+   **four** files are **listed in `.toc`** (the client does not load an unlisted
+   sound) and must **never** be excluded by `.pkgmeta`; `tests/spec/guard_spec.lua`
+   fails if the call leaves `UI/` or loses its guard.
+9. **Which boss may open the panel is a PURE decision** (`Core/BossFilter.lua`,
+   `/gr boss`): an **allow-list of encounter ids** (the primary, language-independent
+   criterion) plus an optional list of **names** (secondary, **empty by default**:
+   the client translates names, nothing is ever guessed), with **an empty list
+   meaning NOTHING opens** (safe default). The rendering layer **renders** that
+   decision (under `pcall`) and never compares an id or a name itself; the id of a
+   boss is **measured** with `/gr idlog on`, never invented.
 
 ---
 

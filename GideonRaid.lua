@@ -71,14 +71,26 @@ end
 
 local function onPlayerLogin()
     ns.UI.Refresh()
+    -- SAFE DEFAULT of the auto-open filter: with NO target boss configured the
+    -- intermission panel never opens by itself, so the player MUST be told (once
+    -- per login, and only while no target is configured) - otherwise the fix looks
+    -- like a broken addon. `/gr boss <id>` or `/gr inter on` is the way out.
+    ns.UI.PrintBossFilterWarning()
 end
 
 -- API ref 12.x: https://warcraft.wiki.gg/wiki/Events
 -- Constraint: ENCOUNTER_START / ENCOUNTER_END are instance events, NOT combat
--- log events. Their ARGUMENTS are not read: they only act as a TRIGGER for the
--- pre-computed timeline, which avoids handling any potentially secret value.
-local function onEncounterStart()
-    ns.UI.IntermissionOnEncounterStart()
+-- log events. The arguments of ENCOUNTER_START ARE read - they are the ONLY way
+-- to know WHICH boss was pulled - and they are read by Core/BossFilter.lua ALWAYS
+-- under pcall: in 12.x an argument may be a SECRET value, and the smallest
+-- operation on it (`type()` included) raises. A value that cannot be read is
+-- reported as unreadable and is NEVER compared, so the worst case is a panel that
+-- does not open by itself - never a Lua error and never the wrong boss.
+-- Only what is needed is read: the encounter id (PRIMARY criterion), the name
+-- (SECONDARY, depends on the client language) and the difficulty + group size
+-- (LOG ONLY, for `/gr idlog on`).
+local function onEncounterStart(encounterID, encounterName, difficultyID, groupSize)
+    ns.UI.IntermissionOnEncounterStart(ns.BossFilter.observeEncounter(encounterID, encounterName, difficultyID, groupSize))
 end
 
 local function onEncounterEnd()
@@ -181,6 +193,7 @@ end
 --- /gr sound test <1v3r|2v2r|3v1r> (and `/gr sound test` alone, which recalls the
 --- setting): plays ONE soundboard on request so the three files can be checked
 --- without waiting for a fight. An unknown state is REFUSED and nothing is played.
+--- `/gr sound test start` also plays the INTERMISSION START sound on request.
 local function soundCommand(argument)
     local tested = argument:match("^test%s+(.+)$")
     if tested ~= nil then
@@ -194,6 +207,171 @@ local function soundCommand(argument)
         return
     end
     setSoundSetting(argument)
+end
+
+--- The saved intermission block, created if it is missing (never a shared table).
+--- @return table|nil block, boolean created
+local function intermissionBlock()
+    local db = _G.GideonRaidDB
+    if type(db) ~= "table" then
+        return nil
+    end
+    if type(db.intermission) ~= "table" then
+        db.intermission = ns.Config.defaultIntermission()
+    end
+    return db.intermission
+end
+
+--- "none" instead of an empty string: an empty allow-list is a MEANING (the safe
+--- default: nothing opens by itself), not a missing value.
+local function describeList(text)
+    if text == "" then
+        return ns.Locale.t("cmd.boss.value.absent")
+    end
+    return text
+end
+
+--- /gr boss (no argument): WHAT WILL OPEN AT THE NEXT PULL - the auto-open target
+--- (allow-list of encounter ids + optional names), the manual override and the
+--- encounter id log.
+local function printBossTarget()
+    local c = ns.Config.resolveIntermission(type(_G.GideonRaidDB) == "table" and _G.GideonRaidDB.intermission or nil)
+    local word = ns.Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled")
+    ns.UI.Print(ns.Locale.format("cmd.boss.status", ns.BossFilter.targetSummary(c), word))
+    if not ns.BossFilter.hasTarget(c) then
+        -- SAFE DEFAULT: say it HERE too, with the exact procedure.
+        ns.UI.Print(ns.Locale.t("cmd.boss.noTarget"))
+    elseif c.overrideEncounter then
+        ns.UI.Print(ns.Locale.t("cmd.boss.overrideArmed"))
+    end
+end
+
+--- /gr boss <id>: ADDS one encounter id to the persisted allow-list (the PRIMARY
+--- criterion: `ENCOUNTER_START` arg1, an integer, identical in every language).
+--- A value that is not a positive integer is REFUSED without persisting anything
+--- (same mechanics as /gr lang, /gr ping and /gr sound): nothing is invented, and
+--- the id of the target boss is NOT guessed here - `/gr idlog on` reads it in game.
+local function addBossTarget(raw)
+    local id = ns.BossFilter.resolveId(raw)
+    if id == nil then
+        ns.UI.Print(ns.Locale.format("cmd.boss.unknown", tostring(raw)))
+        return nil
+    end
+    local block = intermissionBlock()
+    if block == nil then
+        ns.UI.Print(ns.Locale.t("ui.noSavedVariables"))
+        return nil
+    end
+    block.bossIds = ns.BossFilter.addId(block.bossIds, id)
+    local c = ns.Config.resolveIntermission(block)
+    ns.UI.Print(ns.Locale.format("cmd.boss.added", id, #c.bossIds, ns.BossFilter.targetSummary(c)))
+    return id
+end
+
+--- /gr boss name <text>: adds the SECONDARY criterion - the exact encounter NAME
+--- the client displays. It is language dependent (the raid lead plays on a French
+--- client), so the list stays EMPTY by default and no translation is ever guessed.
+local function addBossName(raw)
+    local name = ns.BossFilter.resolveName(raw)
+    if name == nil then
+        ns.UI.Print(ns.Locale.format("cmd.boss.nameUnknown", tostring(raw)))
+        return nil
+    end
+    local block = intermissionBlock()
+    if block == nil then
+        ns.UI.Print(ns.Locale.t("ui.noSavedVariables"))
+        return nil
+    end
+    block.bossNames = ns.BossFilter.addName(block.bossNames, name)
+    local c = ns.Config.resolveIntermission(block)
+    ns.UI.Print(ns.Locale.format("cmd.boss.nameAdded", name, ns.BossFilter.targetSummary(c)))
+    return name
+end
+
+--- /gr boss clear: empties BOTH lists. Back to the SAFE DEFAULT: nothing opens by
+--- itself until a target is configured again.
+local function clearBossTarget()
+    local block = intermissionBlock()
+    if block == nil then
+        ns.UI.Print(ns.Locale.t("ui.noSavedVariables"))
+        return
+    end
+    block.bossIds = {}
+    block.bossNames = {}
+    ns.UI.Print(ns.Locale.t("cmd.boss.cleared"))
+end
+
+--- /gr boss list: the two allow-lists, the state of the manual override and the
+--- encounters memorized by the idlog (newest first).
+local function listBossTarget()
+    local db = _G.GideonRaidDB
+    local c = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.ids", describeList(ns.BossFilter.describeIds(c.bossIds))))
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.names", describeList(ns.BossFilter.describeNames(c.bossNames))))
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.override", ns.Locale.t(c.overrideEncounter and "ui.wordEnabled" or "ui.wordDisabled")))
+    local rawSeen = nil
+    if type(db) == "table" and type(db.intermission) == "table" then
+        rawSeen = db.intermission.seenEncounters
+    end
+    local seen = ns.BossFilter.toList(rawSeen)
+    ns.UI.Print(ns.Locale.format("cmd.boss.list.seen", #seen))
+    for index = 1, #seen do
+        ns.UI.Print("  " .. ns.BossFilter.seenLine(seen[index]))
+    end
+end
+
+--- /gr boss <list|clear|name <text>|<id>> : an unknown or non-numeric value is
+--- REFUSED without persisting anything.
+local function bossCommand(argument)
+    if argument == "list" then
+        listBossTarget()
+        return
+    end
+    if argument == "clear" then
+        clearBossTarget()
+        return
+    end
+    local named = argument:match("^name%s+(.+)$")
+    if named ~= nil then
+        addBossName(named)
+        return
+    end
+    if argument == "name" then
+        ns.UI.Print(ns.Locale.format("cmd.boss.nameUnknown", ""))
+        return
+    end
+    addBossTarget(argument)
+end
+
+--- /gr idlog (no argument): the state of the encounter id log - the measurement
+--- mechanism that gives the REAL id of the target boss.
+local function printIdlog()
+    local c = ns.Config.resolveIntermission(type(_G.GideonRaidDB) == "table" and _G.GideonRaidDB.intermission or nil)
+    local word = ns.Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled")
+    ns.UI.Print(ns.Locale.format("cmd.idlog.status", word, ns.BossFilter.MAX_SEEN))
+end
+
+--- /gr idlog on|off: turns the log on/off and PERSISTS it. An unknown value is
+--- REFUSED without persisting anything (same mechanics as /gr lang).
+local function setIdlog(raw)
+    local wanted = ns.BossFilter.resolveSwitch(raw)
+    if wanted == nil then
+        ns.UI.Print(ns.Locale.format("cmd.idlog.unknown", tostring(raw)))
+        return nil
+    end
+    local block = intermissionBlock()
+    if block == nil then
+        ns.UI.Print(ns.Locale.t("ui.noSavedVariables"))
+        return nil
+    end
+    block.idlog = wanted
+    local word = ns.Locale.t(wanted and "ui.wordEnabled" or "ui.wordDisabled")
+    ns.UI.Print(ns.Locale.format("cmd.idlog.updated", word))
+    if wanted then
+        -- Say the procedure straight away: one pull with the log on, then /gr boss.
+        ns.UI.Print(ns.Locale.format("cmd.idlog.status", word, ns.BossFilter.MAX_SEEN))
+    end
+    return wanted
 end
 
 local function slashHandler(cmd)
@@ -213,6 +391,14 @@ local function slashHandler(cmd)
     -- entry. The pattern accepts anything and soundCommand() judges it: an unknown
     -- value is REFUSED (nothing is persisted, nothing is played).
     local soundArg = cmd:match("^sound%s+(.+)$")
+    -- /gr boss <id|name ETA|list|clear> : which boss may open the panel by itself
+    -- (allow-list of encounter ids). The pattern accepts anything and bossCommand()
+    -- judges it: an unknown or non-numeric value is REFUSED without persisting
+    -- anything.
+    local bossArg = cmd:match("^boss%s+(.+)$")
+    -- /gr idlog <on|off> : the encounter id log (how the REAL id of the target boss
+    -- is captured in game). An unknown value is REFUSED without persisting.
+    local idlogArg = cmd:match("^idlog%s+(.+)$")
     -- /gr sim <mode> : SIMULATION MODE (rehearsal alone, no boss, no raid).
     -- The pattern accepts anything and Core/Simulation.resolveCommand() judges it:
     -- an unknown value is REFUSED (nothing is guessed, nothing is launched).
@@ -240,6 +426,14 @@ local function slashHandler(cmd)
         printSoundSetting()
     elseif soundArg ~= nil then
         soundCommand(soundArg)
+    elseif cmd == "boss" then
+        printBossTarget()
+    elseif bossArg ~= nil then
+        bossCommand(bossArg)
+    elseif cmd == "idlog" then
+        printIdlog()
+    elseif idlogArg ~= nil then
+        setIdlog(idlogArg)
     elseif cmd == "lock" then
         -- The main panel is movable by default; these three commands are the
         -- lock / unlock / reset-position entry points (same effect as the
@@ -286,13 +480,13 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("ENCOUNTER_START")
 frame:RegisterEvent("ENCOUNTER_END")
-frame:SetScript("OnEvent", function(_, event, arg1)
+frame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
-        onAddonLoaded(arg1)
+        onAddonLoaded(...)
     elseif event == "PLAYER_LOGIN" then
         onPlayerLogin()
     elseif event == "ENCOUNTER_START" then
-        onEncounterStart()
+        onEncounterStart(...)
     elseif event == "ENCOUNTER_END" then
         onEncounterEnd()
     end

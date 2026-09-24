@@ -73,7 +73,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(10, #files)
+        assert.are.equal(11, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end
@@ -107,6 +107,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         local pureFiles = {
             "Core/Locale.lua",
             "Core/Sound.lua",
+            "Core/BossFilter.lua",
             "Core/Config.lua",
             "Core/Pairing.lua",
             "Core/Intermission.lua",
@@ -121,7 +122,13 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
             assert.is_nil(code:find("UnitName", 1, true), file .. " lit une unite (interdit dans Core/)")
             assert.is_nil(code:find(BINDING_LOOKUP, 1, true), file .. " lit un raccourci (reserve a la couche de rendu)")
         end
-        for _, file in ipairs({ "Core/Pairing.lua", "Core/Intermission.lua", "Core/Simulation.lua", "Core/Sound.lua" }) do
+        for _, file in ipairs({
+            "Core/Pairing.lua",
+            "Core/Intermission.lua",
+            "Core/Simulation.lua",
+            "Core/Sound.lua",
+            "Core/BossFilter.lua",
+        }) do
             local code = stripComments(readFile(file))
             assert.is_nil(code:find("GideonRaidDB", 1, true), file .. " lit les SavedVariables (interdit dans Core/)")
         end
@@ -135,6 +142,35 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         for _, token in ipairs({ "ENCOUNTER_START", "Intermission.newRun", "advanceRun", "resetRun", "RegisterEvent" }) do
             assert.is_nil(code:find(token, 1, true), "Core/Simulation.lua reference " .. token .. " (la simulation doit etre isolee)")
         end
+    end)
+
+    it("garde la DECISION d'ouverture auto dans Core/, sous pcall, bornee", function()
+        -- Le panneau ne doit plus s'ouvrir sur n'importe quel boss : la decision
+        -- (allow-list d'ids d'encounter, `/gr boss <id>`) vit dans
+        -- Core/BossFilter.lua, qui lit chaque argument de l'evenement SOUS pcall
+        -- (une valeur SECRETE leve au moindre acces) et dont la liste VIDE
+        -- n'ouvre rien (defaut sur).
+        local code = stripComments(readFile("Core/BossFilter.lua"))
+        assert.is_truthy(code:find("pcall", 1, true) ~= nil, "Core/BossFilter.lua doit lire les arguments sous pcall")
+        assert.is_truthy(code:find("bossIds", 1, true) ~= nil, "Core/BossFilter.lua doit porter l'allow-list d'ids")
+        assert.is_truthy(code:find("MAX_SEEN", 1, true) ~= nil, "Core/BossFilter.lua doit borner l'idlog")
+        -- La couche de rendu REND la decision : elle ne compare ni id ni nom
+        -- elle-meme, elle passe par Core/ (et sous pcall).
+        local ui = stripComments(readFile("UI/Intermission.lua"))
+        assert.is_truthy(ui:find("BossFilter", 1, true) ~= nil, "UI/Intermission.lua doit passer par Core/BossFilter")
+        assert.is_nil(ui:find("bossIds", 1, true), "UI/Intermission.lua ne doit pas lire l'allow-list lui-meme")
+        assert.is_truthy(ui:find("pcall(BossFilter", 1, true) ~= nil, "la decision doit etre appelee sous pcall dans UI/")
+    end)
+
+    it("garde la lecture du SON de debut d'intermission dans UI/, sous pcall", function()
+        -- Comme les sondes d'assignation : la table pure et la regle « une seule
+        -- lecture par intermission » sont dans Core/Sound.lua, l'appel audio dans
+        -- UI/Intermission.lua, sous pcall (voir le controle PlaySoundFile plus bas).
+        local core = stripComments(readFile("Core/Sound.lua"))
+        assert.is_truthy(core:find("takeIntermissionStart", 1, true) ~= nil, "Core/Sound.lua doit porter la regle du son de debut")
+        assert.is_truthy(core:find("START_FILE", 1, true) ~= nil, "Core/Sound.lua doit nommer le fichier de debut")
+        local guard = stripComments(readFile("UI/Intermission.lua"))
+        assert.is_truthy(guard:find("playStartSound", 1, true) ~= nil, "UI/Intermission.lua doit jouer le son de debut")
     end)
 
     it("lit le raccourci de ping UNIQUEMENT dans la couche de rendu et SOUS pcall", function()
@@ -177,6 +213,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         for _, file in ipairs({
             "Core/Locale.lua",
             "Core/Sound.lua",
+            "Core/BossFilter.lua",
             "Core/Config.lua",
             "Core/Pairing.lua",
             "Core/Intermission.lua",

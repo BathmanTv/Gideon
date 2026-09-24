@@ -92,10 +92,11 @@ possible:
 |---|---|---|
 | Main panel (`/gr`) | partner, role, position, pairs, then the buttons **in this order**: **PLACE INTERMISSION PANEL** -> **SIM: PING YOURSELF** -> **SIM: INTERMISSION GROUP** -> the LOCK/UNLOCK utility (frozen by a test: an evening flow, then a separated utility); the panel is **draggable** and reopens where you left it, and its frame is **as wide as its longest label in both languages** | `assignment` block prepared out of game by GIDEON |
 | Placement mode (before the pull) | the panel is dragged where you want it, then **OK** saves the position and closes (the body says it explicitly: *place the panel where you want it to appear, then press OK: during the fight it opens by itself*); the close cross (`X`) and **Close** cancel instead of validating | the player's drag (persisted) |
-| Intermission panel (opens by itself 2 s before the intermission, or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint) | the player's click |
+| Intermission panel (opens by itself 2 s before the intermission — **only on the configured target boss**, `/gr boss <id>` — or `/gr inter`) | very large reminder, 3 s countdown, 3 buttons named after the visible composition (`1 vert + 3 rouges` / `2 verts + 2 rouges` / `3 verts + 1 rouge`, number as a hint); the **intermission start sound** plays once here | the player's click |
 | After the click | **the state in very large type**, the **role** (`ROLE: ANCHOR`), **`PING: OUI/NON`** (colored), and **ONE action line** — plus the **REDO** button; **the three composition buttons disappear** (REDO brings them back, empty state) | convention frozen in `Core/Intermission.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
-| Assignment sound | **one soundboard per composition**, played **once** the moment you declare yours (real flow *and* rehearsal), on the Master channel; `/gr sound on\|off` mutes it, `/gr sound test 1v3r\|2v2r\|3v1r` plays one on request | `Core/Sound.lua` (pure table) + three Ogg files in `Sound/` |
+| Assignment sound | **one soundboard per composition**, played **once** the moment you declare yours (real flow *and* rehearsal), on the Master channel; `/gr sound on\|off` mutes it, `/gr sound test 1v3r\|2v2r\|3v1r` plays one on request — plus the **intermission start sound** (`/gr sound test start`), played once at the beginning of every intermission | `Core/Sound.lua` (pure table) + four Ogg files in `Sound/` |
+| Which boss may open the panel | a **persisted allow-list of encounter ids**: `/gr boss <id>` (empty = **nothing opens**, safe default), `/gr boss list`, `/gr boss clear`, optional name list, `/gr idlog on\|off` to read the real id in game; `/gr inter on` = manual override for the next encounter | pure decision in `Core/BossFilter.lua` |
 | Close cross (`X`, top right) | closes the panel — on **both** the main panel, the intermission panel and the ping help window | `Core/Locale.lua` (`ui.closeCross`, `ui.closeTooltip`) |
 | SIMULATION mode (no boss, no raid) | **Intermission group** (`/gr sim inter`): the panel opens **RIGHT AWAY** with **its three composition buttons** (`1V3R` / `2V2R` / `3V1R`, sized on their own labels), you click your composition, get the state + role + `PING: YES/NO` + the action line, correct it with REDO and **you close it yourself** (X or Close) - ONE single cycle, nothing closes it and nothing relaunches it; **Ping help** (`/gr sim ping` = `/gr pinghelp`): a **short information window** (draggable, closable) telling you **how to bind one key per ping** (`Options > Keybindings > Ping`) and the operational reminder - **during the boss, when the panel says `PING: YES`, hover YOUR OWN character frame and press your key: you ping yourself** - plus the two limits: pings only show **while grouped** and **the addon cannot detect a ping** | pure logic in `Core/Simulation.lua` + the pure layout in `Core/Layout.lua` (+ the close cross and the main-panel buttons) |
 
@@ -157,15 +158,29 @@ player is the one who places it.
 1. before the pull, `/gr` → **PLACE INTERMISSION PANEL** (or `/gr inter place`):
    drag the panel where it must appear, prepare your ping keybind in
    *Options > Keybindings*, press **OK** (the position is saved);
-2. pull the boss: `ENCOUNTER_START` starts the **pre-computed schedule**
-   (46.3 s, then 148.9 / 251.5 / 353.2 s) — its arguments are never read;
-3. **1–2 s before each intermission the panel opens by itself** with the three
-   choices;
-4. click your composition: state, role, `PING: OUI/NON` and one action line — the
+2. before the pull too, **name the boss that may open the panel**: `/gr boss <id>`
+   (the *encounter id*, read in game with `/gr idlog on` — see §3.4). With **no
+   target configured the panel never opens by itself**: that is the **safe
+   default**, chosen so that a panel which does not open is better than a panel
+   that opens on the wrong boss;
+3. pull the boss: `ENCOUNTER_START` starts the **pre-computed schedule**
+   (46.3 s, then 148.9 / 251.5 / 353.2 s) **only when the encounter is the
+   configured target**. The event arguments are read **once, under `pcall`**, and
+   only to compare the encounter id (and the optional name): they drive nothing
+   else, and a value that cannot be read (a *secret* value in 12.x) is never a
+   match;
+4. **1–2 s before each intermission the panel opens by itself** with the three
+   choices — and the **intermission start sound** is played **once** (§3.3);
+5. click your composition: state, role, `PING: OUI/NON` and one action line — the
    **three buttons disappear** (so no accidental second click) and **REDO** brings
    them back as many times as needed;
-5. at the end of the intermission the panel **closes by itself**; the next one
+6. at the end of the intermission the panel **closes by itself**; the next one
    reopens it automatically.
+
+To test the whole flow **now**, on any boss, `/gr inter on` is the **manual
+override**: it arms the panel for the **next** encounter whatever the boss
+(consumed at the end of that encounter). It is the only way to open the panel on
+a boss that is not the configured target.
 
 **The panels are movable** (third in-game test): the main panel used to be frozen
 (`lockPanel` was hard-coded to `true`). It is now **draggable by default**, and so
@@ -225,12 +240,27 @@ rehearsal** — the soundboard of **that** state is played, **once**.
 | `2V2R` | `Sound/assign-2v2r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-2v2r.ogg` |
 | `3V1R` | `Sound/assign-3v1r.ogg` | `Interface\AddOns\GideonRaid\Sound\assign-3v1r.ogg` |
 
+#### Intermission start sound (`Sound/intermission-start.ogg`)
+
+The raid lead's own recording (Ogg Vorbis, stereo 44.1 kHz, 3.22 s) is played
+**once at the very beginning of every intermission** — that is the moment the
+panel opens by itself, 2 s before the intermission — and **once per `/gr sim
+inter` rehearsal**. It is **never played twice for the same intermission** (the
+next intermission, and the next rehearsal, re-arm it). Like the soundboards it is
+`Master` channel, behind the `/gr sound on|off` preference, and a missing file or
+a refused call leaves the addon **silent, without a Lua error**.
+
 ```bash
 /gr sound                  # is the sound enabled? (and how to change it)
 /gr sound on | off         # enable/disable it (persisted; an unknown value is refused)
 /gr sound test 1v3r        # hear one soundboard now, without waiting for a fight
 /gr sound test 2v2r        # (also: 3v1r)
+/gr sound test start       # hear the intermission start sound now
 ```
+
+The file must stay listed in `GideonRaid.toc` (a sound that is not listed is not
+loaded by the client, and `PlaySoundFile` then fails silently): a test checks the
+entry **and** the file on disk.
 
 Rules, all covered out of game by `tests/spec/sound_spec.lua`:
 
@@ -260,6 +290,11 @@ The three shipped files are **silent placeholders** (0.2 s of silence, Ogg
 Vorbis), so nothing is broken in the meantime. Replacing them is a **file drop,
 with no code change**:
 
+> `Sound/intermission-start.ogg` is **not** a placeholder: it is the raid lead's
+> own recording, already in the repository and shipped in the `.toc`. **Never**
+> overwrite, rename or re-encode it (its name is what the code and the tests
+> reference).
+
 1. record/convert each soundboard as **Ogg Vorbis** (`.ogg`; a `.wav` or `.mp3`
    file is **not** what the `.toc` lists). Speech or a short musical sting both
    work; keep them short (a few seconds at most) — the intermission lasts about
@@ -281,6 +316,63 @@ with no code change**:
 ```bash
 ffmpeg -i mysound.wav -c:a libvorbis -q:a 5 Sound/assign-1v3r.ogg
 ```
+
+### 3.4 Which boss may open the panel (`/gr boss`) — safe default: none
+
+**Reported bug (fixed):** *"the window opens by itself during ANY boss fight! It
+must be limited to the boss we want."* The auto-open used to fire on **every**
+`ENCOUNTER_START`. It is now filtered by a **persisted allow-list of encounter
+ids**:
+
+```bash
+/gr boss            # what will open at the next pull (target + idlog + override)
+/gr boss 2594       # ADD an encounter id to the target list (persisted)
+/gr boss name <text> # add the SECONDARY criterion: the exact encounter NAME
+/gr boss list       # the two lists, the manual override, the encounters seen
+/gr boss clear      # empty both lists -> back to the safe default (nothing opens)
+/gr idlog on | off  # log every encounter seen (id / name / difficulty / group)
+```
+
+Rules:
+
+- the **encounter id** (`ENCOUNTER_START` arg1) is the **primary** criterion: it
+  is an integer, **identical in every client language** (the raid lead plays on a
+  French client, so no translated name is ever guessed);
+- the **name** list is a **secondary** criterion, **empty by default and never
+  filled in for you** — the client translates encounter names;
+- **empty list = no automatic opening** (safe default), reminded in the chat at
+  login and at every encounter that opens nothing: the panel says *how* to
+  configure the right boss instead of staying silently broken;
+- an argument is **always read under `pcall`** and only to **compare**. In 12.x an
+  argument may be a **secret** value: a comparison on it raises. What cannot be
+  read is reported as *unreadable* and **is never a match** — so a secret value
+  can never open the panel by accident;
+- `/gr boss <id>` refuses anything that is not a **positive integer** (`abc`,
+  `0`, `-3`, `12.5`, `1e3`) **without persisting anything** — same mechanics as
+  `/gr lang`, `/gr ping` and `/gr sound`;
+- `/gr inter on` is the **manual override**: it arms the panel for the **next**
+  encounter whatever the boss, and is consumed at the end of it.
+
+#### Capturing the real encounter id (the `Entombed Sentinels` id is NOT guessed)
+
+The id of Entombed Sentinels is not known yet, so it is **measured in game**
+instead of invented. The procedure, once, on a pull:
+
+1. in game, `/reload` (to load this version), then watch the chat at login: with
+   no target configured, it prints the safe-default warning;
+2. `/gr idlog on` (persisted);
+3. pull **Entombed Sentinels** (any difficulty — the difficulty is logged, it
+   never decides). Every `ENCOUNTER_START` now prints one line:
+   `encounter seen: id=2594 name=Entombed Sentinels difficulty=16 group=20` — an
+   unreadable value prints `unreadable` instead of a fake number;
+4. note the `id=` value (**`/gr boss list`** shows the last 10 encounters seen, so
+   you can read it back after the fight);
+5. `/gr boss <id>` once — done: the panel now opens **only** on that boss, and
+   `/gr boss` confirms it. `/gr idlog off` when you are finished measuring.
+
+Out of game, that same decision is covered by
+`tests/spec/bossfilter_spec.lua` (good id, wrong id, unreadable id, empty list,
+empty name, difficulty, idlog ring, override).
 
 Full detail (convention, ping keybinds, `plan` contract, configuration, "to be
 confirmed in game" items):
@@ -333,8 +425,12 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │                         NEVER listed in the .toc)
 ├── Core/              <- PURE LOGIC (zero WoW API, testable)
 │   ├── Locale.lua     <- in-game strings (en/fr) + language resolution
-│   ├── Sound.lua      <- ASSIGNMENT SOUNDBOARDS: pure table state -> .ogg file,
-│   │                     one-playback-per-assignment gate, bounded /gr sound preference
+│   ├── Sound.lua      <- SOUNDS: pure table state -> .ogg file, one-playback-per-assignment
+│   │                     gate, one-playback-per-intermission start sound, bounded
+│   │                     /gr sound preference
+│   ├── BossFilter.lua <- WHICH BOSS MAY OPEN THE PANEL: pure allow-list of encounter
+│   │                     ids (`/gr boss <id>`, empty = nothing opens) + optional
+│   │                     names, every event argument read under pcall
 │   ├── Config.lua
 │   ├── Pairing.lua
 │   ├── Intermission.lua
@@ -345,10 +441,12 @@ GideonRaid/            <- REPOSITORY ROOT = ADDON ROOT (mandatory)
 │   ├── Panel.lua      <- main panel + the shared layout applier (+ the close cross)
 │   └── Intermission.lua <- intermission panel + the ping help window (close cross, banner,
 │                           and the ONLY audio call of the addon: PlaySoundFile, under pcall)
-├── Sound/             <- the three assignment soundboards, LISTED in the .toc
+├── Sound/             <- the sound files, ALL LISTED in the .toc
 │   ├── assign-1v3r.ogg  (1V3R)   <- silent placeholders until the raid lead
 │   ├── assign-2v2r.ogg  (2V2R)   delivers the real recordings: same names,
-│   └── assign-3v1r.ogg  (3V1R)   same folder, no code change (README §3.3)
+│   ├── assign-3v1r.ogg  (3V1R)   same folder, no code change (README §3.3)
+│   └── intermission-start.ogg    <- the raid lead's recording: played ONCE at the
+│                                    beginning of every intermission (do not rename)
 ├── libs/              <- embedded libraries (externals)
 ├── tests/             <- busted + fixtures (excluded from the zip)
 ├── tools/             <- CLI + .toc validator (excluded from the zip)
@@ -377,31 +475,36 @@ flow with the pre-computed schedule, panels laid out by `Core/Layout.lua`, rehea
 opened right away and closed by the player, ping help window instead of a guided
 sequence), the fifth in-game pass (validated self-ping, OK button of the
 placement mode, composition buttons restored in the rehearsal, every button sized on
-its own label) and the assignment soundboards):
+its own label), the assignment soundboards and the **auto-open boss filter +
+intermission start sound**):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 24 files        # luacheck
+Total: 0 warnings / 0 errors in 26 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (13 files listed: 10 lua + 3 sounds)
+OK GideonRaid.toc                              # check_toc (15 files listed: 11 lua + 4 sounds)
 busted
-260 successes / 0 failures / 0 errors / 0 pending : 1.514132 seconds
+302 successes / 0 failures / 0 errors / 0 pending : 2.08 seconds
 ```
 
-The 260 tests are spread over `intermission_spec.lua` (84),
+The 302 tests are spread over `intermission_spec.lua` (84),
 `load_spec.lua` (49 — real loading, `.toc` order, evening flow, movable panels,
 close cross, simulations, button order, placement OK button, rehearsal composition
-buttons), `sound_spec.lua` (31 — assignment soundboards: pure table state -> file,
-paths listed in the `.toc` and present on disk, bounded `/gr sound` preference, one
-playback per assignment, survival to a failing/absent `PlaySoundFile`),
+buttons), `bossfilter_spec.lua` (40 — **which boss may open the panel**: pure
+allow-list decision, good/wrong/unreadable id, empty list, empty name, difficulty,
+`/gr boss` and `/gr idlog` wiring, idlog ring, manual override),
+`sound_spec.lua` (31 — assignment soundboards **and the intermission start sound**:
+pure table state -> file, one playback per intermission, paths listed in the `.toc`
+and present on disk, bounded `/gr sound` preference, one playback per assignment,
+survival to a failing/absent `PlaySoundFile`),
 `locale_spec.lua` (21),
 `pingpolicy_spec.lua` (20 — ping roles and policies), `layout_spec.lua` (22 — pure
 panel geometry: no overlap, no overflow, every button sized on its label with its
 inner margin, in both languages),
 `simulation_spec.lua` (14 — pure rehearsal + ping help), `pairing_spec.lua` (11) and
-`guard_spec.lua` (8 — anti-forbidden-API guard, audio call restricted to `UI/` under
+`guard_spec.lua` (10 — anti-forbidden-API guard, audio call restricted to `UI/` under
 `pcall`, simulation isolation).
 
 ### Tooling (installed and verified on the VPS on 22/09/2026, Debian 13)

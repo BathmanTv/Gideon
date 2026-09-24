@@ -54,13 +54,17 @@ Locale.STRINGS = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r\n"
+            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
+            .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
+            .. "  /gr idlog [on|off]\n"
             .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r\n"
+            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
+            .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
+            .. "  /gr idlog [on|off]\n"
             .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
             .. "  /gr sim stop\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
@@ -153,10 +157,10 @@ Locale.STRINGS = {
     ["cmd.sound.status"] = {
         en = "Assignment sound: %s - one soundboard per composition (1V3R / 2V2R / 3V1R), played once "
             .. "when you click your composition. /gr sound on|off to change it, /gr sound test 1v3r|2v2r|3v1r "
-            .. "to hear one now.",
+            .. "to hear one now, /gr sound test start for the intermission start sound.",
         fr = "Son d'assignation : %s - un son par composition (1V3R / 2V2R / 3V1R), joue une fois quand tu "
             .. "cliques ta composition. /gr sound on|off pour changer, /gr sound test 1v3r|2v2r|3v1r pour en "
-            .. "ecouter un maintenant.",
+            .. "ecouter un maintenant, /gr sound test start pour le son de debut d'intermission.",
     },
     ["cmd.sound.updated"] = {
         en = "Assignment sound = %s.",
@@ -167,8 +171,8 @@ Locale.STRINGS = {
         fr = "Valeur inconnue '%s' : valeurs acceptees on, off.",
     },
     ["cmd.sound.unknownState"] = {
-        en = "Unknown sound '%s': accepted values are 1v3r, 2v2r, 3v1r.",
-        fr = "Son inconnu '%s' : valeurs acceptees 1v3r, 2v2r, 3v1r.",
+        en = "Unknown sound '%s': accepted values are 1v3r, 2v2r, 3v1r, start.",
+        fr = "Son inconnu '%s' : valeurs acceptees 1v3r, 2v2r, 3v1r, start.",
     },
     ["cmd.sound.test"] = {
         en = "Sound test: %s (%s) should have played. If you heard nothing, check that the file was replaced "
@@ -185,6 +189,171 @@ Locale.STRINGS = {
             .. "silent, nothing else is affected.",
         fr = "Le son %s n'a pas pu etre joue (fichier manquant ou PlaySoundFile indisponible) : l'addon reste "
             .. "silencieux, rien d'autre n'est affecte.",
+    },
+    -- THE INTERMISSION START SOUND (the raid lead's own recording, played ONCE at
+    -- the very beginning of every intermission - i.e. when the panel opens by
+    -- itself 2 s before the intermission - and once per `/gr sim inter`).
+    ["cmd.sound.testStart"] = {
+        en = "Intermission start sound: %s should have played (once at the beginning of every intermission). "
+            .. "If you heard nothing, check that the file is there (Sound/intermission-start.ogg, Ogg Vorbis) "
+            .. "and that the game volume is up.",
+        fr = "Son de debut d'intermission : %s devrait avoir ete joue (une fois au debut de chaque "
+            .. "intermission). Si tu n'as rien entendu, verifie que le fichier est bien la "
+            .. "(Sound/intermission-start.ogg, Ogg Vorbis) et que le volume du jeu est monte.",
+    },
+
+    -- ------------------------------------------- WHICH BOSS MAY OPEN THE PANEL
+    -- CRITICAL BUG fixed here: the panel used to open on ANY ENCOUNTER_START. The
+    -- auto-open target is an ALLOW-LIST of encounter ids (ENCOUNTER_START arg1: an
+    -- integer, identical in every language) plus an optional list of NAMES (arg2,
+    -- which depends on the client language, hence EMPTY by default and never
+    -- guessed). SAFE DEFAULT: an empty list opens NOTHING.
+    ["cmd.boss.status"] = {
+        en = "Auto-open target boss: %s. Encounter id log: %s. /gr boss <id> sets it, /gr boss list shows it, "
+            .. "/gr boss clear removes it.",
+        fr = "Boss cible de l'ouverture auto : %s. Journal des ids d'encounter : %s. /gr boss <id> pour la "
+            .. "definir, /gr boss list pour l'afficher, /gr boss clear pour l'effacer.",
+    },
+    ["cmd.boss.target.none"] = {
+        en = "NONE - SAFE DEFAULT: the panel will NOT open by itself",
+        fr = "AUCUNE - DEFAUT SUR : le panneau ne s'ouvrira PAS tout seul",
+    },
+    ["cmd.boss.target.ids"] = {
+        en = "ids %s",
+        fr = "ids %s",
+    },
+    ["cmd.boss.target.names"] = {
+        en = "names %s (they depend on the client language)",
+        fr = "noms %s (ils dependent de la langue du client)",
+    },
+    ["cmd.boss.added"] = {
+        en = "Target encounter id %d added (%d id(s) configured). Auto-open target: %s",
+        fr = "Id d'encounter cible %d ajoute (%d id(s) configure(s)). Cible de l'ouverture auto : %s",
+    },
+    ["cmd.boss.unknown"] = {
+        en = "Unknown encounter id '%s': a POSITIVE INTEGER is expected, the id ENCOUNTER_START reports "
+            .. "(/gr idlog on captures it in game). Nothing was saved.",
+        fr = "Id d'encounter inconnu '%s' : un ENTIER POSITIF est attendu, l'id que rapporte ENCOUNTER_START "
+            .. "(/gr idlog on le capture en jeu). Rien n'a ete enregistre.",
+    },
+    ["cmd.boss.nameAdded"] = {
+        en = "Target encounter name '%s' added. Auto-open target: %s",
+        fr = "Nom d'encounter cible '%s' ajoute. Cible de l'ouverture auto : %s",
+    },
+    ["cmd.boss.nameUnknown"] = {
+        en = "Empty encounter name '%s': write the exact name your client displays (/gr idlog on shows it), or "
+            .. "use /gr boss <id> instead.",
+        fr = "Nom d'encounter vide '%s' : ecris le nom exact affiche par ton client (/gr idlog on l'affiche), "
+            .. "ou utilise plutot /gr boss <id>.",
+    },
+    ["cmd.boss.cleared"] = {
+        en = "Auto-open target cleared (no id, no name): the panel will NOT open by itself any more - SAFE "
+            .. "DEFAULT. /gr idlog on then /gr boss <id> to name the right boss.",
+        fr = "Cible de l'ouverture auto effacee (aucun id, aucun nom) : le panneau ne s'ouvrira plus tout "
+            .. "seul - DEFAUT SUR. /gr idlog on puis /gr boss <id> pour nommer le bon boss.",
+    },
+    ["cmd.boss.list.ids"] = {
+        en = "Auto-open target ids: %s",
+        fr = "Ids cibles de l'ouverture auto : %s",
+    },
+    ["cmd.boss.list.names"] = {
+        en = "Auto-open target names (SECONDARY criterion, depends on the client language, empty by default " .. "and never guessed): %s",
+        fr = "Noms cibles de l'ouverture auto (critere SECONDAIRE, depend de la langue du client, vide par "
+            .. "defaut et jamais devine) : %s",
+    },
+    ["cmd.boss.list.override"] = {
+        en = "Manual override: %s (/gr inter on arms the panel for the NEXT encounter, whatever the boss; it "
+            .. "is consumed at the end of that encounter).",
+        fr = "Override manuel : %s (/gr inter on arme le panneau pour le PROCHAIN encounter, quel que soit le "
+            .. "boss ; il est consomme a la fin de cet encounter).",
+    },
+    ["cmd.boss.list.seen"] = {
+        en = "Encounters memorized by the idlog (%d, newest first):",
+        fr = "Encounters memorises par l'idlog (%d, du plus recent au plus ancien) :",
+    },
+    -- THE IDLOG LINE. Read by the raid lead at the pull of the target boss: it is
+    -- the ONLY source of the real id (nothing is invented). Each value is read
+    -- under pcall, and a value that cannot be read says so instead of showing a
+    -- fake number.
+    ["cmd.boss.seen"] = {
+        en = "encounter seen: id=%s name=%s difficulty=%s group=%s",
+        fr = "encounter vu : id=%s name=%s difficulty=%s group=%s",
+    },
+    ["cmd.boss.value.unreadable"] = {
+        en = "unreadable",
+        fr = "illisible",
+    },
+    ["cmd.boss.value.absent"] = {
+        en = "none",
+        fr = "aucun",
+    },
+    -- Load-time warning and reminder at every encounter that opens nothing: the
+    -- SAFE DEFAULT is a panel that stays closed, so the chat says HOW to configure
+    -- the right boss (or to force the next encounter once).
+    ["cmd.boss.noTarget"] = {
+        en = "No target boss configured: the intermission panel will NOT open by itself (SAFE DEFAULT - a "
+            .. "panel that does not open is better than a panel on the wrong boss). Turn /gr idlog on, pull "
+            .. "the boss, read the line 'encounter seen: id=<id> ...' and set it with /gr boss <id>. /gr "
+            .. "inter on opens the panel for the NEXT encounter, whatever the boss.",
+        fr = "Aucun boss cible configure : le panneau d'intermission ne s'ouvrira PAS tout seul (DEFAUT SUR - "
+            .. "mieux vaut un panneau qui ne s'ouvre pas qu'un panneau sur le mauvais boss). Active /gr idlog "
+            .. "on, pull le boss, lis la ligne 'encounter vu : id=<id> ...' et definis-la avec /gr boss <id>. "
+            .. "/gr inter on ouvre le panneau au PROCHAIN encounter, quel que soit le boss.",
+    },
+    ["cmd.boss.notTarget"] = {
+        en = "Encounter %s is NOT the configured target: the panel stays closed. /gr boss <id> to change the "
+            .. "target (the id just reported can be copied), /gr inter on to open the panel for the next "
+            .. "encounter.",
+        fr = "L'encounter %s n'est PAS la cible configuree : le panneau reste ferme. /gr boss <id> pour "
+            .. "changer la cible (l'id qui vient d'etre affiche peut etre recopie), /gr inter on pour ouvrir "
+            .. "le panneau au prochain encounter.",
+    },
+    ["cmd.boss.notTargetNoId"] = {
+        en = "This encounter is NOT the configured target (no usable id was read on it): the panel stays "
+            .. "closed. /gr idlog on shows what ENCOUNTER_START reports, /gr boss <id> sets the target, /gr "
+            .. "inter on opens the panel for the next encounter.",
+        fr = "Cet encounter n'est PAS la cible configuree (aucun id exploitable n'a ete lu) : le panneau "
+            .. "reste ferme. /gr idlog on affiche ce que rapporte ENCOUNTER_START, /gr boss <id> definit la "
+            .. "cible, /gr inter on ouvre le panneau au prochain encounter.",
+    },
+    ["cmd.boss.unreadable"] = {
+        en = "The encounter id could not be read (secret value?): no automatic opening. /gr inter on opens the "
+            .. "panel for the next encounter.",
+        fr = "L'id de l'encounter n'a pas pu etre lu (valeur secrete ?) : aucune ouverture automatique. /gr "
+            .. "inter on ouvre le panneau au prochain encounter.",
+    },
+    ["cmd.boss.overrideArmed"] = {
+        en = "Manual override armed: the panel opens for the NEXT encounter, whatever the boss (consumed at "
+            .. "the end of that encounter).",
+        fr = "Override manuel arme : le panneau s'ouvre au PROCHAIN encounter, quel que soit le boss "
+            .. "(consomme a la fin de cet encounter).",
+    },
+    ["cmd.boss.overrideUsed"] = {
+        en = "Encounter started: the MANUAL OVERRIDE (/gr inter on) opens the panel for it, whatever the boss; "
+            .. "it is consumed at the end of this encounter.",
+        fr = "Combat commence : l'OVERRIDE MANUEL (/gr inter on) ouvre le panneau pour cet encounter, quel "
+            .. "que soit le boss ; il est consomme a la fin de ce combat.",
+    },
+    ["cmd.boss.overrideConsumed"] = {
+        en = "Manual override consumed: the panel only opens again for the configured target.",
+        fr = "Override manuel consomme : le panneau ne s'ouvre a nouveau que pour la cible configuree.",
+    },
+    ["cmd.idlog.status"] = {
+        en = "Encounter id log: %s. When on, every ENCOUNTER_START prints 'encounter seen: id=<id> "
+            .. "name=<name> difficulty=<d> group=<n>' ('unreadable' when a value cannot be read) and the last "
+            .. "%d encounters are memorized in the SavedVariables (/gr boss list).",
+        fr = "Journal des ids d'encounter : %s. Quand il est actif, chaque ENCOUNTER_START affiche "
+            .. "'encounter vu : id=<id> name=<nom> difficulty=<d> group=<n>' ('illisible' quand une valeur ne "
+            .. "peut pas etre lue) et les %d derniers encounters sont memorises dans les SavedVariables "
+            .. "(/gr boss list).",
+    },
+    ["cmd.idlog.updated"] = {
+        en = "Encounter id log = %s.",
+        fr = "Journal des ids d'encounter = %s.",
+    },
+    ["cmd.idlog.unknown"] = {
+        en = "Unknown value '%s': accepted values are on, off.",
+        fr = "Valeur inconnue '%s' : valeurs acceptees on, off.",
     },
 
     -- -------------------------------------------------------------- ping policy
@@ -377,6 +546,13 @@ Locale.STRINGS = {
     ["ui.soundLine"] = {
         en = "assignment sound: %s (one soundboard per composition, /gr sound on|off)",
         fr = "son d'assignation : %s (un son par composition, /gr sound on|off)",
+    },
+    -- WHICH BOSS opens the panel by itself (`/gr inter status`): the auto-open
+    -- target of the allow-list and the state of the idlog. The safe default (no
+    -- target) reads as is: NOTHING opens by itself.
+    ["ui.bossLine"] = {
+        en = "auto-open target: %s (encounter id log: %s, /gr boss)",
+        fr = "cible de l'ouverture auto : %s (journal des ids d'encounter : %s, /gr boss)",
     },
 
     -- -------------------------------------------- placement mode (before pull)
