@@ -4,7 +4,7 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
-## [Unreleased]
+## [0.12.0] - 2026-09-24
 
 **The target boss is now DELIVERED with the addon** — no player has to type a
 command for the intermission panel to open on *Entombed Sentinels* — and a new
@@ -706,6 +706,7 @@ was too verbose, and a wrong click could not be corrected.
   (`Core/Pairing.lua`) shared with the GIDEON Discord bot.
 - CI and release workflows (BigWigs packager), offline test suite with busted.
 
+[0.12.0]: https://github.com/BathmanTv/Gideon/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/BathmanTv/Gideon/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/BathmanTv/Gideon/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/BathmanTv/Gideon/compare/v0.8.0...v0.9.0
