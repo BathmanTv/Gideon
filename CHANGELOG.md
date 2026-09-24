@@ -66,7 +66,8 @@ Four requests from the raid lead after the first evening with the picture panel.
   asserted per composition **in FR and EN** (>= 44 px, >= 64 px for `BOSS`) with no
   truncation and no overflow; cards carry a border and a discreet background, size =
   picture + the padding of the style, with the border lighting up on hover/press and
-  **no sound** outside a click; `/gr inter ok` saves the position and closes.
+  **no sound** outside a click; the placement panel stays **draggable** (position
+  saved and restored) and `/gr inter ok` saves that position and closes.
 
 ### Fixed
 

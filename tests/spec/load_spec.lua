@@ -1135,6 +1135,39 @@ describe("chargement de l'addon", function()
         assert.are.equal(50, y)
     end)
 
+    it("le panneau d'intermission est DEPLACABLE en placement et sa position est memorisee", function()
+        -- Le raid lead : pendant le placement, l'illustration sert de repere et le
+        -- panneau doit RESTER deplacable (drag + position memorisee). L'encart
+        -- (une Frame, sans souris : rien a cliquer dessus) ne mange donc pas le
+        -- glisser : c'est le CADRE qui est deplace et enregistre.
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        local moved = false
+        panel.StartMoving = function()
+            moved = true
+        end
+        panel:GetScript("OnDragStart")(panel)
+        assert.is_true(moved, "le glisser doit etre autorise en placement")
+        -- L'illustration n'intercepte PAS la souris (aucun script de drag a elle).
+        assert.is_nil(panel.placement.__scripts)
+        dragTo(panel, "BOTTOMLEFT", "BOTTOMLEFT", -40, 25)
+        assert.are.equal("BOTTOMLEFT", _G.GideonRaidDB.intermission.position.point)
+        assert.are.equal(-40, _G.GideonRaidDB.intermission.position.x)
+        assert.are.equal(25, _G.GideonRaidDB.intermission.position.y)
+        -- `/gr inter ok` valide SANS perdre la position : elle est re-appliquee a
+        -- l'ouverture suivante (placement comme combat).
+        _G.SlashCmdList["GIDEONRAID"]("inter ok")
+        assert.is_false(panel:IsShown())
+        panel:ClearAllPoints()
+        panel:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+        _G.SlashCmdList["GIDEONRAID"]("inter place")
+        local _, _, _, x, y = panel:GetPoint(1)
+        assert.are.equal(-40, x, "position restauree au placement suivant")
+        assert.are.equal(25, y)
+    end)
+
     it("/gr resetposition remet les trois panneaux au centre", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         local main = _G.GideonRaidPanel

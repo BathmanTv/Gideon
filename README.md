@@ -679,14 +679,14 @@ Total: 0 warnings / 0 errors in 30 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
 OK GideonRaid.toc                              # check_toc (21 files listed: 13 lua + 4 sounds + 4 textures)
 busted
-359 successes / 0 failures / 0 errors / 0 pending : 3.42 seconds
+360 successes / 0 failures / 0 errors / 0 pending : 3.48 seconds
 ```
 
-The 359 tests are spread over `intermission_spec.lua` (91 — including the
+The 360 tests are spread over `intermission_spec.lua` (91 — including the
 resolution of the **delivered target**: never configured vs explicit
 `/gr boss clear` vs player addition, and the **removal** of the old placement text
 blob: `setupView` and its locale keys must stay gone),
-`load_spec.lua` (56 — real loading, `.toc` order, evening flow, movable panels,
+`load_spec.lua` (57 — real loading, `.toc` order, evening flow, movable panels,
 close cross, simulations, button order, **placement panel = the illustration alone
 with `/gr inter ok`**, **the explicit 44/64 px font of the word and no Blizzard font
 object**, **the card borders lighting up under the mouse with no sound**),
