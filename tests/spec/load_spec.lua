@@ -79,7 +79,10 @@ describe("chargement de l'addon", function()
 
     it("charge tous les fichiers listes dans le .toc, dans l'ordre", function()
         local files = wowenv.tocFiles()
-        assert.are.equal(13, #files)
+        -- 13 fichiers jusqu'a la 0.13.1, + UI/Showcase.lua (la VITRINE DE STYLE,
+        -- chargee EN DERNIER : elle interroge UI/Intermission.lua pour savoir si un
+        -- vrai combat tourne).
+        assert.are.equal(14, #files)
         assert.are.equal("GideonRaid.lua", files[1])
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])

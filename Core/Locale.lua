@@ -54,33 +54,43 @@ Locale.STRINGS = {
         en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  (place = the panel shows the illustration alone; ok = save the position and close)\n"
+            .. "  (place = the panel shows the illustration and its small OK button; ok = save the position and close)\n"
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
             .. "  /gr diag (health report: the 4 sound files, the target boss, the idlog, the ping)\n"
+            .. "  /gr style <1..6|gideon|shipped> (CARD STYLE of the intermission panel, persisted)\n"
             .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
+            .. "  /gr sim style [1..6|gideon] (STYLE SHOWCASE: every font size, the palette, the 7 frame styles)\n"
+            .. "  /gr sim anim [on|off] (showcase animations: fade-in + border pulse, persisted)\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
             .. "  /gr ping [anchors|color|none]"
             .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
-            .. "  (place = le panneau n'affiche que l'illustration ; ok = enregistre la position et ferme)\n"
+            .. "  (place = le panneau affiche l'illustration et son petit bouton OK ; ok = enregistre la position et ferme)\n"
             .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
             .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
             .. "  /gr diag (bilan de sante : les 4 fichiers de son, le boss cible, l'idlog, le ping)\n"
+            .. "  /gr style <1..6|gideon|shipped> (STYLE DES ENCARTS du panneau d'intermission, persiste)\n"
             .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
             .. "  /gr sim stop\n"
+            .. "  /gr sim style [1..6|gideon] (VITRINE DE STYLE : toutes les tailles, la palette, les 7 styles)\n"
+            .. "  /gr sim anim [on|off] (animations de la vitrine : fondu + pulsation, persiste)\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
     },
     ["cmd.sim.help"] = {
         en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = the intermission "
             .. "panel opens RIGHT AWAY, you click your composition and YOU close it (X or Close); /gr sim ping = "
-            .. "ping help window (how to bind a key per ping and how to ping yourself); /gr sim stop = close it.",
+            .. "ping help window (how to bind a key per ping and how to ping yourself); /gr sim stop = close it; "
+            .. "/gr sim style [1..6|gideon] = the STYLE SHOWCASE (fonts, palette with hex codes, card states, the "
+            .. "candidate frame styles, the animations) where you PICK the style; /gr sim anim on|off = its animations.",
         fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = le panneau "
             .. "d'intermission s'ouvre TOUT DE SUITE, tu cliques ta composition et c'est TOI qui le fermes "
             .. "(croix ou Fermer) ; /gr sim ping = fenetre d'aide au ping (comment binder une touche par ping et "
-            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer.",
+            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer ; /gr sim style [1..6|gideon] = la VITRINE "
+            .. "DE STYLE (polices, palette avec codes hexa, etats d'un encart, styles de cadre candidats, "
+            .. "animations) ou tu CHOISIS le style ; /gr sim anim on|off = ses animations.",
     },
     -- Panel lock: the main panel is MOVABLE by default (in-game feedback); these
     -- three commands are the lock / unlock / reset entry points.
@@ -1223,6 +1233,282 @@ Locale.STRINGS = {
     ["err.planEntryDuplicate"] = {
         en = "plan #%s ignored (duplicate name: %s)",
         fr = "plan #%s ignore (nom en double : %s)",
+    },
+
+    -- ============================================================ STYLE SHOWCASE
+    -- The in-game SURFACE where the raid lead sees what the design can do
+    -- (typography, palette, states, frame styles, animations) and CHOOSES. It
+    -- only exists in SIMULATION mode: the combat panel never shows it.
+    ["ui.placementOk"] = {
+        en = "OK",
+        fr = "OK",
+    },
+    ["ui.showcaseTitle"] = {
+        en = "STYLE SHOWCASE - SIMULATION ONLY",
+        fr = "VITRINE DE STYLE - SIMULATION SEULEMENT",
+    },
+    ["showcase.hint"] = {
+        en = "Wheel = scroll. Click a composition to get the giant word + the sound, click a frame style to preview it live.",
+        fr = "Molette = defiler. Clique une composition pour le mot geant + le son, clique un style de cadre pour l'apercu en direct.",
+    },
+    ["showcase.liveHeader"] = {
+        en = "1 - THE THREE COMPOSITIONS (as in combat)",
+        fr = "1 - LES TROIS COMPOSITIONS (comme en combat)",
+    },
+    ["showcase.liveNote"] = {
+        en = "Click one: the three cards give way to ONE word in the biggest font, and the assignment " .. "soundboard plays once.",
+        fr = "Clique : les trois encarts laissent la place a UN seul mot dans la plus grosse police, et le "
+            .. "son d'assignation part une fois.",
+    },
+    ["showcase.typoHeader"] = {
+        en = "2 - TYPOGRAPHY (every size the addon really uses)",
+        fr = "2 - TYPOGRAPHIE (toutes les tailles reellement utilisees)",
+    },
+    ["showcase.typoNote"] = {
+        en = "The line under each sample gives the real size and where it comes from.",
+        fr = "La ligne sous chaque exemple donne la taille reelle et son origine.",
+    },
+    ["showcase.typoSize"] = {
+        en = "%s %d px - %s",
+        fr = "%s %d px - %s",
+    },
+    ["showcase.typoExplicit"] = {
+        en = "explicit SetFont (FRIZQT__.TTF)",
+        fr = "SetFont explicite (FRIZQT__.TTF)",
+    },
+    ["showcase.typoObject"] = {
+        en = "Blizzard font object (size estimated out of game)",
+        fr = "objet de police Blizzard (taille estimee hors jeu)",
+    },
+    ["showcase.typoGreen"] = {
+        en = "GREEN variant (shipped)",
+        fr = "variante VERTE (livree)",
+    },
+    ["showcase.typoCyan"] = {
+        en = "GIDEON CYAN variant (to decide)",
+        fr = "variante CYAN GIDEON (a trancher)",
+    },
+    ["showcase.typoChrome"] = {
+        en = "GIDEON CHROME",
+        fr = "CHROME GIDEON",
+    },
+    ["showcase.statesHeader"] = {
+        en = "3 - ONE CARD, THREE STATES",
+        fr = "3 - UN ENCART, TROIS ETATS",
+    },
+    ["showcase.statesNote"] = {
+        en = "Hover the second card and press-and-hold the third one: the BORDER lights up and nothing else moves.",
+        fr = "Survole le deuxieme encart et maintiens le clic sur le troisieme : la BORDURE s'allume, rien d'autre ne bouge.",
+    },
+    ["showcase.stateRest"] = {
+        en = "NORMAL - at rest, border #%s",
+        fr = "NORMAL - au repos, bordure #%s",
+    },
+    ["showcase.stateHover"] = {
+        en = "HOVER - move the mouse over this card, border #%s",
+        fr = "SURVOL - passe la souris sur cet encart, bordure #%s",
+    },
+    ["showcase.statePressed"] = {
+        en = "PRESSED - click and hold this card, border #%s",
+        fr = "APPUI - clique et maintiens cet encart, bordure #%s",
+    },
+    ["showcase.paletteHeader"] = {
+        en = "4 - PALETTE OF THE PANEL TODAY",
+        fr = "4 - PALETTE DU PANNEAU AUJOURD'HUI",
+    },
+    ["showcase.paletteNote"] = {
+        en = "Role + exact hex of every colour the intermission panel writes today: dictate a change, "
+            .. "it is ONE constant in Core/Layout.lua.",
+        fr = "Role + code hexadecimal exact de chaque couleur ecrite par le panneau : dicte un changement, "
+            .. "c'est UNE constante dans Core/Layout.lua.",
+    },
+    ["showcase.paletteGideonHeader"] = {
+        en = "4b - GIDEON PALETTE (delivered constants)",
+        fr = "4b - PALETTE GIDEON (constantes livrees)",
+    },
+    ["showcase.paletteGideonNote"] = {
+        en = "Same roles, GIDEON values: dictate a change and it is ONE constant in Core/Layout.lua.",
+        fr = "Memes roles, valeurs GIDEON : dicte un changement, c'est UNE constante dans Core/Layout.lua.",
+    },
+    ["showcase.stylesHeader"] = {
+        en = "5 - FRAME STYLES (click one to preview it live)",
+        fr = "5 - STYLES DE CADRE (clique pour l'apercu en direct)",
+    },
+    ["showcase.stylesNote"] = {
+        en = "1-6 come from your validated board, GIDEON is the new direction. The DELIVERED style stays the default.",
+        fr = "1 a 6 viennent de la planche validee, GIDEON est la nouvelle direction. Le style LIVRE reste le defaut.",
+    },
+    ["showcase.stylesCurrent"] = {
+        en = "Style used by the COMBAT panel right now: %s (/gr style %s to change it).",
+        fr = "Style utilise par le panneau de COMBAT maintenant : %s (/gr style %s pour le changer).",
+    },
+    ["showcase.styleCaption"] = {
+        en = "%s (border #%s, background #%s)",
+        fr = "%s (bordure #%s, fond #%s)",
+    },
+    ["showcase.animHeader"] = {
+        en = "6 - ANIMATIONS",
+        fr = "6 - ANIMATIONS",
+    },
+    ["showcase.animLine"] = {
+        en = "showcase animations: %s (fade-in of the panel + pulse of the first card border) - " .. "/gr sim anim on|off",
+        fr = "animations de la vitrine : %s (fondu d'apparition du panneau + pulsation de la bordure du "
+            .. "premier encart) - /gr sim anim on|off",
+    },
+    ["showcase.animNote"] = {
+        en = "They only ever run HERE: no animation is wired into the combat panel (/gr inter, /gr sim inter).",
+        fr = "Elles ne tournent QUE ici : aucune animation n'est branchee sur le panneau de combat (/gr inter, /gr sim inter).",
+    },
+    ["showcase.opened"] = {
+        en = "SIMULATION (no boss, no raid): STYLE SHOWCASE open. Wheel = scroll, click a composition, "
+            .. "click a frame style to preview it.",
+        fr = "SIMULATION (pas de boss, pas de raid) : VITRINE DE STYLE ouverte. Molette = defiler, clique "
+            .. "une composition, clique un style pour l'apercu.",
+    },
+    ["showcase.closed"] = {
+        en = "Style showcase closed.",
+        fr = "Vitrine de style fermee.",
+    },
+    ["showcase.notOpen"] = {
+        en = "the style showcase is not open (/gr sim style).",
+        fr = "la vitrine de style n'est pas ouverte (/gr sim style).",
+    },
+    ["showcase.previewOnly"] = {
+        en = "Preview style: %s (SHOWCASE ONLY - /gr style %s to apply it to the combat panel).",
+        fr = "Style en apercu : %s (VITRINE SEULEMENT - /gr style %s pour l'appliquer au panneau de combat).",
+    },
+    ["showcase.styleSelected"] = {
+        en = "Real style set to %s: the intermission panel of the next fight uses it (persisted).",
+        fr = "Style reel regle sur %s : le panneau d'intermission du prochain combat l'utilise (persiste).",
+    },
+    ["showcase.animUpdated"] = {
+        en = "Showcase animations: %s (persisted).",
+        fr = "Animations de la vitrine : %s (persiste).",
+    },
+    -- THE SIX CANDIDATE STYLES of the validated board + the GIDEON direction.
+    ["style.1"] = {
+        en = "bare card",
+        fr = "encart nu",
+    },
+    ["style.2"] = {
+        en = "gilded card",
+        fr = "encart dore",
+    },
+    ["style.3"] = {
+        en = "Blizzard button",
+        fr = "bouton Blizzard",
+    },
+    ["style.4"] = {
+        en = "action slot",
+        fr = "case d'action",
+    },
+    ["style.5"] = {
+        en = "bare image + shadow",
+        fr = "image nue + ombre",
+    },
+    ["style.6"] = {
+        en = "double frame",
+        fr = "double cadre",
+    },
+    ["style.gideon"] = {
+        en = "GIDEON (night blue + gold)",
+        fr = "GIDEON (bleu nuit + or)",
+    },
+    ["style.card"] = {
+        en = "delivered card",
+        fr = "encart livre",
+    },
+    ["palette.background"] = {
+        en = "BACKGROUND - fill of the cards",
+        fr = "FOND - interieur des encarts",
+    },
+    ["palette.border"] = {
+        en = "BORDER - card edge at rest",
+        fr = "BORDURE - bord de l'encart au repos",
+    },
+    ["palette.accent"] = {
+        en = "ACCENT - PING / CHASER words",
+        fr = "ACCENT - mots PING / CHASSEUR",
+    },
+    ["palette.textMain"] = {
+        en = "MAIN TEXT - the BOSS word",
+        fr = "TEXTE PRINCIPAL - le mot BOSS",
+    },
+    ["palette.textSecondary"] = {
+        en = "SECONDARY TEXT - SIMULATION banner",
+        fr = "TEXTE SECONDAIRE - bandeau SIMULATION",
+    },
+    ["palette.alert"] = {
+        en = "ALERT - the RED ping",
+        fr = "ALERTE - le ping ROUGE",
+    },
+    ["palette.gideon.NIGHT"] = {
+        en = "NIGHT - darkest fill",
+        fr = "NIGHT - fond le plus sombre",
+    },
+    ["palette.gideon.PANEL"] = {
+        en = "PANEL - night-blue glass",
+        fr = "PANEL - verre bleu nuit",
+    },
+    ["palette.gideon.ROYAL"] = {
+        en = "ROYAL - shaded flats",
+        fr = "ROYAL - aplats ombres",
+    },
+    ["palette.gideon.CYAN"] = {
+        en = "CYAN - glow, hover, PING / CHASER",
+        fr = "CYAN - lueur, survol, PING / CHASSEUR",
+    },
+    ["palette.gideon.GOLD"] = {
+        en = "GOLD - filigree, border at rest",
+        fr = "GOLD - filigrane, bordure au repos",
+    },
+    ["palette.gideon.GOLD_HI"] = {
+        en = "GOLD_HI - highlight, hover, pressed",
+        fr = "GOLD_HI - eclat, survol, appui",
+    },
+    ["palette.gideon.CHROME"] = {
+        en = "CHROME - main text, BOSS",
+        fr = "CHROME - texte principal, BOSS",
+    },
+    ["palette.gideon.MUTED"] = {
+        en = "MUTED - secondary text",
+        fr = "MUTED - texte secondaire",
+    },
+    ["cmd.style.status"] = {
+        en = "intermission panel style: %s (candidates: %s)",
+        fr = "style du panneau d'intermission : %s (candidats : %s)",
+    },
+    ["cmd.style.updated"] = {
+        en = "Intermission panel style set to %s (persisted: the combat panel uses it from now on).",
+        fr = "Style du panneau d'intermission regle sur %s (persiste : le panneau de combat l'utilise des maintenant).",
+    },
+    ["cmd.style.unknown"] = {
+        en = "unknown style: %s (expected 1..6, gideon or shipped)",
+        fr = "style inconnu : %s (attendu 1..6, gideon ou shipped)",
+    },
+    ["cmd.style.help"] = {
+        en = "/gr style <1..6|gideon|shipped>: style of the COMBAT intermission panel (persisted)",
+        fr = "/gr style <1..6|gideon|shipped> : style du panneau d'intermission en COMBAT (persiste)",
+    },
+    ["cmd.sim.style"] = {
+        en = "/gr sim style [1..6|gideon]: opens the STYLE SHOWCASE (simulation only, no boss)",
+        fr = "/gr sim style [1..6|gideon] : ouvre la VITRINE DE STYLE (simulation seulement, sans boss)",
+    },
+    ["cmd.sim.anim"] = {
+        en = "/gr sim anim on|off: showcase animations (fade-in + pulse), persisted",
+        fr = "/gr sim anim on|off : animations de la vitrine (fondu + pulsation), persiste",
+    },
+    ["cmd.sim.animState"] = {
+        en = "showcase animations: %s (persisted, default on)",
+        fr = "animations de la vitrine : %s (persistees, actives par defaut)",
+    },
+    ["cmd.sim.styleUnknown"] = {
+        en = "unknown style: %s (expected 1..6 or gideon)",
+        fr = "style inconnu : %s (attendu 1..6 ou gideon)",
+    },
+    ["cmd.sim.animUsage"] = {
+        en = "usage: /gr sim anim on|off (unknown value refused)",
+        fr = "usage : /gr sim anim on|off (valeur inconnue refusee)",
     },
 }
 

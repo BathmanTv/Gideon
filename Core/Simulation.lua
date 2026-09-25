@@ -74,7 +74,28 @@ Simulation.RUN_PHASE = { OPEN = "OPEN", DONE = "DONE" }
 
 --- Accepted sub-commands of /gr sim (and their aliases). An unknown value is
 --- REFUSED by resolveCommand (nil), never guessed.
-Simulation.COMMANDS = { inter = "inter", group = "inter", groupe = "inter", ping = "ping", stop = "stop" }
+Simulation.COMMANDS = {
+    inter = "inter",
+    group = "inter",
+    groupe = "inter",
+    ping = "ping",
+    stop = "stop",
+    -- THE STYLE SHOWCASE: makes the addon's own design visible IN GAME (fonts,
+    -- palette with hex codes, the three card states, the candidate frame styles,
+    -- two animations) and lets the raid lead CHOOSE there. `style` takes an
+    -- OPTIONAL candidate name, `anim` an on/off switch.
+    style = "style",
+    styles = "style",
+    anim = "anim",
+    animation = "anim",
+    animations = "anim",
+}
+
+--- THE SUB-COMMANDS THAT TAKE AN OPTION. Their argument travels back to the CALLER
+--- untouched: Core/Simulation refuses what it cannot judge (a style name lives in
+--- Core/Layout.BUTTON_STYLES, loaded AFTER this module, and an on/off switch is
+--- resolved by Core/Sound). Everything else refuses a trailing word, as before.
+Simulation.OPTION_COMMANDS = { style = true, anim = true }
 
 local PHASE_OPEN = Simulation.RUN_PHASE.OPEN
 local PHASE_DONE = Simulation.RUN_PHASE.DONE
@@ -114,6 +135,14 @@ function Simulation.parseCommand(raw)
     if mode == nil then
         -- Unknown sub-command: no error here, the caller shows the help.
         return nil, nil, nil
+    end
+    if Simulation.OPTION_COMMANDS[mode] == true then
+        -- The option is handed back RAW: `style` may name a candidate (validated by
+        -- the caller against Core/Layout.BUTTON_STYLES), `anim` an on/off switch
+        -- (validated by the caller through Core/Sound).
+        -- An EMPTY option is not an error either: `/gr sim style` alone opens the
+        -- showcase, and `/gr sim anim` alone recalls the current setting.
+        return mode, { argument = (rest ~= nil and rest ~= "") and rest or nil }, nil
     end
     if rest ~= nil and rest ~= "" then
         return nil, nil, Locale.t("err.simNoOption")

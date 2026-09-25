@@ -45,6 +45,9 @@
 # Core/Layout.lua comes LAST among the Core/ modules: it computes the DISPOSITION
 # of the panels (pure geometry, measured from Core/Locale strings) and the UI/
 # files apply it as-is.
+# THE STYLE SHOWCASE (UI/Showcase.lua) comes LAST of all: it asks UI/Intermission.lua
+# whether a real fight is running (it owns the only way into the showcase, and the
+# showcase must never open during an intermission).
 # Bindings.xml is NOT listed here: the client loads it automatically
 # (https://warcraft.wiki.gg/wiki/Creating_key_bindings).
 GideonRaid.lua
@@ -60,6 +63,7 @@ Core\Textures.lua
 Core\Layout.lua
 UI\Panel.lua
 UI\Intermission.lua
+UI\Showcase.lua
 
 # SOUNDBOARDS OF AN ASSIGNMENT (one file per canonical state, played ONCE when
 # the player declares their composition) AND THE INTERMISSION START SOUND (played
@@ -106,3 +110,16 @@ Texture\3v1r.tga
 # aspect ratio and the alpha preserved (Textures.PLACEMENT_SIZE reports the real
 # size, tests/spec/texture_spec.lua compares it with the header of the file).
 Texture\placement.tga
+
+# THE GIDEON FRAME (the 9-slice border of the "GIDEON" card style, a CANDIDATE the
+# raid lead previews in the style showcase with /gr sim style gideon). Same rules
+# as every other texture: a 32-bit uncompressed TGA in Texture/, listed HERE (an
+# unlisted texture loaded by path is not loaded at all), and its real size is
+# compared with the header of the file by tests/spec/texture_spec.lua.
+# IT IS GENERATED, NOT HAND-MADE: tools/make_gideon_frame.py writes it from pure
+# arithmetic (no Pillow, no source image) and can verify it byte for byte:
+#     python3 tools/make_gideon_frame.py --check
+# It is WHITE on purpose (a 2 px border + a soft inner halo, 64x64): the colour
+# comes from the game (SetBackdropBorderColor), so the style is pure DATA - gold at
+# rest, CYAN on hover, bright gold on press.
+Texture\gideon-frame.tga

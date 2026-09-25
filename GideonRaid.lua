@@ -399,6 +399,55 @@ local function setIdlog(raw)
     return wanted
 end
 
+--- /gr style (no argument): WHICH CARD STYLE the intermission panel uses, and how
+--- to change it. The list of candidates comes from Core/Layout (it owns the style
+--- tables): the chat never writes a style name on its own.
+local function printStyleSetting()
+    local db = _G.GideonRaidDB
+    local resolved = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
+    local names = {}
+    for index = 1, #ns.Layout.STYLE_ORDER do
+        local name = ns.Layout.STYLE_ORDER[index]
+        names[#names + 1] = ns.Layout.styleNumber(name) or name
+    end
+    names[#names + 1] = tostring(ns.Layout.SHIPPED_STYLE)
+    ns.UI.Print(ns.Locale.format("cmd.style.status", ns.Layout.styleLabel(resolved.style), table.concat(names, ", ")))
+    ns.UI.Print(ns.Locale.t("cmd.style.help"))
+end
+
+--- /gr style <1..6|gideon|shipped>: chooses the CARD STYLE of the combat intermission
+--- panel and PERSISTS it (the panel uses it from the next refresh on). An unknown
+--- value is REFUSED - nothing is persisted, nothing is guessed - exactly like
+--- /gr sound, /gr lang and /gr ping. `shipped` brings back the delivered style.
+--- Core/Layout.resolveStyle() is the ONLY judge of what a style name means (each
+--- style carries its own aliases), and Core/Config.resolveStyleName() is the only
+--- writer of the field.
+--- @param raw string|nil style written by the player
+--- @return string|nil the accepted canonical style name
+local function setStyleSetting(raw)
+    local accepted = ns.Layout.resolveStyle(raw)
+    if accepted == nil then
+        ns.UI.Print(ns.Locale.format("cmd.style.unknown", tostring(raw)))
+        return nil
+    end
+    local db = _G.GideonRaidDB
+    if type(db) == "table" then
+        if type(db.intermission) ~= "table" then
+            db.intermission = ns.Config.defaultIntermission()
+        end
+        db.intermission.style = ns.Config.resolveStyleName(accepted)
+    end
+    -- The panels are refreshed AT ONCE: the raid lead sees his choice on the main
+    -- panel and on the intermission panel without waiting for anything.
+    ns.UI.IntermissionApplyConfig()
+    ns.UI.IntermissionRefresh()
+    if ns.UI.ShowcaseIsShown() then
+        ns.UI.ShowcaseRefresh()
+    end
+    ns.UI.Print(ns.Locale.format("cmd.style.updated", ns.Layout.styleLabel(accepted)))
+    return accepted
+end
+
 --- /gr diag: the HEALTH REPORT of the addon, in ONE read-only command (see
 --- Core/Diag.lua and UI.PrintDiag). It reads the SavedVariables, two sound CVars and
 --- - ONLY when the client is already silenced - checks each sound file with
@@ -433,6 +482,10 @@ local function slashHandler(cmd)
     -- The pattern accepts anything and Core/Simulation.resolveCommand() judges it:
     -- an unknown value is REFUSED (nothing is guessed, nothing is launched).
     local simMode = cmd:match("^sim%s+(.+)$")
+    -- /gr style <1..6|gideon|shipped> : the CARD STYLE of the combat intermission
+    -- panel. The pattern accepts anything and setStyleSetting() judges it (through
+    -- Core/Layout.resolveStyle): an unknown value is REFUSED, nothing is persisted.
+    local styleArg = cmd:match("^style%s+(.+)$")
     if cmd == "" or cmd == "show" then
         ns.UI.Toggle()
     elseif cmd == "reset" then
@@ -464,6 +517,10 @@ local function slashHandler(cmd)
         printIdlog()
     elseif idlogArg ~= nil then
         setIdlog(idlogArg)
+    elseif cmd == "style" then
+        printStyleSetting()
+    elseif styleArg ~= nil then
+        setStyleSetting(styleArg)
     elseif cmd == "diag" then
         -- HEALTH REPORT: sounds + effective target + idlog + ping, in one command.
         -- Read-only and silent (see UI.PrintDiag / Core/Diag.lua).

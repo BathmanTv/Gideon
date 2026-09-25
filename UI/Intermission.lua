@@ -533,10 +533,17 @@ local function ensurePanel()
     end)
     p.redo:Hide()
 
-    -- NO OK BUTTON ANY MORE (raid-lead request: the placement panel shows the
-    -- illustration and NOTHING else - no button at all). The placement is
-    -- validated by `/gr inter ok`, which saves the position exactly like the
-    -- former button did (UI.IntermissionConfirmSetup, unchanged).
+    -- THE OK BUTTON OF THE PLACEMENT PANEL (raid-lead decision: "Remet oui ok").
+    -- A small, discreet button UNDER the illustration: it saves the position and
+    -- closes, exactly like `/gr inter ok` - which stays available as a backup. It
+    -- is part of the PLACEMENT layout only (Core/Layout.placementPanel): during a
+    -- fight the layout does not contain it, so the applier hides it, and it can
+    -- never be drawn over the three composition cards.
+    p.placementOk = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+    p.placementOk:SetScript("OnClick", function()
+        UI.IntermissionConfirmSetup()
+    end)
+    p.placementOk:Hide()
 
     p:Hide()
     panel = p
@@ -556,6 +563,7 @@ local function panelElements(p)
         { id = "wordBig", frame = p.wordBig },
         { id = "redo", frame = p.redo },
         { id = "placement", frame = p.placement },
+        { id = "placementOk", frame = p.placementOk },
     }
 end
 
@@ -640,13 +648,14 @@ function UI.IntermissionRefresh()
     local spec = {}
 
     if setupMode then
-        -- PLACEMENT MODE (before the pull): ONE thing on screen - the illustration
-        -- the raid lead delivered (Core/Layout.placementPanel) - and NOTHING ELSE.
-        -- No button, no label, no composition: the picture IS the reference of the
-        -- size and the spot the window will occupy during the fight. The former
-        -- OK button is gone; `/gr inter ok` validates, the cross cancels, and the
-        -- panel is dragged to the wanted spot like the combat panel.
-        return UI.ApplyLayout(p, Layout.placementPanel(), panelElements(p))
+        -- PLACEMENT MODE (before the pull): the illustration the raid lead
+        -- delivered (Core/Layout.placementPanel) and its small OK button UNDER it,
+        -- and NOTHING ELSE. No composition, no label: the picture IS the reference
+        -- of the size and the spot the window will occupy during the fight. The OK
+        -- button saves the position and closes (UI.IntermissionConfirmSetup), the
+        -- cross cancels, `/gr inter ok` does the same as the button, and the panel
+        -- is dragged to the wanted spot like the combat panel.
+        return UI.ApplyLayout(p, Layout.placementPanel(c.style), panelElements(p))
     end
 
     -- The ping policy is INJECTED into Core (Core never reads the SavedVariables)
@@ -662,6 +671,11 @@ function UI.IntermissionRefresh()
     end
     spec.showChoices = snap.showButtons
     spec.showRedo = snap.showRedo
+    -- THE STYLE OF THE CARDS: the raid lead's choice (`/gr style`), the delivered
+    -- one by default. It travels WITH the layout, so the combat panel's look is
+    -- decided in ONE place (Core/Layout.BUTTON_STYLES) and this layer only applies
+    -- the table it is handed.
+    spec.style = c.style
     -- THE WORD: absent until a composition is declared, and always paired with
     -- the STATE it belongs to (never parsed back from the text).
     spec.wordText = snap.word
@@ -775,6 +789,15 @@ local function realFlowBusy()
     end
     local phase = state.phase
     return phase == ns.Intermission.PHASE.PENDING or phase == ns.Intermission.PHASE.VISIBLE or phase == ns.Intermission.PHASE.DARK
+end
+
+--- THE SAME PREDICATE, EXPORTED: the STYLE SHOWCASE (UI/Showcase.lua) refuses to
+--- open while a real fight is running or a timeline is armed, exactly like a
+--- rehearsal does. Nothing else may call it, and the showcase is the only surface
+--- outside this file that needs to know.
+--- @return boolean
+function UI.IntermissionRealFlowBusy()
+    return realFlowBusy()
 end
 
 --- True while the INTERMISSION REHEARSAL is running. The ping help window is NOT
@@ -927,6 +950,16 @@ function UI.SimulationCommand(raw)
         UI.SimulationInterStart(options)
     elseif mode == "ping" then
         UI.SimulationPingStart()
+    elseif mode == "style" then
+        -- `/gr sim style [1..6|gideon]`: the STYLE SHOWCASE - every font size, the
+        -- palette with its hex codes, the three states of a card, the seven frame
+        -- styles and the two animations, shown IN GAME so the raid lead chooses
+        -- there. An unknown candidate is refused by the showcase itself.
+        UI.ShowcaseOpen(options.argument)
+    elseif mode == "anim" then
+        -- `/gr sim anim on|off`: the showcase animations (fade-in + border pulse),
+        -- persisted. Unknown value refused, like `/gr sound on|off`.
+        UI.ShowcaseAnimationsCommand(options.argument)
     else
         UI.SimulationStop()
     end

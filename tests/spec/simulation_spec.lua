@@ -44,7 +44,25 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
         assert.are.same({ "Warning", "OnMyWay", "Assist" }, S.PING_SEQUENCE)
         assert.are.equal("OPEN", S.RUN_PHASE.OPEN)
         assert.are.equal("DONE", S.RUN_PHASE.DONE)
-        assert.are.same({ inter = "inter", group = "inter", groupe = "inter", ping = "ping", stop = "stop" }, S.COMMANDS)
+        assert.are.same({
+            inter = "inter",
+            group = "inter",
+            groupe = "inter",
+            ping = "ping",
+            stop = "stop",
+            -- LA VITRINE DE STYLE : `style` ouvre la vitrine (option facultative :
+            -- le candidat a previsualiser) et `anim` coupe/active ses animations.
+            style = "style",
+            styles = "style",
+            anim = "anim",
+            animation = "anim",
+            animations = "anim",
+        }, S.COMMANDS)
+        -- LES SOUS-COMMANDES A OPTION, et elles seules : tout le reste refuse un
+        -- mot de trop (Core ne devine jamais).
+        assert.is_true(S.OPTION_COMMANDS.style and S.OPTION_COMMANDS.anim)
+        assert.is_nil(S.OPTION_COMMANDS.inter)
+        assert.is_nil(S.OPTION_COMMANDS.stop)
     end)
 
     it("annonce les TROIS pings dans un ordre EXPLICITE et lisible", function()

@@ -431,10 +431,18 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
             -- Sans CORRIGER, il n'y a plus AUCUNE ligne d'actions.
             local plain = L.intermissionPanel({ wordText = ns.Locale.t("state.word.1V3R"), wordState = "1V3R" })
             assert.is_nil(blockOf(plain, "actions"), lang .. " : une ligne d'actions traine")
-            -- Et le panneau de placement ne contient AUCUN bouton du tout.
+            -- Et le panneau de placement : l'illustration et son bouton OK, RIEN
+            -- d'autre - aucune composition, aucun Fermer.
             local placement = L.placementPanel()
+            assert.are.equal(2, #placement.blocks, lang .. " : le panneau de placement doit avoir 2 blocs")
             for index = 1, #placement.blocks do
-                assert.are.equal("image", placement.blocks[index].kind, lang .. " : un bouton traine sur le panneau de placement")
+                local block = placement.blocks[index]
+                local known = block.id == L.PLACEMENT_BLOCK_ID or block.id == L.PLACEMENT_OK_BLOCK_ID
+                assert.is_true(known, lang .. " : un bouton etranger traine sur le panneau de placement")
+                if block.kind == "button" then
+                    assert.are.equal(L.PLACEMENT_OK_BLOCK_ID, block.id, lang .. " : seul le bouton OK est autorise")
+                    assert.are.equal(ns.Locale.t("ui.placementOk"), block.text, lang)
+                end
             end
         end
     end)
@@ -764,16 +772,17 @@ describe("Layout : panneau d'intermission (images, ordre fige, deux langues)", f
         end
     end)
 
-    it("mode placement : l'illustration SEULE, aucun bouton, aucun texte, rien sous la croix", function()
-        -- Retour du raid lead : pendant le placement, le panneau n'affiche QUE la
+    it("mode placement : l'illustration + son bouton OK, aucun texte, rien sous la croix", function()
+        -- Retour du raid lead : pendant le placement, le panneau affiche la
         -- nouvelle illustration (un repere visuel pour voir la taille et
-        -- l'emplacement qu'aura la fenetre). Aucun bouton, aucun texte, aucune
-        -- composition : la validation se fait par `/gr inter ok`, l'annulation par
-        -- la croix, le deplacement par le drag.
+        -- l'emplacement qu'aura la fenetre) PUIS le petit bouton OK qui enregistre
+        -- la position et ferme (« Remet oui ok »). Aucun texte, aucune composition :
+        -- `/gr inter ok` fait la meme chose que le bouton, l'annulation par la
+        -- croix, le deplacement par le drag.
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)
             local layout = L.placementPanel()
-            assert.are.equal(1, #layout.blocks, lang .. " : le panneau de placement doit avoir UN seul bloc")
+            assert.are.equal(2, #layout.blocks, lang .. " : le panneau de placement doit avoir 2 blocs")
             assert.are.equal("", problemsOf(L, layout), lang)
             -- Aucun texte : le mode placement explique en chat/README, pas a l'ecran.
             assert.are.equal(0, #textBlocks(layout), lang)

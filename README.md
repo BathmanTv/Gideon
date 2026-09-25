@@ -91,7 +91,7 @@ possible:
 | Screen | Content | Data source |
 |---|---|---|
 | Main panel (`/gr`) | partner, role, position, pairs, then the buttons **in this order**: **PLACE INTERMISSION PANEL** -> **SIM: PING YOURSELF** -> **SIM: INTERMISSION GROUP** -> the LOCK/UNLOCK utility (frozen by a test: an evening flow, then a separated utility); the panel is **draggable** and reopens where you left it, and its frame is **as wide as its longest label in both languages** | `assignment` block prepared out of game by GIDEON |
-| Placement mode (before the pull) | the panel shows **ONE thing only**: the Gideon illustration (`Texture/placement.tga`), so you can see the size and the spot the window will take; it is **dragged** where you want it and **`/gr inter ok`** saves the position and closes — the panel carries **no button at all**; the close cross (`X`) cancels instead of validating | the player's drag (persisted) |
+| Placement mode (before the pull) | the panel shows **ONE thing only**: the Gideon illustration (`Texture/placement.tga`), so you can see the size and the spot the window will take; it is **dragged** where you want it and the small **OK** button under the illustration saves the position and closes (**`/gr inter ok`** does the same from the keyboard) — the panel carries **no composition button**; the close cross (`X`) cancels instead of validating | the player's drag (persisted) |
 | Intermission panel (opens by itself 2 s before the intermission — **only on the delivered/configured target boss** (`/gr boss`, delivered id `3445` = *Entombed Sentinels*, every difficulty) — or `/gr inter`) | **three vertically stacked cards** carrying the raid lead's screenshots of the three compositions (`3V1R` / `2V2R` / `1V3R`, order frozen by `Core/Layout.lua`), each one **a thin border around its picture**, **no title and no text at all**; during a rehearsal only, the SIMULATION banner; **no sound** at that moment | the player's click |
 | After the click | **ONE word, and nothing else** — `Ping` / `BOSS` / `Chasseur` (**44 px**, and **64 px** for `BOSS`, the biggest text of the window), the two survival words in green, `BOSS` in the theme colour — plus the **CORRECT** button; **the three cards disappear** (CORRECT brings them back) | `Core/Locale.lua` (`state.word.*`) + the theme in `Core/Layout.lua` |
 | Ping | **which ping to use** (`PING: Warning`) and, if you bound one, **which key to press** (`PING: Warning - press Q`) — the addon **never pings** | the player's keybinds, read with `GetBindingKey` |
@@ -160,7 +160,7 @@ player is the one who places it.
    the panel then shows **one single thing** — the Gideon illustration — so you can
    see the **size and the spot** the window will occupy during the fight. Drag the
    panel where it must appear, prepare your ping keybind in
-   *Options > Keybindings*, then **`/gr inter ok`** to save the position (the panel
+   *Options > Keybindings*, then the **OK** button under the illustration (or **`/gr inter ok`** from the keyboard) to save the position (the panel
    itself carries **no button at all**; the close cross **cancels**);
 2. before the pull **you have nothing to configure**: the addon already targets
    *Entombed Sentinels* (encounter id `3445`, every difficulty — see §3.4). To
@@ -224,6 +224,12 @@ and opens again at the next intermission.
 ```bash
 /gr sim inter   # "Intermission group": the panel opens RIGHT AWAY, click your composition,
                 # correct it with REDO, then close it YOURSELF (X or Close). One single cycle.
+/gr sim style   # STYLE SHOWCASE: the three cards, the whole typography, the palette with its
+                # hex codes, the seven candidate card styles, the animations (no boss, no raid)
+/gr sim style 4 # same, with candidate style 4 applied to the live preview
+/gr sim anim off# switch the showcase animations off (persisted; "on" puts them back)
+/gr style gideon# which card style the intermission panel REALLY uses in a fight (persisted)
+/gr style shipped # go back to the delivered style
 /gr sim ping    # PING HELP (= /gr pinghelp): how to bind one key per ping, and how to ping yourself
 /gr sim stop    # close the rehearsal or the help window (= the Close button, = the cross)
 ```
@@ -499,11 +505,13 @@ theme (`Core/Layout.lua`), never from literals scattered in the UI. `CORRECT`
 stays available, discreet, and brings the three pictures back.
 
 **The style of a card is a parameter.** `Layout.BUTTON_STYLES` holds the styles and
-`Layout.CHOICE_STYLE` names the one in use; today **one** style is defined (the
-thin-bordered card the raid lead asked for) because the richer picker is still
-being chosen. Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
-whatever Core names, and a test locks the geometry, the padding and the border
-colours down.
+`Layout.CHOICE_STYLE` names the one in use. Seven styles are now defined as **data**
+(the delivered thin-bordered card, five richer candidates and the Gideon style —
+see ``The style showcase'' below), and `/gr style <name>` picks the one the
+intermission panel really uses during a fight (persisted; an unknown value is
+refused). Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
+whatever Core names, and tests lock the geometry, the padding and the border colours
+of every entry down.
 
 **The "no leftover title" rule.** Each panel built by `Core/Layout.lua` carries its
 own id, and `Layout.violations()` refuses any text block the panel is not allowed to
@@ -536,7 +544,7 @@ displays **one single picture**: the Gideon illustration the raid lead delivered
 (`Texture/placement.tga`, 384 px box, aspect ratio and alpha kept, same conversion
 tool). It is the **visual reference** of the window being placed — you see the size
 and the spot it will occupy during the fight. There is **no button, no label and no
-composition** on that panel: drag it where you want, validate with `/gr inter ok`
+composition** on that panel: drag it where you want, validate with the **OK** button (or `/gr inter ok` from the keyboard)
 (which saves the position, `UI.IntermissionConfirmSetup`) or cancel with the cross.
 Note that this illustration is **opaque** (the delivered PNG has no alpha channel),
 unlike the three orb screenshots.
@@ -554,6 +562,39 @@ not an orb state).
 
 **A new texture file needs a client RESTART** (a `/reload` does not load files
 added after the client started) — exactly like a new sound file.
+
+#### The style showcase (`/gr sim style`) — choosing the design in game
+
+The raid lead asked for the simulation panel to become a **showcase**: *"on voit
+rien ^^ — il doit servir d'exemple pour voir les animations, polices, etc."*.
+`/gr sim style` therefore opens a **scrollable style showcase** (no boss, no raid;
+the **SIMULATION** banner is pinned **outside** the scrolling area, so it can never
+be mistaken for a pull) that displays:
+
+- **the three picture cards**, clickable, with the one big word and the click-only
+  soundboard — the rehearsal behaviour, unchanged;
+- **the typography**: every word at every size the addon uses (44 px, 64 px and the
+  secondary sizes) with the size written next to it, and, for `PING` / `CHASSEUR`,
+  the **two colour variants** (the delivered green and the Gideon cyan) side by side;
+- **the three card states** side by side (rest / hover / pressed), the forced ones
+  not reacting to the mouse, so the feedback is judged without guessing;
+- **the palette**: the theme roles and the eight `GIDEON_*` constants, **each with its
+  hexadecimal code printed**, so the raid lead can dictate a value to change;
+- **the seven candidate styles**, clickable to apply live to the preview;
+- **the animations**: a fade-in at the opening and a discreet pulse on the first
+  card, switched with `/gr sim anim on|off` (persisted).
+
+**The Gideon style.** The raid lead supplied GIDEON's artwork (chrome helmet, gold
+filigree, night-blue glass, cyan glow) with one instruction: *"we want a design
+unique to GIDEON"*. Its palette was **sampled from that picture** and lives as named
+constants in `Core/Layout.lua` — the single source: `GIDEON_NIGHT`, `GIDEON_PANEL`,
+`GIDEON_ROYAL`, `GIDEON_CYAN`, `GIDEON_GOLD`, `GIDEON_GOLD_HI`, `GIDEON_CHROME`,
+`GIDEON_MUTED`. The frame is a **64×64 nine-slice** TGA
+(`Texture/gideon-frame.tga`) generated deterministically by
+`tools/make_gideon_frame.py` — a **white mask with alpha**, tinted at runtime, so a
+single file covers every state: gold at rest, cyan on hover, bright gold pressed.
+The **delivered style stays the default**: Gideon is a candidate (`/gr style gideon`)
+until the raid lead validates it in game, and `/gr style shipped` goes back.
 
 ## 4. In-game language — English by default, French on a frFR client
 
@@ -669,26 +710,29 @@ the **auto-open boss filter + intermission start sound**, the **delivered defaul
 target (measured id 3445) + `/gr diag`**, the **three pictures + one word panel with
 the click-only soundboards**, and the **0.13.1 pass (placement panel = the
 illustration alone, no title anywhere on the intermission panel, the word five
-notches bigger, the buttons turned into thin-bordered cards)**):
+notches bigger, the buttons turned into thin-bordered cards), and the **0.13.2
+pass (the simulation panel turned into a style showcase, the Gideon style sampled
+from the artwork, the OK button back, and the fix of the applier bug that left every
+panel empty)**):
 
 ```
 $ make check
 stylua --check .
 luacheck .
-Total: 0 warnings / 0 errors in 30 files        # luacheck
+Total: 0 warnings / 0 errors in 32 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (21 files listed: 13 lua + 4 sounds + 4 textures)
+OK GideonRaid.toc                              # check_toc (23 files listed: 14 lua + 4 sounds + 5 textures)
 busted
-360 successes / 0 failures / 0 errors / 0 pending : 3.48 seconds
+397 successes / 0 failures / 0 errors / 0 pending : 4.96 seconds
 ```
 
-The 360 tests are spread over `intermission_spec.lua` (91 — including the
+The 397 tests are spread over `intermission_spec.lua` (91 — including the
 resolution of the **delivered target**: never configured vs explicit
 `/gr boss clear` vs player addition, and the **removal** of the old placement text
 blob: `setupView` and its locale keys must stay gone),
 `load_spec.lua` (57 — real loading, `.toc` order, evening flow, movable panels,
-close cross, simulations, button order, **placement panel = the illustration alone
-with `/gr inter ok`**, **the explicit 44/64 px font of the word and no Blizzard font
+close cross, simulations, button order, **the placement panel = the illustration alone plus the small OK button
+(`/gr inter ok` also works)**, **the explicit 44/64 px font of the word and no Blizzard font
 object**, **the card borders lighting up under the mouse with no sound**),
 `bossfilter_spec.lua` (45 — **which boss may open the panel**: the **delivered
 default target** (id 3445 + the EN/FR names, every difficulty), explicit clear vs
@@ -705,7 +749,10 @@ any leftover title**, no truncation of `Chasseur`/`BOSS`), `locale_spec.lua` (21
 the **silence gate** of the audio probe, the verdict of each of the 4 sound files, the
 report lines, and the wiring: **no sound is ever played when the client is audible**),
 `texture_spec.lua` (15 — TGA headers read byte by byte, the three orb screenshots
-**and the placement illustration**), `simulation_spec.lua` (14 — pure rehearsal +
+**and the placement illustration**), `showcase_spec.lua` (37 — the style showcase: every section produces a block, the
+seven styles as data, the pinned SIMULATION banner, the palette with its hex codes,
+the switchable animations, the showcase refused during a real fight, the placement
+panel = illustration + OK), `simulation_spec.lua` (14 — pure rehearsal +
 ping help), `pairing_spec.lua` (11) and `guard_spec.lua` (11 — anti-forbidden-API
 guard, audio call restricted to `UI/` under `pcall` and behind the silence gate,
 simulation isolation).

@@ -56,6 +56,12 @@ function stub.install()
         self.__width = width
         self.__height = height
     end
+    function Frame:GetWidth()
+        return self.__width or 0
+    end
+    function Frame:GetHeight()
+        return self.__height or 0
+    end
     --- Tous les arguments sont conserves (point, relativeTo, relativePoint, x, y) :
     --- les positions PERSISTEES (panneau principal, panneau intermission, fenetre
     --- de simulation) sont ainsi verifiables hors jeu.
@@ -79,7 +85,12 @@ function stub.install()
         end
         return p[1], p[2], p[3], p[4] or 0, p[5] or 0
     end
-    function Frame:SetMovable() end
+    function Frame:SetMovable(movable)
+        self.__movable = movable and true or false
+    end
+    function Frame:IsMovable()
+        return self.__movable == true
+    end
     function Frame:EnableMouse() end
     function Frame:RegisterForDrag() end
     function Frame:RegisterForClicks() end
@@ -147,6 +158,39 @@ function stub.install()
     function Frame:SetScale(scale)
         self.__scale = scale
     end
+    --- Opacite d'un cadre. La VITRINE DE STYLE fait un FONDU D'APPARITION et une
+    --- PULSATION DE BORDURE : les deux passent par SetAlpha / SetBackdropBorderColor.
+    --- Le stub CONSERVE la valeur, sinon un test ne pourrait pas prouver que les
+    --- animations ne tournent que dans la vitrine (et jamais pendant un combat).
+    function Frame:SetAlpha(alpha)
+        self.__alpha = alpha
+    end
+    function Frame:GetAlpha()
+        if self.__alpha == nil then
+            return 1
+        end
+        return self.__alpha
+    end
+    --- ZONE DEFILANTE de la vitrine (un ScrollFrame) : le client garde un ENFANT
+    --- defilant et une position verticale. Le stub les RETIENT pour qu'un test
+    --- puisse verifier que le contenu de la vitrine depasse bien la fenetre.
+    function Frame:SetScrollChild(child)
+        self.__scrollChild = child
+    end
+    function Frame:GetScrollChild()
+        return self.__scrollChild
+    end
+    function Frame:SetVerticalScroll(offset)
+        self.__verticalScroll = offset
+    end
+    function Frame:GetVerticalScroll()
+        return tonumber(self.__verticalScroll) or 0
+    end
+    function Frame:SetVerticalScrollRange(range)
+        self.__verticalScrollRange = range
+    end
+    function Frame:EnableMouseWheel() end
+    function Frame:DisableMouseWheel() end
     function Frame:GetScale()
         return self.__scale or 1
     end
@@ -286,7 +330,13 @@ function stub.install()
     end
     function Frame:SetTexCoord() end
     function Frame:SetAllPoints() end
-    -- Boutons (boutons 1/2/3, bouton fermer).
+    -- LIBELLE D'UN BOUTON. Ce n'est PAS une methode de Frame dans le client :
+    -- un Frame NU (une carte d'image dessinee par UI.CreateCard("Frame", ...))
+    -- n'a ni SetText ni GetText, et l'appeler leve « attempt to call method
+    -- 'SetText' (a nil value) ». Le stub reproduit cette difference (voir
+    -- CreateFrame plus bas) : c'est ce qui rend le bug visible hors jeu.
+    --   * un Button (et un EditBox) : a SetText/GetText ;
+    --   * un Frame nu : ne les a PAS (FRAME_WITHOUT_TEXT ci-dessous).
     function Frame:SetText(t)
         self.__text = t
     end
@@ -316,8 +366,40 @@ function stub.install()
     end
     function Frame:SetTextInsets() end
 
-    _G.CreateFrame = function(_, name)
-        local f = setmetatable({ __name = name }, Frame)
+    --[[ UN FRAME NU N'A PAS DE LIBELLE.
+
+         Reproduit le client : Frame:SetText / Frame:GetText n'existent PAS sur
+         un Frame (seuls Button et EditBox les portent, et les FontString les
+         definissent pour eux-memes). C'est exactement le meme raisonnement que
+         pour l'ancre nulle de SetPoint plus haut : le stub doit REFUSER ce que le
+         client refuse, sinon la suite de tests valide du code qui leverait en jeu
+         (« attempt to call method 'SetText' (a nil value) »), et l'applier
+         s'arreterait au milieu du panneau.
+    ]]
+    local FRAME_WITHOUT_TEXT = {
+        __index = function(_, key)
+            if key == "SetText" or key == "GetText" then
+                return nil
+            end
+            return Frame[key]
+        end,
+    }
+
+    --- Le type d'un frame cree : un Button (ou un template de bouton, comme
+    --- "UIPanelButtonTemplate") porte un LIBELLE, les autres non.
+    --- @return table la metatable a appliquer
+    local function metatableFor(frameType, template)
+        local kind = type(frameType) == "string" and frameType or "Frame"
+        local name = type(template) == "string" and template or ""
+        if kind == "Button" or kind == "EditBox" or name:find("Button", 1, true) ~= nil then
+            return Frame
+        end
+        return FRAME_WITHOUT_TEXT
+    end
+    stub.metatableFor = metatableFor
+
+    _G.CreateFrame = function(frameType, name, parent, template)
+        local f = setmetatable({ __name = name, __frameType = frameType }, metatableFor(frameType, template))
         if name then
             _G[name] = f
         end

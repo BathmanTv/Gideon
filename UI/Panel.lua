@@ -97,43 +97,100 @@ end
      a future style is one entry in Core and one name passed to these helpers.
 ]]
 --- Applies the style `styleName` (Core/Layout.BUTTON_STYLES) to a card frame.
+--- THE INSETS COME FROM THE STYLE TOO: a 9-slice border as thick as the style #6
+--- needs its own insets, and the ONE place that knows them is the style table in
+--- Core (a UI/ file would be a second source of truth).
+--- A style MAY declare a SECOND, INNER border ("double frame"): UI.ApplyInnerBorder
+--- draws it on a child frame, below.
 --- @param frame Frame the frame to dress
 --- @param styleName string|nil name of the style (Layout.CHOICE_STYLE by default)
 --- @return table the style table applied (never nil)
 function UI.ApplyCardStyle(frame, styleName)
     local style = ns.Layout.style(styleName)
     if type(frame.SetBackdrop) == "function" then
+        local insets = type(style.insets) == "table" and style.insets or nil
         frame:SetBackdrop({
             bgFile = style.bgFile,
             edgeFile = style.edgeFile,
             edgeSize = style.edgeSize,
-            insets = { left = 0, right = 0, top = 0, bottom = 0 },
+            insets = {
+                left = tonumber(insets and insets.left) or 0,
+                right = tonumber(insets and insets.right) or 0,
+                top = tonumber(insets and insets.top) or 0,
+                bottom = tonumber(insets and insets.bottom) or 0,
+            },
         })
     end
     frame.cardStyle = style
+    UI.ApplyInnerBorder(frame, style)
     return style
 end
 
+--[[ THE OPTIONAL SECOND BORDER of a card ("double frame", style #6).
+
+     A style declares `innerEdgeSize` / `innerInset` / `innerEdgeFile` when it
+     wants a second, INNER border (the "passe-partout" of the validated board).
+     The child frame is created ONCE per card and reused: a style change is a
+     re-point + a re-colour, never a new frame in the middle of a fight.
+     A style WITHOUT an inner border hides the child (if the card ever had one).
+]]
+--- @param frame Frame a card
+--- @param style table the style table to apply
+--- @return Frame|nil the inner border frame (nil when the style has none)
+function UI.ApplyInnerBorder(frame, style)
+    local thickness = tonumber(style.innerEdgeSize)
+    local inner = frame.innerBorder
+    if thickness == nil then
+        if inner ~= nil then
+            inner:Hide()
+        end
+        return nil
+    end
+    if inner == nil then
+        inner = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        frame.innerBorder = inner
+    end
+    inner:ClearAllPoints()
+    local inset = tonumber(style.innerInset) or 0
+    inner:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+    inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+    if type(inner.SetBackdrop) == "function" then
+        inner:SetBackdrop({
+            edgeFile = style.innerEdgeFile or style.edgeFile,
+            edgeSize = thickness,
+            insets = { left = thickness, right = thickness, top = thickness, bottom = thickness },
+        })
+    end
+    inner:Show()
+    return inner
+end
+
 --- The state of a card, for the ONLY feedback it has (the border lights up).
-UI.CARD_STATE = {
-    REST = "rest",
-    HOVER = "hover",
-    PRESSED = "pressed",
-}
+--- THE TABLE IS CORE'S (Layout.CARD_STATE): the showcase forces a state on the
+--- three example cards of "one card, three states", and the layout is the only
+--- place that names a state - this alias exists so no UI/ file ever writes
+--- "rest"/"hover"/"pressed" as a literal again.
+UI.CARD_STATE = ns.Layout.CARD_STATE or { REST = "rest", HOVER = "hover", PRESSED = "pressed" }
 
 --- The card's border/background colours of a state. NOTHING else moves and
 --- nothing else is drawn: no glow, no pushed texture, no label - "the border
 --- lights up, nothing more" (raid-lead request).
+--- The OPTIONAL INNER border (style #6) follows the same state, and the halo of a
+--- 9-slice style (GIDEON) is part of its border texture: it is therefore tinted by
+--- this same call, with no extra drawing code.
 --- @param frame Frame a card
 --- @param state string|nil UI.CARD_STATE value (REST by default)
 --- @return table { r, g, b, a } the border colour applied
 function UI.CardBorder(frame, state)
     local style = frame.cardStyle or ns.Layout.style(nil)
     local border = style.border
+    local innerBorder = style.innerBorder
     if state == UI.CARD_STATE.HOVER then
         border = style.borderHover
+        innerBorder = style.innerBorderHover or innerBorder
     elseif state == UI.CARD_STATE.PRESSED then
         border = style.borderPressed
+        innerBorder = style.innerBorderPressed or innerBorder
     end
     if type(frame.SetBackdropBorderColor) == "function" then
         frame:SetBackdropBorderColor(border.r, border.g, border.b, border.a)
@@ -142,6 +199,13 @@ function UI.CardBorder(frame, state)
     if background ~= nil and type(frame.SetBackdropColor) == "function" then
         frame:SetBackdropColor(background.r, background.g, background.b, background.a)
     end
+    local inner = frame.innerBorder
+    if inner ~= nil and type(inner.SetBackdropBorderColor) == "function" and innerBorder ~= nil then
+        inner:SetBackdropBorderColor(innerBorder.r, innerBorder.g, innerBorder.b, innerBorder.a)
+    end
+    -- THE STATE IS REMEMBERED ON THE CARD: a redraw (a style change, a new click in
+    -- the showcase) re-applies it instead of snapping a hovered card back to rest.
+    frame.cardState = state or UI.CARD_STATE.REST
     return border
 end
 
@@ -158,6 +222,20 @@ function UI.CreateCard(frameType, parent, styleName)
     UI.ApplyCardStyle(card, styleName)
     UI.CardBorder(card, UI.CARD_STATE.REST)
     return card
+end
+
+--- A COLOUR CHIP of the style showcase: a plain frame filled with a flat white
+--- texture, so a single SetBackdropColor paints it. The FILE comes from
+--- Core/Layout.SWATCH_BG_FILE (Core/ remains the only place that names a client
+--- file for the showcase), and the colour itself arrives with the block.
+--- @param parent Frame
+--- @return Frame the chip
+function UI.CreateSwatch(parent)
+    local chip = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    if type(chip.SetBackdrop) == "function" then
+        chip:SetBackdrop({ bgFile = ns.Layout.SWATCH_BG_FILE })
+    end
+    return chip
 end
 
 --- Applies ONE block of a PURE layout (Core/Layout.lua) to its element: the
@@ -180,6 +258,10 @@ local function applyBlock(frame, block)
         -- The style is a DATA of the layout (Core named it): whatever table Core
         -- serves is applied as-is.
         UI.ApplyCardStyle(frame, block.style)
+        -- A FORCED STATE (the "one card, three states" row of the showcase) wins
+        -- over the remembered one: the three examples must show their state at the
+        -- same time, next to each other.
+        UI.CardBorder(frame, block.cardState or frame.cardState or UI.CARD_STATE.REST)
         if type(block.texture) == "string" and block.texture ~= "" then
             local picture = frame.picture
             if picture ~= nil and type(picture.SetTexture) == "function" then
@@ -199,6 +281,17 @@ local function applyBlock(frame, block)
         frame:Show()
         return frame
     end
+    if block.kind == "swatch" then
+        -- A COLOUR CHIP of the style showcase: a plain tinted square, no texture,
+        -- no label. Its colour is DATA of the layout (Core owns the palette).
+        frame:SetSize(block.width, block.height)
+        local color = block.color or {}
+        if type(frame.SetBackdropColor) == "function" then
+            frame:SetBackdropColor(color.r, color.g, color.b, color.a)
+        end
+        frame:Show()
+        return frame
+    end
     if block.kind == "button" then
         frame:SetSize(block.width, block.height)
     else
@@ -207,8 +300,52 @@ local function applyBlock(frame, block)
         frame:SetWidth(block.width)
     end
     frame:SetText(block.text)
+    if block.kind == "text" then
+        -- AN OPTIONAL EXPLICIT FONT, handed by Core (the two word sizes: an
+        -- addon-created FontString with a file and a size we can verify, instead
+        -- of a Blizzard font object whose size is unreadable out of game).
+        if type(block.fontFile) == "string" and type(block.fontSize) == "number" and type(frame.SetFont) == "function" then
+            frame:SetFont(block.fontFile, block.fontSize, "")
+        end
+        -- AN OPTIONAL EXPLICIT COLOUR, handed by Core too (the showcase writes the
+        -- same word in the shipped green and in the GIDEON cyan, one above the
+        -- other, so the raid lead can choose).
+        if type(block.color) == "table" and type(frame.SetTextColor) == "function" then
+            frame:SetTextColor(block.color.r, block.color.g, block.color.b, block.color.a or 1)
+        end
+    end
     frame:Show()
     return frame
+end
+
+--- The layout is the ONLY source of what is written on screen: an element that
+--- is not part of the current layout is emptied, so a hidden "1V3R" can never
+--- survive a CORRECT. AND IT IS A RESET, NOT A DRAW:
+---   - a FontString and a Button carry a label, so they are emptied;
+---   - A PLAIN FRAME CARRIES NO LABEL AT ALL (`Frame:SetText` does not exist in
+---     the client: only Button / EditBox / FontString have it), and CALLING IT
+---     RAISES. That call used to sit in the loop below, and the placement
+---     illustration card - a plain Frame built by UI.CreateCard("Frame", ...) -
+---     was enough to abort the WHOLE applier in game: every element had already
+---     been hidden, no block had been applied yet, and the player was left in
+---     front of an EMPTY panel with its border and its close cross (in-game
+---     report: "on voit rien").
+--- The capability is therefore TESTED, never assumed, exactly like the anchor
+--- point above - and tests/support/wowapi_stub.lua refuses SetText on a plain
+--- Frame like the client does, so this can never come back unnoticed.
+--- @param frame Frame|FontString|nil
+--- @return boolean true when the element was emptied
+local function resetElement(frame)
+    if frame == nil then
+        return false
+    end
+    if type(frame.SetText) ~= "function" then
+        -- No label to empty (a card, a plain Frame): nothing to reset. The
+        -- element is still hidden by the caller.
+        return false
+    end
+    frame:SetText("")
+    return true
 end
 
 --- Applies a whole layout to a set of elements.
@@ -218,7 +355,9 @@ end
 --- another one.
 --- @param target Frame the panel
 --- @param layout table computed by Core/Layout.lua
---- @param elements table array of { id = string, frame = Frame|FontString }
+--- @param elements table array of { id = string, frame = Frame|FontString,
+---   reset = function|nil } (reset: for a COMPOSITE element whose text lives in
+---   a child, e.g. a palette swatch; it takes precedence over SetText)
 --- @return table the layout
 function UI.ApplyLayout(target, layout, elements)
     local byId = {}
@@ -226,9 +365,13 @@ function UI.ApplyLayout(target, layout, elements)
         local entry = elements[index]
         byId[entry.id] = entry.frame
         entry.frame:Hide()
-        -- ... and it keeps NO stale text: the layout is the ONLY source of what
-        -- is written on screen (a hidden "1V3R" must not survive a CORRIGER).
-        entry.frame:SetText("")
+        if type(entry.reset) == "function" then
+            entry.reset()
+        else
+            -- ... and it keeps NO stale text (see resetElement: a plain Frame has
+            -- no SetText in the client, and calling it aborted the applier).
+            resetElement(entry.frame)
+        end
     end
     target:SetSize(layout.width, layout.height)
     for index = 1, #layout.blocks do
@@ -418,12 +561,16 @@ function UI.ResetPositions()
     end
     db.panelPosition = ns.Config.defaultPanelPosition()
     db.pingPanelPosition = ns.Config.defaultPanelPosition()
+    db.showcasePosition = ns.Config.defaultPanelPosition()
     if type(db.intermission) == "table" then
         db.intermission.position = ns.Config.defaultPanelPosition()
     end
     UI.ApplyPanelPosition()
     UI.IntermissionApplyConfig()
     UI.PingPanelApplyPosition()
+    if type(UI.ShowcaseApplyPosition) == "function" then
+        UI.ShowcaseApplyPosition()
+    end
     UI.Print(Locale.t("cmd.positionReset"))
     return true
 end

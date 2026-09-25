@@ -73,7 +73,9 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
     local files = wowenv.tocFiles()
 
     it("scanne reellement tous les fichiers du .toc", function()
-        assert.are.equal(13, #files)
+        -- 13 fichiers jusqu'a la 0.13.1, + UI/Showcase.lua (la VITRINE DE STYLE) :
+        -- ce test refuse de scanner une liste vide ou tronquee, donc il compte.
+        assert.are.equal(14, #files)
         for _, file in ipairs(files) do
             assert.is_truthy(readFile(file):len() > 0, file .. " est vide")
         end

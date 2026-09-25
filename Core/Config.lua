@@ -167,6 +167,16 @@ function Config.defaultIntermission()
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
         -- and changeable in game with /gr ping anchors|color|none.
         pingMode = Config.DEFAULT_PING_MODE,
+        -- CARD STYLE of this panel (raid-lead picker, `/gr style <1..6|gideon|shipped>`):
+        -- the DELIVERED style by default. Core/Layout.BUTTON_STYLES owns the styles,
+        -- this field only NAMES the one in use.
+        style = Config.DEFAULT_STYLE,
+        -- STYLE SHOWCASE (`/gr sim style`): the style its examples are drawn with -
+        -- a CANDIDATE, transient by design, and its two animations. The animations
+        -- are ON by default (the raid lead asked to SEE them) and only an explicit
+        -- false stops them.
+        showcaseStyle = Config.DEFAULT_STYLE,
+        showcaseAnimations = true,
         -- ASSIGNMENT SOUNDBOARD (see Core/Sound.lua): enabled by default, one
         -- sound per canonical state, played ONCE when the player declares their
         -- composition. /gr sound on|off, /gr sound test 1v3r|2v2r|3v1r.
@@ -326,6 +336,11 @@ function Config.ensureDB(db)
     if type(db.pingPanelPosition) ~= "table" then
         db.pingPanelPosition = Config.defaultPanelPosition()
     end
+    -- The STYLE SHOWCASE is draggable too (it is a window like the others): its
+    -- position is created fresh here, so two characters never share one.
+    if type(db.showcasePosition) ~= "table" then
+        db.showcasePosition = Config.defaultPanelPosition()
+    end
     if type(db.intermission) ~= "table" then
         db.intermission = Config.defaultIntermission()
     end
@@ -347,6 +362,33 @@ function Config.resolveLocale(raw)
         end
     end
     return Locale.AUTO
+end
+
+--- THE STYLE OF THE INTERMISSION CARDS: the DELIVERED default, and a MIRROR of the
+--- style names of Core/Layout.BUTTON_STYLES.
+--- WHY A MIRROR: the .toc loads Core/Layout.lua LAST among the Core modules (it
+--- measures the strings of Locale and Config), so this file cannot ask it for the
+--- list. tests/spec/showcase_spec.lua asserts that this mirror is EXACTLY the key
+--- set of Layout.BUTTON_STYLES: a style added in Core and forgotten here fails a
+--- test instead of becoming silently unusable.
+Config.DEFAULT_STYLE = "card"
+Config.STYLE_NAMES = { "1", "2", "3", "4", "5", "6", "gideon", "card" }
+
+--- Resolves a PERSISTED style name. Accepted: one of Config.STYLE_NAMES, case and
+--- spaces insensitive. Anything else - absent, empty, mistyped, a number, a table,
+--- a hand-edited SavedVariables - falls back to the DELIVERED style: PURE and
+--- TOTAL, it never raises and never returns nil, so the layout is always handed a
+--- style it knows.
+--- @param raw string|nil raw GideonRaidDB.intermission.style value
+--- @return string canonical style name
+function Config.resolveStyleName(raw)
+    local wanted = type(raw) == "string" and raw:lower():gsub("%s+", "") or ""
+    for index = 1, #Config.STYLE_NAMES do
+        if wanted == Config.STYLE_NAMES[index] then
+            return wanted
+        end
+    end
+    return Config.DEFAULT_STYLE
 end
 
 --- Resolves the PERSISTED PING POLICY (GideonRaidDB.intermission.pingMode).
@@ -532,6 +574,20 @@ function Config.resolveIntermission(raw)
     -- migration of the existing saves is exactly this: a missing field means
     -- "enabled", no schema bump is needed.
     out.soundEnabled = Sound.resolveEnabled(raw.soundEnabled)
+    -- STYLE OF THE INTERMISSION CARDS (the raid lead's picker): the resolved value
+    -- is a canonical name - a key of Core/Layout.BUTTON_STYLES - and an unknown or
+    -- missing value falls back to the DELIVERED style. A hand-edited
+    -- SavedVariables can therefore never hand an unknown style to the layout.
+    out.style = Config.resolveStyleName(raw.style)
+    -- SHOWCASE ANIMATIONS: only an exact `false` stops them (the showcase is
+    -- exactly where the raid lead wants to SEE the animations, so the default is
+    -- ON). Same rule as the sound preference, mirrored from
+    -- Layout.animationsEnabled (asserted equal by tests/spec/showcase_spec.lua).
+    out.showcaseAnimations = raw.showcaseAnimations ~= false
+    -- THE PREVIEW STYLE OF THE SHOWCASE (`/gr sim style <n>`): transient by nature,
+    -- but persisted like the rest of the panel preferences so a /reload does not
+    -- send the raid lead back to square one.
+    out.showcaseStyle = Config.resolveStyleName(raw.showcaseStyle)
 
     -- AUTO-OPEN FILTER: the EFFECTIVE allow-lists were computed at the very top of
     -- this function (delivered default + the entries of the player, or the entries

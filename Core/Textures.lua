@@ -120,6 +120,33 @@ Textures.PLACEMENT_BOX = 384
 --- i.e. 4:3) is preserved: nothing is stretched, nothing is padded.
 Textures.PLACEMENT_SIZE = { 384, 288 }
 
+--[[ --------------------------------------- THE GIDEON FRAME (card style data)
+
+     The "GIDEON" card style (Layout.BUTTON_STYLES.gideon) frames its picture
+     with a 9-slice texture: a 2 px border plus a soft inner halo (the glow of
+     the GIDEON visual). The file is WHITE, so the colour comes from the game
+     (SetBackdropBorderColor): gold at rest, CYAN on hover, bright gold on press -
+     the style stays pure DATA, not a rendering branch.
+
+     IT IS GENERATED, NOT HAND-MADE: tools/make_gideon_frame.py writes it from
+     pure arithmetic (no Pillow, no source image), so it can be regenerated and
+     byte-compared at any time:
+         python3 tools/make_gideon_frame.py           # write
+         python3 tools/make_gideon_frame.py --check   # verify
+
+     Same rules as the raid lead's textures: 32-bit UNCOMPRESSED TGA (type 2),
+     listed in GideonRaid.toc (the client does not load an unlisted texture), and
+     the declared size below is compared with the real header of the file by
+     tests/spec/texture_spec.lua. Its size is a POWER OF TWO (64x64): the client
+     accepts others (the raid lead's orbs are 256x241 and display fine), but a
+     stretched 9-slice is safer on a power of two.
+]]
+Textures.GIDEON_FRAME_FILE = "gideon-frame.tga"
+
+--- Size of Texture/gideon-frame.tga ON DISK (a 64x64 power of two), declared
+--- here like every other texture size: Core/ cannot open a file.
+Textures.GIDEON_FRAME_SIZE = { 64, 64 }
+
 --- State -> size of the TGA ON DISK, MEASURED at conversion time by
 --- tools/make_textures.py (it prints this exact block). Both values are <= BOX
 --- and the LONGEST one is exactly BOX: the aspect ratio of the screenshot is
@@ -220,6 +247,21 @@ end
 --- @return number width, number height
 function Textures.placementSize()
     return Textures.PLACEMENT_SIZE[1], Textures.PLACEMENT_SIZE[2]
+end
+
+--- CLIENT path of the GIDEON frame texture (the 9-slice border of the GIDEON
+--- card style), in the same folder as the orbs. Exactly what the rendering layer
+--- hands to Frame:SetBackdrop({ edgeFile = ... }), and exactly what
+--- GideonRaid.toc lists.
+--- @return string client path
+function Textures.gideonFramePath()
+    return Textures.FOLDER .. Textures.GIDEON_FRAME_FILE
+end
+
+--- Size of Texture/gideon-frame.tga ON DISK, as a copy.
+--- @return number width, number height
+function Textures.gideonFrameSize()
+    return Textures.GIDEON_FRAME_SIZE[1], Textures.GIDEON_FRAME_SIZE[2]
 end
 
 --- Fits a declared size into a square box, ASPECT RATIO PRESERVED: the longest

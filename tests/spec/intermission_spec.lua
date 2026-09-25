@@ -889,14 +889,25 @@ describe("Intermission : panneau de placement (avant le pull)", function()
         end
     end)
 
-    it("le plan de placement ne contient QUE l'illustration", function()
+    it("le plan de placement : l'illustration, puis son petit bouton OK", function()
+        -- Le raid lead a demande le RETOUR du bouton OK (« Remet oui ok ») : le
+        -- panneau de placement affiche l'illustration PUIS un petit bouton OK qui
+        -- enregistre la position et ferme (UI.IntermissionConfirmSetup), exactement
+        -- comme `/gr inter ok` - qui reste disponible en secours. Rien d'autre :
+        -- aucune composition, aucun texte.
         local layout = L.placementPanel()
         assert.are.equal(L.PANEL.PLACEMENT, layout.panel)
         assert.are.equal("", table.concat(L.violations(layout), " | "))
-        assert.are.equal(1, #layout.blocks)
+        assert.are.equal(2, #layout.blocks)
         assert.are.equal(L.PLACEMENT_BLOCK_ID, layout.blocks[1].id)
         assert.are.equal("image", layout.blocks[1].kind)
         assert.are.equal(ns.Textures.placementPath(), layout.blocks[1].texture)
+        assert.are.equal(L.PLACEMENT_OK_BLOCK_ID, layout.blocks[2].id)
+        assert.are.equal("button", layout.blocks[2].kind)
+        assert.are.equal(ns.Locale.t("ui.placementOk"), layout.blocks[2].text)
+        -- Le bouton est SOUS l'illustration (le plan empile les blocs : le 2e est
+        -- forcement plus bas que le 1er).
+        assert.is_true(layout.blocks[2].top < layout.blocks[1].top, "le bouton OK doit etre SOUS l'illustration")
         -- Le fichier est bien livre a cote des trois orbes, et il est DECLARE dans
         -- le .toc : une texture chargee par chemin mais absente du .toc n'est pas
         -- chargee par le client (l'illustration ne s'afficherait pas).

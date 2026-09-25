@@ -4,6 +4,51 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.2] - 2026-09-25
+
+**The simulation panel becomes a style showcase, the OK button is back, and the
+panel is visible again (it was empty in every mode).**
+
+### Fixed
+
+- **The panel showed nothing in every mode.** `UI.ApplyLayout` reset each element
+  with `entry.frame:SetText("")`, but the placement element is a **plain frame** —
+  and the client exposes `SetText` only on buttons, edit boxes and font strings. The
+  call raised *"attempt to call method 'SetText' (a nil value)"* on the **first**
+  loop of the applier, before any block was shown: every element stayed hidden, in
+  combat as in a rehearsal. The applier now clears a label only when the element
+  really carries `SetText` (with a per-element `reset` hook for the composite
+  blocks), and the test stub was made **faithful to the client** — it no longer gives
+  a plain frame a `SetText` — so the regression cannot come back unnoticed.
+
+### Added
+
+- **The style showcase**: `/gr sim style` opens a scrollable panel (no boss, no raid)
+  showing the three picture cards, the whole typography (44/64 px and the secondary
+  sizes, the size written next to each word, `PING`/`CHASSEUR` in both colour
+  variants), the three card states side by side, the palette **with its hexadecimal
+  codes**, the seven candidate styles and the two animations. `/gr sim anim on|off`
+  switches the animations (persisted); the SIMULATION banner stays pinned outside the
+  scrolling area.
+- **The Gideon style**, sampled from the artwork supplied by the raid lead: eight
+  `GIDEON_*` constants in `Core/Layout.lua` (single source) and a generated 64×64
+  nine-slice frame (`tools/make_gideon_frame.py` → `Texture/gideon-frame.tga`), a
+  white mask tinted per state — gold at rest, cyan on hover, bright gold pressed.
+  Candidate only: `/gr style gideon` to try it, `/gr style shipped` to go back; the
+  delivered style remains the default.
+- **`/gr style <1..6|gideon|shipped>`**: which card style the intermission panel
+  really uses during a fight (persisted, unknown value refused).
+- **The OK button is back** on the placement panel (raid-lead decision): a small
+  button under the illustration saves the position and closes, exactly like
+  `/gr inter ok`, which stays available from the keyboard. No OK button in combat nor
+  in a rehearsal.
+- Six candidate card styles next to the delivered one, as **data** in
+  `Layout.BUTTON_STYLES` — adding a style is an entry, not a rewrite.
+
+### Tests
+
+- **397** tests (37 added, 6 adapted, none removed).
+
 ## [0.13.1] - 2026-09-24
 
 **The placement panel is the illustration alone, the intermission panel has no
