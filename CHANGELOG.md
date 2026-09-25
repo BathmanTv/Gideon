@@ -4,6 +4,31 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.3] - 2026-09-25
+
+**The delivered style is now GIDEON.** Raid-lead decision after seeing it in the
+style showcase: *"Style Gideon"*.
+
+### Changed
+
+- `Layout.SHIPPED_STYLE` is `gideon` (it was `card`): a fresh install, and any player
+  who never picked a style, now gets the Gideon card — night-blue fill, gold border at
+  rest, cyan halo under the mouse, bright gold while pressed. The former thin grey
+  border is untouched and stays selectable with `/gr style card`.
+- `shipped` is resolved **centrally** in `Layout.resolveStyle` (it always means "the
+  delivered style, whatever it is") instead of being an alias stored on the card
+  entry, so changing the delivered style can never leave a stale alias behind.
+  `/gr style shipped` therefore means Gideon today.
+- The hover check of the test suite measures **perceived luminance** instead of the
+  red channel: the Gideon hover goes gold -> cyan (red down, green and blue up), so
+  "the border lights up" is verified in every style, not only in the grey one.
+
+### Notes
+
+- The seven presets are unchanged: `1`..`6`, `card` and `gideon` (`card` is no longer
+  the default, but it is not lost).
+- The word colours are unchanged for now: PING / CHASSEUR green, BOSS gold.
+
 ## [0.13.2] - 2026-09-25
 
 **The simulation panel becomes a style showcase, the OK button is back, and the

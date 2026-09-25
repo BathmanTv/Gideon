@@ -371,7 +371,7 @@ end
 --- list. tests/spec/showcase_spec.lua asserts that this mirror is EXACTLY the key
 --- set of Layout.BUTTON_STYLES: a style added in Core and forgotten here fails a
 --- test instead of becoming silently unusable.
-Config.DEFAULT_STYLE = "card"
+Config.DEFAULT_STYLE = "gideon" -- delivered style: GIDEON (raid-lead decision 2026-09-25; "card" stays available)
 Config.STYLE_NAMES = { "1", "2", "3", "4", "5", "6", "gideon", "card" }
 
 --- Resolves a PERSISTED style name. Accepted: one of Config.STYLE_NAMES, case and

@@ -505,11 +505,11 @@ theme (`Core/Layout.lua`), never from literals scattered in the UI. `CORRECT`
 stays available, discreet, and brings the three pictures back.
 
 **The style of a card is a parameter.** `Layout.BUTTON_STYLES` holds the styles and
-`Layout.CHOICE_STYLE` names the one in use. Seven styles are now defined as **data**
-(the delivered thin-bordered card, five richer candidates and the Gideon style —
-see ``The style showcase'' below), and `/gr style <name>` picks the one the
-intermission panel really uses during a fight (persisted; an unknown value is
-refused). Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
+`Layout.CHOICE_STYLE` names the one in use. Seven presets are defined as **data** — the five
+richer candidates, `card` (the former thin-bordered default, kept so the raid lead can
+go back to it) and `gideon`, which is **the DELIVERED style** since 2026-09-25 (see
+``The style showcase'' below) — and `/gr style <name>` picks the one the intermission
+panel really uses during a fight (persisted; an unknown value is refused). Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
 whatever Core names, and tests lock the geometry, the padding and the border colours
 of every entry down.
 
@@ -593,8 +593,12 @@ constants in `Core/Layout.lua` — the single source: `GIDEON_NIGHT`, `GIDEON_PA
 (`Texture/gideon-frame.tga`) generated deterministically by
 `tools/make_gideon_frame.py` — a **white mask with alpha**, tinted at runtime, so a
 single file covers every state: gold at rest, cyan on hover, bright gold pressed.
-The **delivered style stays the default**: Gideon is a candidate (`/gr style gideon`)
-until the raid lead validates it in game, and `/gr style shipped` goes back.
+**Gideon is the DELIVERED style** (raid-lead decision, 2026-09-25, after seeing it in
+the showcase): a fresh install gets the night-blue card with the gold border, the
+cyan halo under the mouse and the bright gold press. The former thin grey border is
+untouched and stays selectable with `/gr style card`; `/gr style shipped` always
+means "the delivered style, whatever it is", and is answered centrally so no stale
+alias can survive a change of default.
 
 ## 4. In-game language — English by default, French on a frFR client
 

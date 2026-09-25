@@ -305,9 +305,11 @@ Layout.CHOICE_GAP = 8
 ]]
 
 --- THE DELIVERED STYLE: what the intermission panel uses until the raid lead
---- picks another one (`/gr style <1..6|gideon|shipped>`). `shipped` resolves to
---- exactly this key: the current card with its thin grey border.
-Layout.SHIPPED_STYLE = "card"
+--- picks another one (`/gr style <1..6|card|shipped>`). `shipped` resolves to
+--- exactly this key. RAID-LEAD DECISION (2026-09-25, "Style Gideon"): the delivered
+--- style is now GIDEON - night blue + gold with a cyan halo on hover. The former
+--- thin grey card stays available as the `card` preset, so nothing is lost.
+Layout.SHIPPED_STYLE = "gideon"
 
 --[[ THE GIDEON PALETTE (delivered by the raid lead, values used AS-IS).
 
@@ -392,9 +394,10 @@ Layout.CHOICE_STYLE = Layout.SHIPPED_STYLE
 
 --[[ THE STYLE TABLE. Six entries come from the validated board (1 "encart nu",
      2 "encart dore", 3 "bouton Blizzard", 4 "case d'action", 5 "image nue +
-     ombre", 6 "double cadre"), `gideon` is the raid lead's own direction (night
-     blue + gold, halo on hover) and `card` is the DELIVERED one: the default of
-     the addon, whose data never moves when a candidate is added.
+     ombre", 6 "double cadre"), then `card` (the former delivered thin grey
+     border, kept so the raid lead can go back to it) and `gideon` (the raid lead's
+     own direction - night blue + gold, cyan halo on hover - DELIVERED since
+     2026-09-25). No entry's data ever moves when a candidate is added.
 ]]
 Layout.BUTTON_STYLES = {
     ["1"] = {
@@ -514,7 +517,10 @@ Layout.BUTTON_STYLES = {
     card = {
         id = "card",
         labelKey = "style.card",
-        aliases = { "card", "shipped", "livre", "default" },
+        -- "shipped"/"livre"/"default" are NOT stored here: Layout.resolveStyle
+        -- answers them centrally, so changing the delivered style can never leave
+        -- a stale alias behind.
+        aliases = { "card" },
         padding = 6,
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -530,7 +536,7 @@ Layout.BUTTON_STYLES = {
 --- THE CANDIDATE STYLES, in the ORDER the style showcase displays them: the six
 --- of the validated board, then the GIDEON direction. The delivered style is NOT
 --- part of this list (it is the default, and `/gr style shipped` brings it back).
-Layout.STYLE_ORDER = { "1", "2", "3", "4", "5", "6", "gideon" }
+Layout.STYLE_ORDER = { "1", "2", "3", "4", "5", "6", "card" }
 
 --- The style table of a name, never nil: an unknown or missing name falls back to
 --- the configured one, so a layout can always be applied (no nil handed to
@@ -563,6 +569,12 @@ function Layout.resolveStyle(raw)
     local flat = raw:lower():gsub("%s+", "")
     if flat == "" then
         return nil
+    end
+    -- "shipped" ALWAYS means the DELIVERED style, whatever it currently is: the
+    -- alias is answered here rather than stored in an entry (raid-lead decision
+    -- 2026-09-25: the delivered style became GIDEON, and "shipped" followed it).
+    if flat == "shipped" or flat == "livre" or flat == "default" then
+        return Layout.SHIPPED_STYLE
     end
     local names = { unpack(Layout.STYLE_ORDER) }
     names[#names + 1] = Layout.SHIPPED_STYLE

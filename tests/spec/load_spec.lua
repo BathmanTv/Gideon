@@ -794,13 +794,19 @@ describe("chargement de l'addon", function()
         local soundsBefore = #stub.sounds
         local width, height = button.__width, button.__height
         -- AU REPOS : la bordure du style (un simple encart, rien de plus).
-        local rest = button:GetBackdropBorderColor()
-        assert.are.equal(style.border.r, rest, "bordure au repos")
+        local restR, restG, restB = button:GetBackdropBorderColor()
+        assert.are.equal(style.border.r, restR, "bordure au repos")
         assert.are.equal("", button:GetText(), "aucun texte dans le cadre")
         -- SURVOL : la bordure S'ECLAIRE (c'est le SEUL retour visuel demande).
+        -- On mesure la LUMINANCE PERCUE et pas le canal rouge : le style GIDEON
+        -- passe de l'or au CYAN au survol (rouge en baisse, vert et bleu en hausse).
+        local function lum(r, g, b)
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
+        end
         button:GetScript("OnEnter")(button)
-        assert.are.equal(style.borderHover.r, button:GetBackdropBorderColor(), "bordure au survol")
-        assert.is_true(style.borderHover.r > rest, "la bordure doit s'eclairer au survol")
+        local hoverR, hoverG, hoverB = button:GetBackdropBorderColor()
+        assert.are.equal(style.borderHover.r, hoverR, "bordure au survol")
+        assert.is_true(lum(hoverR, hoverG, hoverB) > lum(restR, restG, restB), "la bordure doit s'eclairer au survol")
         -- APPUI : la bordure reste allumee.
         button:GetScript("OnMouseDown")(button)
         assert.are.equal(style.borderPressed.r, button:GetBackdropBorderColor(), "bordure a l'appui")

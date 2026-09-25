@@ -66,7 +66,7 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
     end)
 
     it("expose les SEPT styles candidats, dans un ordre STABLE", function()
-        assert.are.same({ "1", "2", "3", "4", "5", "6", "gideon" }, L.STYLE_ORDER)
+        assert.are.same({ "1", "2", "3", "4", "5", "6", "card" }, L.STYLE_ORDER)
         for index = 1, #L.STYLE_ORDER do
             local name = L.STYLE_ORDER[index]
             assert.is_not_nil(L.BUTTON_STYLES[name], name .. " doit exister")
@@ -74,8 +74,8 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
         end
         -- Le style LIVRE n'est PAS dans les sept : on ne propose pas au raid lead
         -- de « choisir » ce qui est deja en place. Il reste PREVISUALISABLE a la
-        -- demande (`/gr sim style card`), ce qui sert a comparer Gideon a l'existant.
-        assert.are.equal("card", L.SHIPPED_STYLE)
+        -- demande (`/gr sim style gideon`), ce qui sert a comparer Gideon a l'existant.
+        assert.are.equal("gideon", L.SHIPPED_STYLE)
         assert.is_true(L.isCandidateStyle(L.SHIPPED_STYLE))
         for index = 1, #L.STYLE_ORDER do
             assert.are_not.equal(L.SHIPPED_STYLE, L.STYLE_ORDER[index])
@@ -151,7 +151,7 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
         -- « shipped » ramene le style LIVRE (la valeur persistee est toujours un nom
         -- canonique : jamais le mot « shipped »).
         assert.are.equal(L.SHIPPED_STYLE, L.resolveStyle("shipped"))
-        assert.are.equal(L.SHIPPED_STYLE, L.resolveStyle("card"))
+        assert.are.equal("card", L.resolveStyle("card"))
         -- TOUT LE RESTE EST REFUSE (aucun repli silencieux).
         for _, bad in ipairs({ "0", "7", "99", "nope", "gideonn", "-1", "" }) do
             assert.is_nil(L.resolveStyle(bad), tostring(bad) .. " doit etre refuse")
@@ -239,9 +239,9 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
             local caption = textBlock(layout, "styleCap" .. index)
             assert.is_not_nil(caption)
             assert.is_true(contains(caption.text, L.hexOfColor(L.style(L.STYLE_ORDER[index]).border)))
-            if index == 7 then
-                assert.is_true(contains(caption.text, "GIDEON"))
-            end
+            -- La legende porte le NOM du style, dans la langue active : le raid
+            -- lead dicte « style 3 », « GIDEON » ou « card » sans ambiguite.
+            assert.is_true(contains(caption.text, ns.Locale.t(L.style(L.STYLE_ORDER[index]).labelKey)))
         end
         -- Le style PREVIEW est celui des compositions (selectionne en direct).
         local preview = L.showcasePanel({ style = "gideon" })
@@ -439,27 +439,27 @@ describe("Vitrine : la configuration du raid lead", function()
     end)
 
     it("le style par defaut est le style LIVRE, et une valeur inconnue y retombe", function()
-        assert.are.equal("card", C.resolveStyleName(nil))
-        assert.are.equal("card", C.resolveStyleName(""))
-        assert.are.equal("card", C.resolveStyleName("nope"))
-        assert.are.equal("card", C.resolveStyleName(7))
-        assert.are.equal("card", C.resolveStyleName({}))
+        assert.are.equal("gideon", C.resolveStyleName(nil))
+        assert.are.equal("gideon", C.resolveStyleName(""))
+        assert.are.equal("gideon", C.resolveStyleName("nope"))
+        assert.are.equal("gideon", C.resolveStyleName(7))
+        assert.are.equal("gideon", C.resolveStyleName({}))
         -- « shipped » n'est PAS un nom canonique : c'est un alias de commande,
         -- resolu par Core/Layout.resolveStyle AVANT d'arriver ici.
-        assert.are.equal("card", C.resolveStyleName("shipped"))
+        assert.are.equal("gideon", C.resolveStyleName("shipped"))
         assert.are.equal("1", C.resolveStyleName("1"))
         assert.are.equal("gideon", C.resolveStyleName("gideon"))
     end)
 
     it("la sauvegarde porte le style, l'apercu et les animations", function()
         local db = C.ensureDB({})
-        assert.are.equal("card", db.intermission.style)
-        assert.are.equal("card", db.intermission.showcaseStyle)
+        assert.are.equal("gideon", db.intermission.style)
+        assert.are.equal("gideon", db.intermission.showcaseStyle)
         assert.is_true(db.intermission.showcaseAnimations)
         assert.is_table(db.showcasePosition)
         -- Un style ABSURDE dans la sauvegarde ne casse rien : on retombe sur le livre.
         local broken = C.ensureDB({ intermission = { style = "hacker" } })
-        assert.are.equal("card", C.resolveIntermission(broken.intermission).style)
+        assert.are.equal("gideon", C.resolveIntermission(broken.intermission).style)
         -- Un style choisi EST respecte.
         local chosen = C.ensureDB({ intermission = { style = "gideon", showcaseAnimations = false } })
         assert.are.equal("gideon", C.resolveIntermission(chosen.intermission).style)
@@ -579,7 +579,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         assert.is_nil(showcase())
         assert.is_true(contains(messages(), "unknown style"))
         -- Rien n'a ete persiste au passage.
-        assert.are.equal("card", _G.GideonRaidDB.intermission.style)
+        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style)
     end)
 
     it("un vrai combat en cours FERME la porte a la vitrine", function()
@@ -634,8 +634,11 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         assert.are.equal(ns.Layout.hexOf(ns.Layout.GIDEON_GOLD), ns.Layout.hexOfColor({ r = border[1], g = border[2], b = border[3] }))
         -- ... et la texture d'encadrement est celle generee par tools/.
         assert.are.equal(ns.Textures.gideonFramePath(), card.__backdrop.edgeFile)
-        -- LE PANNEAU DE COMBAT N'A PAS BOUGE : le style livre reste le defaut.
-        assert.are.equal("card", _G.GideonRaidDB.intermission.style)
+        -- LE PANNEAU DE COMBAT N'A PAS BOUGE : l'apercu est TRANSIENT, meme quand
+        -- on previsualise un autre candidat que le style livre.
+        slash("sim style 2")
+        assert.are.equal(ns.Layout.style("2").edgeFile, element("liveChoice1").__backdrop.edgeFile)
+        assert.are.equal(ns.Layout.SHIPPED_STYLE, _G.GideonRaidDB.intermission.style)
     end)
 
     -- ------------------------------------------------------------ LE CHOIX REEL --
@@ -646,8 +649,13 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown())
         local card = _G.GideonRaidIntermissionPanel.buttons[1]
         assert.are.equal(ns.Textures.gideonFramePath(), card.__backdrop.edgeFile)
-        -- `/gr style shipped` ramene le style LIVRE (l'encart a bords actuel).
+        -- `/gr style shipped` ramene le style LIVRE : GIDEON depuis la decision du
+        -- raid lead ("Style Gideon", 2026-09-25).
         slash("style shipped")
+        assert.are.equal(ns.Layout.SHIPPED_STYLE, _G.GideonRaidDB.intermission.style)
+        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style)
+        -- L'ANCIEN encart a bords reste joignable : rien n'a ete perdu.
+        slash("style card")
         assert.are.equal("card", _G.GideonRaidDB.intermission.style)
         local plain = _G.GideonRaidIntermissionPanel.buttons[1]
         assert.are.equal(ns.Layout.style("card").edgeFile, plain.__backdrop.edgeFile)
