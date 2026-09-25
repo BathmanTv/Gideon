@@ -552,9 +552,19 @@ describe("Vitrine : la configuration du raid lead", function()
         assert.is_nil(T.GIDEON_FRAME_SIZE)
         assert.is_nil(T.gideonFramePath)
         assert.is_nil(T.gideonFrameSize)
+        -- Le .toc ne doit plus le LISTER...
         for _, entry in ipairs(wowenv.tocEntries()) do
             assert.is_nil(entry:find("gideon%-frame"), "le .toc ne doit plus lister " .. entry)
         end
+        -- ... ni meme le NOMMER, commentaire compris : une entree fantome dans un
+        -- manifeste est exactement ce qui remet un fichier dans le zip un jour.
+        local manifest = io.open("GideonRaid.toc", "r")
+        assert.is_not_nil(manifest, "GideonRaid.toc doit exister")
+        for line in manifest:lines() do
+            assert.is_nil(line:find("gideon%-frame"), "reference fantome dans le .toc : " .. line)
+            assert.is_nil(line:find("make_gideon"), "reference fantome dans le .toc : " .. line)
+        end
+        manifest:close()
         for _, relative in ipairs({ "Texture/gideon-frame.tga", "tools/make_gideon_frame.py" }) do
             -- `busted` tourne depuis la racine du depot (voir .busted).
             local handle = io.open(relative, "rb")

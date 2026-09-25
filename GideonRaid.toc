@@ -110,10 +110,3 @@ Texture\3v1r.tga
 # aspect ratio and the alpha preserved (Textures.PLACEMENT_SIZE reports the real
 # size, tests/spec/texture_spec.lua compares it with the header of the file).
 Texture\placement.tga
-
-# THE GIDEON FRAME IS GONE (0.13.4): Texture/gideon-frame.tga and its generator
-# tools/make_gideon_frame.py only served the `gideon` card style, which the raid
-# lead dropped ("keep option 1"). The guild identity now comes from the GIDEON
-# COLOURS applied to the 1 px border of the single remaining card
-# (Layout.GIDEON_* -> Layout.BUTTON_STYLES), so the file must NOT be listed here
-# any more: tests/spec/showcase_spec.lua fails if it comes back.
