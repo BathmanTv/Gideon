@@ -167,14 +167,14 @@ function Config.defaultIntermission()
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
         -- and changeable in game with /gr ping anchors|color|none.
         pingMode = Config.DEFAULT_PING_MODE,
-        -- CARD STYLE of this panel (raid-lead picker, `/gr style <1..6|gideon|shipped>`):
-        -- the DELIVERED style by default. Core/Layout.BUTTON_STYLES owns the styles,
-        -- this field only NAMES the one in use.
+        -- CARD STYLE of this panel (raid-lead picker, `/gr style [1|shipped]`): the
+        -- guild card by default, and the ONLY style there is. Core/Layout.
+        -- BUTTON_STYLES owns the styles, this field only NAMES the one in use.
         style = Config.DEFAULT_STYLE,
         -- STYLE SHOWCASE (`/gr sim style`): the style its examples are drawn with -
-        -- a CANDIDATE, transient by design, and its two animations. The animations
-        -- are ON by default (the raid lead asked to SEE them) and only an explicit
-        -- false stops them.
+        -- the guild card (there is no candidate left), and its two animations. The
+        -- animations are ON by default (the raid lead asked to SEE them) and only
+        -- an explicit false stops them.
         showcaseStyle = Config.DEFAULT_STYLE,
         showcaseAnimations = true,
         -- ASSIGNMENT SOUNDBOARD (see Core/Sound.lua): enabled by default, one
@@ -370,15 +370,18 @@ end
 --- measures the strings of Locale and Config), so this file cannot ask it for the
 --- list. tests/spec/showcase_spec.lua asserts that this mirror is EXACTLY the key
 --- set of Layout.BUTTON_STYLES: a style added in Core and forgotten here fails a
---- test instead of becoming silently unusable.
-Config.DEFAULT_STYLE = "gideon" -- delivered style: GIDEON (raid-lead decision 2026-09-25; "card" stays available)
-Config.STYLE_NAMES = { "1", "2", "3", "4", "5", "6", "gideon", "card" }
+--- test instead of becoming silently unusable - and, since 2026-09-25, it also
+--- asserts that BOTH hold exactly ONE entry (the guild card), so no surface can
+--- ever offer a choice again.
+Config.DEFAULT_STYLE = "1" -- delivered style: the guild card (thin border + GIDEON palette, raid-lead decision 2026-09-25)
+Config.STYLE_NAMES = { "1" }
 
 --- Resolves a PERSISTED style name. Accepted: one of Config.STYLE_NAMES, case and
 --- spaces insensitive. Anything else - absent, empty, mistyped, a number, a table,
---- a hand-edited SavedVariables - falls back to the DELIVERED style: PURE and
---- TOTAL, it never raises and never returns nil, so the layout is always handed a
---- style it knows.
+--- a hand-edited SavedVariables, or an OLD style that no longer exists (`gideon`,
+--- `card`, `2`..`6`) - falls back to the DELIVERED style: PURE and TOTAL, it never
+--- raises and never returns nil, so the layout is always handed a style it knows
+--- and an old save rolls back on the guild card without an error.
 --- @param raw string|nil raw GideonRaidDB.intermission.style value
 --- @return string canonical style name
 function Config.resolveStyleName(raw)
@@ -575,9 +578,10 @@ function Config.resolveIntermission(raw)
     -- "enabled", no schema bump is needed.
     out.soundEnabled = Sound.resolveEnabled(raw.soundEnabled)
     -- STYLE OF THE INTERMISSION CARDS (the raid lead's picker): the resolved value
-    -- is a canonical name - a key of Core/Layout.BUTTON_STYLES - and an unknown or
-    -- missing value falls back to the DELIVERED style. A hand-edited
-    -- SavedVariables can therefore never hand an unknown style to the layout.
+    -- is a canonical name - a key of Core/Layout.BUTTON_STYLES - and an unknown,
+    -- missing or OLD value (a save that still says `gideon`, `card`, `2`..) falls
+    -- back to the DELIVERED style. A hand-edited or outdated SavedVariables can
+    -- therefore never hand an unknown style to the layout, nor break anything.
     out.style = Config.resolveStyleName(raw.style)
     -- SHOWCASE ANIMATIONS: only an exact `false` stops them (the showcase is
     -- exactly where the raid lead wants to SEE the animations, so the default is

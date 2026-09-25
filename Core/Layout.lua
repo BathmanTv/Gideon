@@ -70,11 +70,15 @@
     a title back: every layout test in the suite asks for the violations of the
     panel it just built.
 
-    THE STYLE OF A CARD IS A PARAMETER (Layout.BUTTON_STYLES). The image
-    "buttons" are simple CARDS: a thin border and a discreet dark background
-    behind the picture, no Blizzard button chrome, no text. ONE style is defined
-    today - the raid lead is still choosing - and a richer picker only has to
-    add an entry to Layout.BUTTON_STYLES and name it in Layout.CHOICE_STYLE.
+    THE STYLE OF A CARD (Layout.BUTTON_STYLES). The image "buttons" are simple
+    CARDS: a THIN border and a discreet dark background behind the picture, no
+    Blizzard button chrome, no text. RAID-LEAD DECISION (2026-09-25, "keep option
+    1"): there is exactly ONE style - the thin card of option 1 of the validated
+    board, painted with the GIDEON constants below (gold at rest, cyan under the
+    mouse, bright gold while pressed). The candidate gallery (2..6, `card`,
+    `gideon`) is GONE, data included: Layout.STYLE_ORDER is EMPTY and
+    Layout.BUTTON_STYLES holds that single entry, so no surface can offer a
+    choice that no longer exists.
 ----------------------------------------------------------------------------]]
 --
 --
@@ -278,47 +282,40 @@ Layout.PING_HELP_WIDTH = 520
 Layout.CHOICE_IMAGE_MAX = 160
 Layout.CHOICE_GAP = 8
 
---[[ THE CARD: a thin border and a discreet dark background behind a picture.
+--[[ THE CARD: a THIN border and a discreet dark background behind a picture.
 
      The raid lead asked for "just a frame with edges" around every image - no
-     Blizzard button chrome, no decoration, no text - and a RICHER PICKER LATER.
-     The style is therefore a PARAMETER: a name in Layout.CHOICE_STYLE selects a
-     table in Layout.BUTTON_STYLES, the layout carries that name on every image
-     block, and the rendering layer applies whatever table it is handed
-     (UI.ApplyCardStyle). Adding a style later is adding one entry here and
-     naming it - nothing else in the addon knows how a card looks.
+     Blizzard button chrome, no decoration, no text. The style is therefore a
+     PARAMETER: a name in Layout.CHOICE_STYLE selects a table in
+     Layout.BUTTON_STYLES, the layout carries that name on every image block, and
+     the rendering layer applies whatever table it is handed (UI.ApplyCardStyle).
        padding        : transparent space between the border and the picture (the
                         picture is ALWAYS drawn whole, inside the border);
        bgFile/edgeFile: the client files of the background and of the border;
-       edgeSize       : border thickness, in pixels (thin by design);
+       edgeSize       : border thickness, in pixels - 1 px, THIN by design (the
+                        SIGNATURE of option 1: never thicken it);
        insets         : inner insets of the 9-slice, as the client expects them;
-       background     : the discreet dark fill behind the picture;
-       border         : the border colour at rest;
-       borderHover    : the border colour under the mouse (the ONLY feedback);
-       borderPressed  : the border colour between press and release;
-       innerEdgeSize  : OPTIONAL second, INNER border (the "double frame" style #6):
-                        the rendering layer draws it on a child frame;
-       innerInset     : inset of that inner border, in pixels;
-       innerBorder / innerBorderHover / innerBorderPressed : its three colours.
+       background     : the discreet dark fill behind the picture (GIDEON_PANEL);
+       border         : the border colour at rest (GIDEON_GOLD);
+       borderHover    : the border colour under the mouse (GIDEON_CYAN - the ONE
+                        feedback a card has);
+       borderPressed  : the border colour between press and release (GIDEON_GOLD_HI).
      A style is therefore PURE DATA: no code anywhere knows the name of a style,
-     and adding one is adding an entry here plus its label in Core/Locale.lua.
+     and adding one would be adding an entry here plus its label in Core/Locale.lua.
 ]]
 
---- THE DELIVERED STYLE: what the intermission panel uses until the raid lead
---- picks another one (`/gr style <1..6|card|shipped>`). `shipped` resolves to
---- exactly this key. RAID-LEAD DECISION (2026-09-25, "Style Gideon"): the delivered
---- style is now GIDEON - night blue + gold with a cyan halo on hover. The former
---- thin grey card stays available as the `card` preset, so nothing is lost.
-Layout.SHIPPED_STYLE = "gideon"
+--- THE DELIVERED STYLE, and the ONLY one (raid-lead decision 2026-09-25: "keep
+--- option 1"). `1`, `shipped` and the aliases `bare` / `nu` / `encartnu` all name
+--- this one and the same table.
+Layout.SHIPPED_STYLE = "1"
 
 --[[ THE GIDEON PALETTE (delivered by the raid lead, values used AS-IS).
 
-     One named constant per colour, here and nowhere else: the GIDEON card style
-     and the style showcase both read them, so the palette can not drift. They
-     are 24-bit RGB integers (0xRRGGBB); Layout.hexOf() prints them and
-     Layout.colorOf() converts them to the floats the client expects. The
-     showcase displays each one WITH its hex code, so the raid lead can dictate a
-     change without any ambiguity.
+     One named constant per colour, here and nowhere else: the card style and the
+     style showcase both read them, so the palette can not drift. They are 24-bit
+     RGB integers (0xRRGGBB); Layout.hexOf() prints them and Layout.colorOf()
+     converts them to the floats the client expects. The showcase displays each one
+     WITH its hex code, so the raid lead can dictate a change without any ambiguity.
 ]]
 Layout.GIDEON_NIGHT = 0x04050f
 Layout.GIDEON_PANEL = 0x0a0c22
@@ -392,12 +389,14 @@ end
 
 Layout.CHOICE_STYLE = Layout.SHIPPED_STYLE
 
---[[ THE STYLE TABLE. Six entries come from the validated board (1 "encart nu",
-     2 "encart dore", 3 "bouton Blizzard", 4 "case d'action", 5 "image nue +
-     ombre", 6 "double cadre"), then `card` (the former delivered thin grey
-     border, kept so the raid lead can go back to it) and `gideon` (the raid lead's
-     own direction - night blue + gold, cyan halo on hover - DELIVERED since
-     2026-09-25). No entry's data ever moves when a candidate is added.
+--[[ THE STYLE TABLE: ONE entry, the delivered card.
+
+     RAID-LEAD DECISION (2026-09-25, "keep option 1"): the candidate gallery of
+     the validated board (2 "encart dore", 3 "bouton Blizzard", 4 "case d'action",
+     5 "image nue + ombre", 6 "double cadre") AND the former `card` and `gideon`
+     presets are REMOVED - data included. What is kept is the SIGNATURE of
+     option 1: edgeSize 1 and padding 6, NEVER thickened, painted with the GIDEON
+     constants above so the guild identity survives the simplification.
 ]]
 Layout.BUTTON_STYLES = {
     ["1"] = {
@@ -409,134 +408,25 @@ Layout.BUTTON_STYLES = {
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
-        background = { r = 0.078, g = 0.078, b = 0.078, a = 0.85 },
-        border = { r = 0.604, g = 0.604, b = 0.604, a = 1 },
-        borderHover = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-        borderPressed = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-    },
-    ["2"] = {
-        id = "2",
-        labelKey = "style.2",
-        aliases = { "2", "gold", "dore", "gilded" },
-        padding = 6,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 16,
-        insets = { left = 5, right = 5, top = 5, bottom = 5 },
-        background = { r = 0.059, g = 0.047, b = 0.024, a = 0.9 },
-        border = { r = 0.788, g = 0.635, b = 0.153, a = 1 },
-        borderHover = { r = 1.0, g = 0.914, b = 0.510, a = 1 },
-        borderPressed = { r = 1.0, g = 0.914, b = 0.510, a = 1 },
-    },
-    ["3"] = {
-        id = "3",
-        labelKey = "style.3",
-        aliases = { "3", "blizzard", "bouton" },
-        padding = 8,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\UI-Panel-Button-Up",
-        edgeSize = 12,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        background = { r = 0.16, g = 0.16, b = 0.16, a = 1 },
-        border = { r = 0.55, g = 0.55, b = 0.55, a = 1 },
-        borderHover = { r = 0.80, g = 0.80, b = 0.80, a = 1 },
-        borderPressed = { r = 0.35, g = 0.35, b = 0.35, a = 1 },
-    },
-    ["4"] = {
-        id = "4",
-        labelKey = "style.4",
-        aliases = { "4", "action", "case", "slot" },
-        padding = 2,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\UI-Quickslot2",
-        edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-        background = { r = 0.043, g = 0.043, b = 0.043, a = 1 },
-        border = { r = 0.35, g = 0.35, b = 0.35, a = 1 },
-        borderHover = { r = 0.80, g = 0.75, b = 0.40, a = 1 },
-        borderPressed = { r = 1.0, g = 0.82, b = 0.0, a = 1 },
-    },
-    ["5"] = {
-        id = "5",
-        labelKey = "style.5",
-        aliases = { "5", "shadow", "ombre", "nue" },
-        padding = 3,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 3,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        background = { r = 0, g = 0, b = 0, a = 0 },
-        border = { r = 0, g = 0, b = 0, a = 0.75 },
-        borderHover = { r = 0.30, g = 0.90, b = 0.30, a = 0.9 },
-        borderPressed = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-    },
-    ["6"] = {
-        id = "6",
-        labelKey = "style.6",
-        aliases = { "6", "double", "doublecadre" },
-        padding = 8,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 3,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        background = { r = 0, g = 0, b = 0, a = 0.7 },
-        border = { r = 0.545, g = 0.545, b = 0.545, a = 1 },
-        borderHover = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-        borderPressed = { r = 1.0, g = 0.82, b = 0.0, a = 1 },
-        -- THE SECOND, INNER BORDER (the "passe-partout" of the board).
-        innerEdgeSize = 1,
-        innerInset = 4,
-        innerBorder = { r = 0.545, g = 0.545, b = 0.545, a = 1 },
-        innerBorderHover = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-        innerBorderPressed = { r = 1.0, g = 0.82, b = 0.0, a = 1 },
-    },
-    -- THE RAID LEAD'S OWN DIRECTION: night-blue glass, gold filigree, CYAN halo.
-    -- Border 2 px GOLD at rest (the halo comes from the generated 9-slice
-    -- texture, Texture/gideon-frame.tga, which is WHITE so the game applies the
-    -- colour), CYAN on hover, GOLD_HI on press.
-    gideon = {
-        id = "gideon",
-        labelKey = "style.gideon",
-        aliases = { "gideon", "nuit", "night" },
-        padding = 10,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\AddOns\\GideonRaid\\Texture\\gideon-frame.tga",
-        edgeSize = 16,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
         -- THE COLOURS ARE THE CONSTANTS THEMSELVES (Layout.colorOf of the GIDEON
         -- values above): the hex code the showcase writes next to a chip and the
         -- colour the client actually paints can never drift apart.
-        background = Layout.colorOf(Layout.GIDEON_PANEL, 0.94),
+        background = Layout.colorOf(Layout.GIDEON_PANEL, 0.92),
+        -- The three border COLOURS of the guild card. The border itself stays the
+        -- SAME 1 px edge of option 1 - the guild identity is a colour, never a
+        -- thicker frame.
         border = Layout.colorOf(Layout.GIDEON_GOLD),
         borderHover = Layout.colorOf(Layout.GIDEON_CYAN),
         borderPressed = Layout.colorOf(Layout.GIDEON_GOLD_HI),
     },
-    -- THE DELIVERED STYLE (the default of the addon): a thin border and a
-    -- discreet dark background. Its data does not move when a candidate is added,
-    -- so the combat panel is IDENTICAL by default.
-    card = {
-        id = "card",
-        labelKey = "style.card",
-        -- "shipped"/"livre"/"default" are NOT stored here: Layout.resolveStyle
-        -- answers them centrally, so changing the delivered style can never leave
-        -- a stale alias behind.
-        aliases = { "card" },
-        padding = 6,
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 2,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
-        background = { r = 0.05, g = 0.05, b = 0.07, a = 0.6 },
-        border = { r = 0.45, g = 0.45, b = 0.45, a = 1 },
-        borderHover = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-        borderPressed = { r = 1.0, g = 1.0, b = 1.0, a = 1 },
-    },
 }
 
---- THE CANDIDATE STYLES, in the ORDER the style showcase displays them: the six
---- of the validated board, then the GIDEON direction. The delivered style is NOT
---- part of this list (it is the default, and `/gr style shipped` brings it back).
-Layout.STYLE_ORDER = { "1", "2", "3", "4", "5", "6", "card" }
+--- THE CANDIDATE STYLES: NONE. There is nothing left to choose (raid-lead
+--- decision 2026-09-25): the list is kept as the ONE place a style would be
+--- declared, and it is what makes "offering a choice" impossible by construction.
+--- tests/spec/showcase_spec.lua locks it down (empty), with the mirror of
+--- Core/Config.STYLE_NAMES.
+Layout.STYLE_ORDER = {}
 
 --- The style table of a name, never nil: an unknown or missing name falls back to
 --- the configured one, so a layout can always be applied (no nil handed to
@@ -553,10 +443,11 @@ function Layout.style(name)
 end
 
 --- Canonical NAME of a style: its id or any of its aliases (case and spaces
---- insensitive), or nil when nothing matches. `shipped` (and `livre`, `default`,
---- `card`) resolve to the DELIVERED style, so the raid lead never has to know an
---- internal name. BOUNDED INPUT, UNKNOWN REFUSED: the caller refuses nil,
---- nothing is ever guessed.
+--- insensitive), or nil when nothing matches. `shipped` (and `livre`, `default`)
+--- resolve to the DELIVERED style, so the raid lead never has to know an internal
+--- name. BOUNDED INPUT, UNKNOWN REFUSED: the caller refuses nil, nothing is ever
+--- guessed - and since 2026-09-25 everything but the delivered card IS unknown
+--- (`2`, `gideon`, `card`, `99` are refused, nothing is persisted).
 --- @param raw string|number|nil
 --- @return string|nil canonical style name (a key of Layout.BUTTON_STYLES)
 function Layout.resolveStyle(raw)
@@ -571,8 +462,8 @@ function Layout.resolveStyle(raw)
         return nil
     end
     -- "shipped" ALWAYS means the DELIVERED style, whatever it currently is: the
-    -- alias is answered here rather than stored in an entry (raid-lead decision
-    -- 2026-09-25: the delivered style became GIDEON, and "shipped" followed it).
+    -- alias is answered here rather than stored in an entry, so changing the
+    -- delivered style can never leave a stale alias behind.
     if flat == "shipped" or flat == "livre" or flat == "default" then
         return Layout.SHIPPED_STYLE
     end
@@ -591,9 +482,9 @@ function Layout.resolveStyle(raw)
     return nil
 end
 
---- Is `raw` a style the showcase can PREVIEW (`/gr sim style <1..6|gideon>`)? The
---- delivered style is accepted too: previewing "what we ship today" is a
---- legitimate comparison. An unknown value returns false.
+--- Is `raw` a style the showcase can PREVIEW? The delivered style is the only one
+--- there is, so this answers true for `1`, `shipped` and their aliases, and false
+--- for everything else (an unknown value returns false).
 --- @param raw string|nil
 --- @return boolean
 function Layout.isCandidateStyle(raw)
@@ -612,30 +503,13 @@ function Layout.isCandidateStyle(raw)
     return false
 end
 
---- The LABEL displayed for a style: its NUMBER for the six candidates ("1 -
---- encart nu"), its translated name for `gideon` and for the delivered style.
+--- The LABEL displayed for a style: its translated name. There is only ONE style
+--- now, so there is no number any more - the "1 - encart nu" numbering of the
+--- candidate gallery went away with the gallery.
 --- @param name string|nil
 --- @return string
 function Layout.styleLabel(name)
-    local key = Layout.resolveStyle(name) or Layout.CHOICE_STYLE
-    local entry = Layout.BUTTON_STYLES[key] or Layout.BUTTON_STYLES[Layout.CHOICE_STYLE]
-    local label = Locale.t(entry.labelKey)
-    if tonumber(entry.id) ~= nil then
-        return entry.id .. " - " .. label
-    end
-    return label
-end
-
---- The number of a candidate style, or nil (`gideon` and the delivered style are
---- NAMED, not numbered).
---- @param name string|nil
---- @return string|nil "1".."6"
-function Layout.styleNumber(name)
-    local key = Layout.resolveStyle(name)
-    if key == nil or tonumber(key) == nil then
-        return nil
-    end
-    return key
+    return Locale.t(Layout.style(name).labelKey)
 end
 
 --- The hex codes of a style, as the showcase prints them next to its example: the
@@ -2041,26 +1915,24 @@ end
 --=============================================================================
 -- THE STYLE SHOWCASE (the in-game answer to "on voit rien pendant une
 -- repetition": the raid lead judges the DESIGN in game, not on an out-of-game
--- board, and PICKS there).
+-- board).
 --=============================================================================
 
 --[[ WIDTH OF THE SHOWCASE PANEL, in pixels.
 
      Wider than the combat panel (Layout.INTERMISSION_WIDTH) ON PURPOSE: the
      showcase lays its examples out in ROWS, and a row has to hold three CARDS at
-     the REAL size of the fight, so what the raid lead compares is what the player
+     the REAL size of the fight, so what the raid lead looks at is what the player
      will see - not a shrunken thumbnail.
 ]]
 Layout.SHOWCASE_WIDTH = 720
---- Cards per row in the showcase (3 x the widest card + 2 gaps still fit inside
---- Layout.SHOWCASE_WIDTH: the widest card is the GIDEON one, 180 px).
-Layout.SHOWCASE_ROWS_OF = 3
---- Height, in pixels, of the SCROLLING WINDOW of the showcase. The content is
---- ~2400 px tall (seven style examples at the real size of a fight card, plus the
---- typography and the palette): it scrolls INSIDE this fixed window, so the frame
---- never covers the whole screen and the fixed banner strip stays visible.
+--- Height, in pixels, of the SCROLLING WINDOW of the showcase. The content is much
+--- taller than the window (the typography, the palette with its 8 GIDEON constants
+--- and their hex codes, the three card states, the guild card and the animations):
+--- it scrolls INSIDE this fixed window, so the frame never covers the whole screen
+--- and the fixed banner strip stays visible.
 Layout.SHOWCASE_WINDOW_HEIGHT = 560
---- The composition every frame style is demonstrated with: "2 green + 2 red", the
+--- The composition the guild card is demonstrated with: "2 green + 2 red", the
 --- sample of the validated board.
 Layout.SHOWCASE_SAMPLE_STATE = "2V2R"
 --- THE THREE STATES a card can be drawn in when the LAYOUT forces one of them (the
@@ -2071,8 +1943,9 @@ Layout.CARD_STATE = { REST = "rest", HOVER = "hover", PRESSED = "pressed" }
 Layout.CARD_STATES = { Layout.CARD_STATE.REST, Layout.CARD_STATE.HOVER, Layout.CARD_STATE.PRESSED }
 --- WHAT A CLICK ON A CARD OF THE SHOWCASE DOES, as DATA of the layout: the
 --- rendering layer applies the action it is handed instead of guessing a rule out
---- of the block id, so a new clickable example is a Core change only.
-Layout.SHOWCASE_ACTION = { DECLARE = "declare", PREVIEW_STYLE = "previewStyle" }
+--- of the block id, so a new clickable example is a Core change only. DECLARE is
+--- the only action left: there is no candidate style to preview any more.
+Layout.SHOWCASE_ACTION = { DECLARE = "declare" }
 
 --- The colour a chip is painted with, with a guaranteed alpha (a colour of
 --- Layout.THEME carries three channels and no alpha: the client's
@@ -2172,9 +2045,8 @@ Layout.TYPOGRAPHY = {
      Layout.PANEL.SHOWCASE is a panel like any other: Layout.violations() refuses
      any TEXT whose id is not listed here, so the showcase can not silently grow a
      paragraph, and the combat panel can not inherit one. The list is BUILT from
-     the tables above, so adding a typography sample or a style candidate adds its
-     ids here automatically - forgetting one raises a test failure, not a bug in
-     game.
+     the tables above, so adding a typography sample adds its ids here
+     automatically - forgetting one raises a test failure, not a bug in game.
 ]]
 Layout.SHOWCASE_TEXT_IDS = {
     showcaseBanner = true,
@@ -2197,7 +2069,9 @@ Layout.SHOWCASE_TEXT_IDS = {
     stylesHeader = true,
     stylesNote = true,
     stylesCurrent = true,
-    stylesPreview = true,
+    -- the ONE example of the guild card (there is no gallery any more: the index
+    -- is 1 and it stays 1, the delivered style being the only one).
+    styleCap1 = true,
     animHeader = true,
     animLine = true,
     animNote = true,
@@ -2217,9 +2091,6 @@ for index = 1, #Layout.PALETTE do
 end
 for index = 1, #Layout.GIDEON_PALETTE do
     showcaseText("gideonLabel" .. index)
-end
-for index = 1, #Layout.STYLE_ORDER do
-    showcaseText("styleCap" .. index)
 end
 for index = 1, #Layout.INTERMISSION_CHOICE_ORDER do
     showcaseText("stateCap" .. index)
@@ -2261,20 +2132,23 @@ end
        4. the PALETTE: the colours of the panel today AND the GIDEON constants,
           each chip with its hex code in text (so the raid lead can dictate a
           value);
-       5. the FRAME STYLES: the six candidates of the validated board plus GIDEON,
-          each drawn at the REAL size, with its number and its border/background
-          hexes; a click previews it live;
+       5. THE GUILD CARD: ONE example, the delivered (and only) style, drawn at
+          the REAL size of a fight card with the hex codes of its border and of
+          its background. THERE IS NO GALLERY ANY MORE: the six candidates of the
+          validated board and the `card` / `gideon` presets are gone (raid-lead
+          decision 2026-09-25, "keep option 1"), so nothing is proposed and
+          nothing is clickable here;
        6. the ANIMATIONS: fade-in + border pulse, their state, and how to stop
           them.
 
-     `style` is the PREVIEW style (what the examples are drawn with), `realStyle`
-     is the style the COMBAT panel uses right now: the two are shown, so nobody
-     can confuse what he is looking at with what the fight will show. NOTHING here
-     is part of the combat layout: /gr sim style is the only way in, and the
-     fixed strip above (Layout.showcaseBannerPanel) never leaves the screen.
+     `style` and `realStyle` both name the card style: with a single style they
+     resolve to the same table, and the note under the example says which card the
+     COMBAT panel uses. NOTHING here is part of the combat layout: /gr sim style
+     is the only way in, and the fixed strip above (Layout.showcaseBannerPanel)
+     never leaves the screen.
 
      @param spec table|nil {
-       style = string|nil (preview style: 1..6, gideon, card),
+       style = string|nil (the card style the examples are drawn with),
        realStyle = string|nil (the style the combat panel uses),
        animations = any (the persisted preference: only `false` disables),
        showChoices = boolean|nil, wordText = string|nil, wordState = string|nil }
@@ -2386,8 +2260,8 @@ function Layout.showcasePanel(spec)
     end
 
     -- 3. ONE CARD, THREE STATES: the same card three times, in a row, so the
-    --    feedback (the border, and the halo of the GIDEON style) can be compared
-    --    without touching anything else.
+    --    feedback (the border, and nothing but the border: the guild card has no
+    --    halo, no glow and no label) can be compared without touching anything else.
     header("statesHeader", Locale.t("showcase.statesHeader"))
     note("statesNote", Locale.t("showcase.statesNote"))
     local styleTable = Layout.style(preview)
@@ -2434,40 +2308,22 @@ function Layout.showcasePanel(spec)
         )
     end
 
-    -- 5. THE FRAME STYLES. Every candidate is drawn at the REAL size of a fight
-    --    card, in rows of Layout.SHOWCASE_ROWS_OF, with its number and the hex
-    --    codes of its border and of its background underneath.
+    -- 5. THE GUILD CARD. ONE example, at the REAL size of a fight card, with the
+    --    hex codes of its border and of its background underneath. The candidate
+    --    gallery is GONE (raid-lead decision 2026-09-25, "keep option 1"): there
+    --    is nothing to compare and nothing to click any more.
     header("stylesHeader", Locale.t("showcase.stylesHeader"))
     note("stylesNote", Locale.t("showcase.stylesNote"))
-    note("stylesCurrent", Locale.format("showcase.stylesCurrent", Layout.styleLabel(real), Layout.styleNumber(real) or real))
-    note("stylesPreview", Locale.format("showcase.previewOnly", Layout.styleLabel(preview), Layout.styleNumber(preview) or preview))
-    for start = 1, #Layout.STYLE_ORDER, Layout.SHOWCASE_ROWS_OF do
-        local items = {}
-        for offset = 0, Layout.SHOWCASE_ROWS_OF - 1 do
-            local name = Layout.STYLE_ORDER[start + offset]
-            if name ~= nil then
-                items[#items + 1] = {
-                    id = "styleCard" .. (start + offset),
-                    kind = "image",
-                    state = Layout.SHOWCASE_SAMPLE_STATE,
-                    style = name,
-                    -- A click PREVIEWS this style: the whole showcase (the live row,
-                    -- the states row, every example) is redrawn with it, so the raid
-                    -- lead judges the style on the real size of a fight card.
-                    action = Layout.SHOWCASE_ACTION.PREVIEW_STYLE,
-                }
-            end
-        end
-        push({ id = "styleRow" .. start, kind = "row", align = "center", gap = Layout.CHOICE_GAP, items = items })
-        for offset = 0, Layout.SHOWCASE_ROWS_OF - 1 do
-            local index = start + offset
-            local name = Layout.STYLE_ORDER[index]
-            if name ~= nil then
-                local borderHex, backgroundHex = Layout.styleHexes(name)
-                note("styleCap" .. index, Locale.format("showcase.styleCaption", Layout.styleLabel(name), borderHex, backgroundHex))
-            end
-        end
-    end
+    note("stylesCurrent", Locale.format("showcase.stylesCurrent", Layout.styleLabel(real)))
+    push({
+        id = "styleCard1",
+        kind = "image",
+        align = "center",
+        state = Layout.SHOWCASE_SAMPLE_STATE,
+        style = Layout.CHOICE_STYLE,
+    })
+    local borderHex, backgroundHex = Layout.styleHexes(preview)
+    note("styleCap1", Locale.format("showcase.styleCaption", Layout.styleLabel(preview), borderHex, backgroundHex))
 
     -- 6. THE ANIMATIONS: what they are, whether they are on, how to stop them.
     header("animHeader", Locale.t("showcase.animHeader"))

@@ -399,26 +399,32 @@ local function setIdlog(raw)
     return wanted
 end
 
---- /gr style (no argument): WHICH CARD STYLE the intermission panel uses, and how
---- to change it. The list of candidates comes from Core/Layout (it owns the style
---- tables): the chat never writes a style name on its own.
+--- /gr style (no argument): WHICH CARD STYLE the intermission panel uses, and the
+--- fact that there is NO CHOICE LEFT. The style names come from Core/Layout (it
+--- owns the style tables): the chat never writes a style name on its own.
+--- Layout.STYLE_ORDER is the list of candidates and it is EMPTY since the
+--- raid-lead decision of 2026-09-25 ("keep option 1"), so the list the player
+--- reads holds the delivered style and nothing else - but it is still BUILT from
+--- Core, so a candidate would reappear here without touching this function.
 local function printStyleSetting()
     local db = _G.GideonRaidDB
     local resolved = ns.Config.resolveIntermission(type(db) == "table" and db.intermission or nil)
     local names = {}
     for index = 1, #ns.Layout.STYLE_ORDER do
         local name = ns.Layout.STYLE_ORDER[index]
-        names[#names + 1] = ns.Layout.styleNumber(name) or name
+        names[#names + 1] = name
     end
     names[#names + 1] = tostring(ns.Layout.SHIPPED_STYLE)
     ns.UI.Print(ns.Locale.format("cmd.style.status", ns.Layout.styleLabel(resolved.style), table.concat(names, ", ")))
     ns.UI.Print(ns.Locale.t("cmd.style.help"))
 end
 
---- /gr style <1..6|gideon|shipped>: chooses the CARD STYLE of the combat intermission
---- panel and PERSISTS it (the panel uses it from the next refresh on). An unknown
---- value is REFUSED - nothing is persisted, nothing is guessed - exactly like
---- /gr sound, /gr lang and /gr ping. `shipped` brings back the delivered style.
+--- /gr style <1|shipped>: the CARD STYLE of the combat intermission panel, and it
+--- PERSISTS it (the panel uses it from the next refresh on). Since the raid-lead
+--- decision of 2026-09-25 there is a SINGLE style, so `1` and `shipped` (and the
+--- aliases `bare`, `nu`, `encartnu`) all mean the same card, and anything else -
+--- `2`, `gideon`, `card`, `99`, an empty or absent string - is REFUSED: nothing is
+--- persisted, nothing is guessed, exactly like /gr sound, /gr lang and /gr ping.
 --- Core/Layout.resolveStyle() is the ONLY judge of what a style name means (each
 --- style carries its own aliases), and Core/Config.resolveStyleName() is the only
 --- writer of the field.
@@ -482,7 +488,7 @@ local function slashHandler(cmd)
     -- The pattern accepts anything and Core/Simulation.resolveCommand() judges it:
     -- an unknown value is REFUSED (nothing is guessed, nothing is launched).
     local simMode = cmd:match("^sim%s+(.+)$")
-    -- /gr style <1..6|gideon|shipped> : the CARD STYLE of the combat intermission
+    -- /gr style <1|shipped> : the CARD STYLE of the combat intermission
     -- panel. The pattern accepts anything and setStyleSetting() judges it (through
     -- Core/Layout.resolveStyle): an unknown value is REFUSED, nothing is persisted.
     local styleArg = cmd:match("^style%s+(.+)$")

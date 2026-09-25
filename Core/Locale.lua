@@ -59,9 +59,9 @@ Locale.STRINGS = {
             .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
             .. "  /gr diag (health report: the 4 sound files, the target boss, the idlog, the ping)\n"
-            .. "  /gr style <1..6|gideon|shipped> (CARD STYLE of the intermission panel, persisted)\n"
+            .. "  /gr style [1|shipped] (CARD STYLE of the intermission panel - one single style, persisted)\n"
             .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
-            .. "  /gr sim style [1..6|gideon] (STYLE SHOWCASE: every font size, the palette, the 7 frame styles)\n"
+            .. "  /gr sim style [1|shipped] (STYLE SHOWCASE: every font size, the palette, the guild card)\n"
             .. "  /gr sim anim [on|off] (showcase animations: fade-in + border pulse, persisted)\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
         fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
@@ -72,10 +72,10 @@ Locale.STRINGS = {
             .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
             .. "  /gr idlog [on|off]\n"
             .. "  /gr diag (bilan de sante : les 4 fichiers de son, le boss cible, l'idlog, le ping)\n"
-            .. "  /gr style <1..6|gideon|shipped> (STYLE DES ENCARTS du panneau d'intermission, persiste)\n"
+            .. "  /gr style [1|shipped] (STYLE DES ENCARTS du panneau d'intermission - un seul style, persiste)\n"
             .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
             .. "  /gr sim stop\n"
-            .. "  /gr sim style [1..6|gideon] (VITRINE DE STYLE : toutes les tailles, la palette, les 7 styles)\n"
+            .. "  /gr sim style [1|shipped] (VITRINE DE STYLE : toutes les tailles, la palette, l'encart de la guilde)\n"
             .. "  /gr sim anim [on|off] (animations de la vitrine : fondu + pulsation, persiste)\n"
             .. "  /gr lock | /gr unlock | /gr resetposition",
     },
@@ -83,14 +83,14 @@ Locale.STRINGS = {
         en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = the intermission "
             .. "panel opens RIGHT AWAY, you click your composition and YOU close it (X or Close); /gr sim ping = "
             .. "ping help window (how to bind a key per ping and how to ping yourself); /gr sim stop = close it; "
-            .. "/gr sim style [1..6|gideon] = the STYLE SHOWCASE (fonts, palette with hex codes, card states, the "
-            .. "candidate frame styles, the animations) where you PICK the style; /gr sim anim on|off = its animations.",
+            .. "/gr sim style [1|shipped] = the STYLE SHOWCASE (fonts, palette with hex codes, card states, the "
+            .. "guild card, the animations); /gr sim anim on|off = its animations.",
         fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = le panneau "
             .. "d'intermission s'ouvre TOUT DE SUITE, tu cliques ta composition et c'est TOI qui le fermes "
             .. "(croix ou Fermer) ; /gr sim ping = fenetre d'aide au ping (comment binder une touche par ping et "
-            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer ; /gr sim style [1..6|gideon] = la VITRINE "
-            .. "DE STYLE (polices, palette avec codes hexa, etats d'un encart, styles de cadre candidats, "
-            .. "animations) ou tu CHOISIS le style ; /gr sim anim on|off = ses animations.",
+            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer ; /gr sim style [1|shipped] = la VITRINE "
+            .. "DE STYLE (polices, palette avec codes hexa, etats d'un encart, l'encart de la guilde, "
+            .. "animations) ; /gr sim anim on|off = ses animations.",
     },
     -- Panel lock: the main panel is MOVABLE by default (in-game feedback); these
     -- three commands are the lock / unlock / reset entry points.
@@ -1248,8 +1248,8 @@ Locale.STRINGS = {
         fr = "VITRINE DE STYLE - SIMULATION SEULEMENT",
     },
     ["showcase.hint"] = {
-        en = "Wheel = scroll. Click a composition to get the giant word + the sound, click a frame style to preview it live.",
-        fr = "Molette = defiler. Clique une composition pour le mot geant + le son, clique un style de cadre pour l'apercu en direct.",
+        en = "Wheel = scroll. Click a composition to get the giant word + the sound.",
+        fr = "Molette = defiler. Clique une composition pour le mot geant + le son.",
     },
     ["showcase.liveHeader"] = {
         en = "1 - THE THREE COMPOSITIONS (as in combat)",
@@ -1331,16 +1331,20 @@ Locale.STRINGS = {
         fr = "Memes roles, valeurs GIDEON : dicte un changement, c'est UNE constante dans Core/Layout.lua.",
     },
     ["showcase.stylesHeader"] = {
-        en = "5 - FRAME STYLES (click one to preview it live)",
-        fr = "5 - STYLES DE CADRE (clique pour l'apercu en direct)",
+        en = "5 - THE GUILD CARD (the only style)",
+        fr = "5 - L'ENCART DE LA GUILDE (le seul style)",
     },
     ["showcase.stylesNote"] = {
-        en = "1-6 come from your validated board, GIDEON is the new direction. The DELIVERED style stays the default.",
-        fr = "1 a 6 viennent de la planche validee, GIDEON est la nouvelle direction. Le style LIVRE reste le defaut.",
+        en = "Option 1 of your board became the guild card: a 1 px border, a discreet dark fill, and the "
+            .. "GIDEON palette - gold at rest, cyan under the mouse, bright gold while pressed. The candidate "
+            .. "gallery is gone; what is shown here is exactly what a fight draws.",
+        fr = "L'option 1 de ta planche est devenue l'encart de la guilde : bordure de 1 px, fond sombre "
+            .. "discret et palette GIDEON - or au repos, cyan au survol, or vif a l'appui. La galerie de "
+            .. "candidats a disparu ; ce qui est montre ici est exactement ce qu'un combat dessine.",
     },
     ["showcase.stylesCurrent"] = {
-        en = "Style used by the COMBAT panel right now: %s (/gr style %s to change it).",
-        fr = "Style utilise par le panneau de COMBAT maintenant : %s (/gr style %s pour le changer).",
+        en = "The COMBAT panel draws exactly this card right now: %s.",
+        fr = "Le panneau de COMBAT dessine exactement cet encart maintenant : %s.",
     },
     ["showcase.styleCaption"] = {
         en = "%s (border #%s, background #%s)",
@@ -1360,10 +1364,8 @@ Locale.STRINGS = {
         fr = "Elles ne tournent QUE ici : aucune animation n'est branchee sur le panneau de combat (/gr inter, /gr sim inter).",
     },
     ["showcase.opened"] = {
-        en = "SIMULATION (no boss, no raid): STYLE SHOWCASE open. Wheel = scroll, click a composition, "
-            .. "click a frame style to preview it.",
-        fr = "SIMULATION (pas de boss, pas de raid) : VITRINE DE STYLE ouverte. Molette = defiler, clique "
-            .. "une composition, clique un style pour l'apercu.",
+        en = "SIMULATION (no boss, no raid): STYLE SHOWCASE open. Wheel = scroll, click a composition.",
+        fr = "SIMULATION (pas de boss, pas de raid) : VITRINE DE STYLE ouverte. Molette = defiler, clique une composition.",
     },
     ["showcase.closed"] = {
         en = "Style showcase closed.",
@@ -1373,50 +1375,15 @@ Locale.STRINGS = {
         en = "the style showcase is not open (/gr sim style).",
         fr = "la vitrine de style n'est pas ouverte (/gr sim style).",
     },
-    ["showcase.previewOnly"] = {
-        en = "Preview style: %s (SHOWCASE ONLY - /gr style %s to apply it to the combat panel).",
-        fr = "Style en apercu : %s (VITRINE SEULEMENT - /gr style %s pour l'appliquer au panneau de combat).",
-    },
-    ["showcase.styleSelected"] = {
-        en = "Real style set to %s: the intermission panel of the next fight uses it (persisted).",
-        fr = "Style reel regle sur %s : le panneau d'intermission du prochain combat l'utilise (persiste).",
-    },
     ["showcase.animUpdated"] = {
         en = "Showcase animations: %s (persisted).",
         fr = "Animations de la vitrine : %s (persiste).",
     },
-    -- THE SIX CANDIDATE STYLES of the validated board + the GIDEON direction.
+    -- THE ONE CARD OF THE GUILD. The candidate gallery (2..6, `card`, `gideon`) is
+    -- gone: `style.1` is the thin card of option 1, painted with the GIDEON palette.
     ["style.1"] = {
-        en = "bare card",
-        fr = "encart nu",
-    },
-    ["style.2"] = {
-        en = "gilded card",
-        fr = "encart dore",
-    },
-    ["style.3"] = {
-        en = "Blizzard button",
-        fr = "bouton Blizzard",
-    },
-    ["style.4"] = {
-        en = "action slot",
-        fr = "case d'action",
-    },
-    ["style.5"] = {
-        en = "bare image + shadow",
-        fr = "image nue + ombre",
-    },
-    ["style.6"] = {
-        en = "double frame",
-        fr = "double cadre",
-    },
-    ["style.gideon"] = {
-        en = "GIDEON (night blue + gold)",
-        fr = "GIDEON (bleu nuit + or)",
-    },
-    ["style.card"] = {
-        en = "delivered card",
-        fr = "encart livre",
+        en = "guild card (thin border)",
+        fr = "encart de la guilde (bordure fine)",
     },
     ["palette.background"] = {
         en = "BACKGROUND - fill of the cards",
@@ -1475,24 +1442,24 @@ Locale.STRINGS = {
         fr = "MUTED - texte secondaire",
     },
     ["cmd.style.status"] = {
-        en = "intermission panel style: %s (candidates: %s)",
-        fr = "style du panneau d'intermission : %s (candidats : %s)",
+        en = "intermission panel style: %s - the guild card is the ONLY style (%s), there is nothing left to choose.",
+        fr = "style du panneau d'intermission : %s - l'encart de la guilde est le SEUL style (%s), il n'y a plus rien a choisir.",
     },
     ["cmd.style.updated"] = {
-        en = "Intermission panel style set to %s (persisted: the combat panel uses it from now on).",
-        fr = "Style du panneau d'intermission regle sur %s (persiste : le panneau de combat l'utilise des maintenant).",
+        en = "Intermission panel style set to %s (persisted - it is the only style).",
+        fr = "Style du panneau d'intermission regle sur %s (persiste - c'est le seul style).",
     },
     ["cmd.style.unknown"] = {
-        en = "unknown style: %s (expected 1..6, gideon or shipped)",
-        fr = "style inconnu : %s (attendu 1..6, gideon ou shipped)",
+        en = "unknown style: %s (the guild card is the only style: expected 1 or shipped)",
+        fr = "style inconnu : %s (l'encart de la guilde est le seul style : attendu 1 ou shipped)",
     },
     ["cmd.style.help"] = {
-        en = "/gr style <1..6|gideon|shipped>: style of the COMBAT intermission panel (persisted)",
-        fr = "/gr style <1..6|gideon|shipped> : style du panneau d'intermission en COMBAT (persiste)",
+        en = "/gr style [1|shipped]: style of the COMBAT intermission panel - ONE single style, nothing to choose (persisted)",
+        fr = "/gr style [1|shipped] : style du panneau d'intermission en COMBAT - UN SEUL style, rien a choisir (persiste)",
     },
     ["cmd.sim.style"] = {
-        en = "/gr sim style [1..6|gideon]: opens the STYLE SHOWCASE (simulation only, no boss)",
-        fr = "/gr sim style [1..6|gideon] : ouvre la VITRINE DE STYLE (simulation seulement, sans boss)",
+        en = "/gr sim style [1|shipped]: opens the STYLE SHOWCASE (simulation only, no boss)",
+        fr = "/gr sim style [1|shipped] : ouvre la VITRINE DE STYLE (simulation seulement, sans boss)",
     },
     ["cmd.sim.anim"] = {
         en = "/gr sim anim on|off: showcase animations (fade-in + pulse), persisted",
@@ -1503,8 +1470,8 @@ Locale.STRINGS = {
         fr = "animations de la vitrine : %s (persistees, actives par defaut)",
     },
     ["cmd.sim.styleUnknown"] = {
-        en = "unknown style: %s (expected 1..6 or gideon)",
-        fr = "style inconnu : %s (attendu 1..6 ou gideon)",
+        en = "unknown style: %s (the guild card is the only style: expected 1 or shipped)",
+        fr = "style inconnu : %s (l'encart de la guilde est le seul style : attendu 1 ou shipped)",
     },
     ["cmd.sim.animUsage"] = {
         en = "usage: /gr sim anim on|off (unknown value refused)",

@@ -97,11 +97,8 @@ end
      a future style is one entry in Core and one name passed to these helpers.
 ]]
 --- Applies the style `styleName` (Core/Layout.BUTTON_STYLES) to a card frame.
---- THE INSETS COME FROM THE STYLE TOO: a 9-slice border as thick as the style #6
---- needs its own insets, and the ONE place that knows them is the style table in
---- Core (a UI/ file would be a second source of truth).
---- A style MAY declare a SECOND, INNER border ("double frame"): UI.ApplyInnerBorder
---- draws it on a child frame, below.
+--- THE INSETS COME FROM THE STYLE TOO: the ONE place that knows them is the style
+--- table in Core (a UI/ file would be a second source of truth).
 --- @param frame Frame the frame to dress
 --- @param styleName string|nil name of the style (Layout.CHOICE_STYLE by default)
 --- @return table the style table applied (never nil)
@@ -122,47 +119,7 @@ function UI.ApplyCardStyle(frame, styleName)
         })
     end
     frame.cardStyle = style
-    UI.ApplyInnerBorder(frame, style)
     return style
-end
-
---[[ THE OPTIONAL SECOND BORDER of a card ("double frame", style #6).
-
-     A style declares `innerEdgeSize` / `innerInset` / `innerEdgeFile` when it
-     wants a second, INNER border (the "passe-partout" of the validated board).
-     The child frame is created ONCE per card and reused: a style change is a
-     re-point + a re-colour, never a new frame in the middle of a fight.
-     A style WITHOUT an inner border hides the child (if the card ever had one).
-]]
---- @param frame Frame a card
---- @param style table the style table to apply
---- @return Frame|nil the inner border frame (nil when the style has none)
-function UI.ApplyInnerBorder(frame, style)
-    local thickness = tonumber(style.innerEdgeSize)
-    local inner = frame.innerBorder
-    if thickness == nil then
-        if inner ~= nil then
-            inner:Hide()
-        end
-        return nil
-    end
-    if inner == nil then
-        inner = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        frame.innerBorder = inner
-    end
-    inner:ClearAllPoints()
-    local inset = tonumber(style.innerInset) or 0
-    inner:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
-    inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
-    if type(inner.SetBackdrop) == "function" then
-        inner:SetBackdrop({
-            edgeFile = style.innerEdgeFile or style.edgeFile,
-            edgeSize = thickness,
-            insets = { left = thickness, right = thickness, top = thickness, bottom = thickness },
-        })
-    end
-    inner:Show()
-    return inner
 end
 
 --- The state of a card, for the ONLY feedback it has (the border lights up).
@@ -173,24 +130,19 @@ end
 UI.CARD_STATE = ns.Layout.CARD_STATE or { REST = "rest", HOVER = "hover", PRESSED = "pressed" }
 
 --- The card's border/background colours of a state. NOTHING else moves and
---- nothing else is drawn: no glow, no pushed texture, no label - "the border
---- lights up, nothing more" (raid-lead request).
---- The OPTIONAL INNER border (style #6) follows the same state, and the halo of a
---- 9-slice style (GIDEON) is part of its border texture: it is therefore tinted by
---- this same call, with no extra drawing code.
+--- nothing else is drawn: no glow, no pushed texture, no label, no second frame -
+--- "the border lights up, nothing more" (raid-lead request). The ONE card of the
+--- addon is the 1 px border of option 1, tinted with the GIDEON palette.
 --- @param frame Frame a card
 --- @param state string|nil UI.CARD_STATE value (REST by default)
 --- @return table { r, g, b, a } the border colour applied
 function UI.CardBorder(frame, state)
     local style = frame.cardStyle or ns.Layout.style(nil)
     local border = style.border
-    local innerBorder = style.innerBorder
     if state == UI.CARD_STATE.HOVER then
         border = style.borderHover
-        innerBorder = style.innerBorderHover or innerBorder
     elseif state == UI.CARD_STATE.PRESSED then
         border = style.borderPressed
-        innerBorder = style.innerBorderPressed or innerBorder
     end
     if type(frame.SetBackdropBorderColor) == "function" then
         frame:SetBackdropBorderColor(border.r, border.g, border.b, border.a)
@@ -198,10 +150,6 @@ function UI.CardBorder(frame, state)
     local background = style.background
     if background ~= nil and type(frame.SetBackdropColor) == "function" then
         frame:SetBackdropColor(background.r, background.g, background.b, background.a)
-    end
-    local inner = frame.innerBorder
-    if inner ~= nil and type(inner.SetBackdropBorderColor) == "function" and innerBorder ~= nil then
-        inner:SetBackdropBorderColor(innerBorder.r, innerBorder.g, innerBorder.b, innerBorder.a)
     end
     -- THE STATE IS REMEMBERED ON THE CARD: a redraw (a style change, a new click in
     -- the showcase) re-applies it instead of snapping a hovered card back to rest.

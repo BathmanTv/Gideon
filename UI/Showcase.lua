@@ -1,10 +1,12 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / UI / Showcase.lua
 
-    THE STYLE SHOWCASE: the in-game surface where the raid lead SEES what the
-    design can do (every font size, the palette with its hex codes, the three
-    states of a card, the seven candidate frame styles, two animations) and
-    CHOOSES - instead of judging on a board built outside the game.
+    THE STYLE SHOWCASE: the in-game surface where the raid lead SEES the design -
+    every font size, the palette with its hex codes, the three states of a card,
+    the guild card at the real size of a fight, two animations - instead of
+    judging on a board built outside the game. THERE IS NO STYLE PICKER ANY MORE
+    (raid-lead decision 2026-09-25, "keep option 1"): the gallery of candidates is
+    gone and the showcase shows the ONE delivered card.
 
     RENDERING LAYER ONLY. Every block, every size, every colour, every label and
     the action of every click come from Core/Layout.lua (Layout.showcasePanel and
@@ -13,7 +15,8 @@
     fight is running) and NOTHING in the combat path ever calls it.
 
     IT EXISTS IN SIMULATION ONLY:
-      - `/gr sim style` opens it, `/gr sim style <candidate>` previews a candidate;
+      - `/gr sim style` opens it, `/gr sim style 1` (or `shipped`) is accepted,
+        anything else is refused;
       - it REFUSES to open while a real intermission is running, exactly like a
         rehearsal does (UI.IntermissionRealFlowBusy);
       - the SIMULATION banner lives in a FIXED strip above the scrolling area, so
@@ -172,8 +175,9 @@ local function ensureShowcase()
     s.bannerHint:SetText("")
     s.bannerHint:Hide()
 
-    -- THE SCROLLING CONTENT: the showcase is taller than the window (it shows
-    -- seven style examples at the real size of a fight card), so the content is a
+    -- THE SCROLLING CONTENT: the showcase is taller than the window (typography,
+    -- palette, and the ONE guild card example at the real size of a fight card), so
+    -- the content is a
     -- child of a ScrollFrame and the wheel scrolls it.
     s.scroll = CreateFrame("ScrollFrame", "GideonRaidStyleShowcaseScroll", s)
     s.scroll:EnableMouseWheel(true)
@@ -211,9 +215,9 @@ local function elementFor(block)
     if block.kind == "row" then
         return nil
     elseif block.kind == "image" then
-        -- A CARD: clickable in the showcase (a composition declares itself, a
-        -- style previews itself), so it is built as a Button and never as a plain
-        -- Frame (which has no label and no click).
+        -- A CARD: clickable in the showcase (a composition declares itself), so it
+        -- is built as a Button and never as a plain Frame (which has no label and
+        -- no click).
         frame = UI.CreateCard("Button", parent, block.style)
         frame:RegisterForClicks("LeftButtonUp")
         frame:SetScript("OnEnter", function(self)
@@ -229,10 +233,10 @@ local function elementFor(block)
             UI.CardBorder(self, UI.CARD_STATE.HOVER)
         end)
         frame:SetScript("OnClick", function(self)
+            -- DECLARE is the ONLY action a card can carry now: there is no
+            -- candidate style left to preview.
             if self.showcaseAction == Layout.SHOWCASE_ACTION.DECLARE then
                 UI.ShowcaseDeclare(self.showcaseState)
-            elseif self.showcaseAction == Layout.SHOWCASE_ACTION.PREVIEW_STYLE then
-                UI.ShowcaseSetPreview(self.showcaseStyleName)
             end
         end)
     elseif block.kind == "swatch" then
@@ -268,9 +272,6 @@ local function collectElements(layout)
             if block.state ~= nil then
                 frame.showcaseState = block.state
             end
-            if block.style ~= nil and block.kind == "image" then
-                frame.showcaseStyleName = block.style
-            end
             if block.cardState ~= nil then
                 frame.showcaseForcedState = block.cardState
             end
@@ -284,9 +285,6 @@ local function collectElements(layout)
                 end
                 if current.state ~= nil then
                     itemFrame.showcaseState = current.state
-                end
-                if current.style ~= nil and current.kind == "image" then
-                    itemFrame.showcaseStyleName = current.style
                 end
                 if current.cardState ~= nil then
                     itemFrame.showcaseForcedState = current.cardState
@@ -458,10 +456,10 @@ function UI.ShowcaseRefresh()
     return layout
 end
 
---- OPENS the style showcase (`/gr sim style`, and `/gr sim style <candidate>`).
+--- OPENS the style showcase (`/gr sim style`, and `/gr sim style 1|shipped`).
 --- REFUSED while a real fight is running or a timeline is armed: the showcase is a
 --- SIMULATION surface, and nothing in it may ever appear during an intermission.
---- @param raw string|nil candidate style written by the player (1..6, gideon)
+--- @param raw string|nil style written by the player (the delivered card only)
 --- @return Frame|nil the showcase frame (nil when it was refused)
 function UI.ShowcaseOpen(raw)
     local c = config()
@@ -508,28 +506,6 @@ function UI.ShowcaseClose()
     stopAnimations()
     showcase:Hide()
     return wasShown
-end
-
---- PREVIEWS a candidate style in the showcase (`/gr sim style <candidate>`, and a
---- click on a style example): the whole showcase is redrawn with it, so the raid
---- lead judges it on the REAL size of a fight card. The COMBAT panel is NOT
---- touched (`/gr style <candidate>` is the command that changes it).
---- BOUNDED: an unknown value is REFUSED, nothing is guessed and nothing changes.
---- @param raw string|nil
---- @return string|nil the accepted canonical style name
-function UI.ShowcaseSetPreview(raw)
-    local name = Layout.resolveStyle(raw)
-    if name == nil or not Layout.isCandidateStyle(name) then
-        UI.Print(Locale.format("cmd.sim.styleUnknown", tostring(raw)))
-        return nil
-    end
-    previewStyle = name
-    persist("showcaseStyle", name)
-    if UI.ShowcaseIsShown() then
-        UI.ShowcaseRefresh()
-    end
-    UI.Print(Locale.format("showcase.previewOnly", Layout.styleLabel(name), Layout.styleNumber(name) or name))
-    return name
 end
 
 --- `/gr sim anim on|off` (and `/gr sim anim` alone, which recalls the setting):

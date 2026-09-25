@@ -4,6 +4,66 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.4] - 2026-09-25
+
+**The style gallery is retired: there is now ONE card style, and it carries the
+GIDEON colours.** Raid-lead decision after seeing both designs in the showcase:
+*"keep option 1"*.
+
+### Changed
+
+- **`Layout.BUTTON_STYLES` holds a single entry** (`Layout.SHIPPED_STYLE = "1"`):
+  the **thin card of option 1** — a **1 px** border (`Interface\Buttons\WHITE8X8`),
+  a padding of 6 px and a discreet dark fill behind the picture — painted with the
+  GIDEON constants that were already in `Core/Layout.lua`: **gold** `GIDEON_GOLD`
+  (`#D19A45`) at rest, **cyan** `GIDEON_CYAN` (`#7ADBFA`) under the mouse, **bright
+  gold** `GIDEON_GOLD_HI` (`#FFE982`) while pressed, `GIDEON_PANEL` (`#0A0C22`) as the
+  background at alpha 0.92. The guild identity is a **colour**, never a thicker frame.
+- `Layout.STYLE_ORDER` is **empty**: no surface can offer a choice that no longer
+  exists. `Layout.CHOICE_STYLE` is the delivered style, and every alias (`1`,
+  `shipped`, `bare`, `nu`, `encartnu`) resolves to the one and same table.
+- `/gr style` with no argument now prints the style in use **and the fact that there
+  is no choice left**; `/gr style 1` (and `shipped`, `bare`, `nu`, `encartnu`) is
+  accepted and persisted. `Config.DEFAULT_STYLE` is `Layout.SHIPPED_STYLE`, and
+  `Config.STYLE_NAMES` stays the exact mirror of `Layout.BUTTON_STYLES` — one entry.
+- The **style showcase** (`/gr sim style`) keeps everything the raid lead uses: the
+  three clickable compositions with their sound, the typography with its sizes, the
+  palette with its hexadecimal codes, the three card states, the animations
+  (`/gr sim anim on|off`) and the pinned SIMULATION banner. Its section 5 now shows
+  **one single example**, the guild card, labelled as such and not as a number.
+- `UI.ShowcaseSetPreview` is gone with the gallery: clicking an example no longer
+  swaps the preview style, because there is nothing to swap to.
+
+### Removed
+
+- The five remaining candidates of the validated board — **2** *encart doré*,
+  **3** *bouton Blizzard*, **4** *case d'action*, **5** *image nue + ombre*,
+  **6** *double cadre* — and the former `card` (thin grey border) and `gideon`
+  (gold nine-slice) presets: **deleted, data included**. `/gr style 2`, `/gr style
+  gideon`, `/gr style card`, `/gr style 99` and an empty value are **refused** with a
+  clear message and **nothing is persisted**.
+- `Texture/gideon-frame.tga` — **removed from the `.toc` and from the package** (the
+  zip now ships 4 textures instead of 5) — and its generator
+  `tools/make_gideon_frame.py`, which only served the nine-slice `gideon` style. The
+  file can be regenerated if a thick nine-slice frame is ever asked for again.
+- `Textures.gideonFramePath` / `Textures.gideonFrameSize`, the `ApplyInnerBorder`
+  path of `UI/Panel.lua` (the second frame of style 6), the locale keys
+  `style.2` … `style.6`, `style.card`, `style.gideon` and the showcase strings of the
+  gallery (`showcase.previewOnly`, `showcase.styleSelected`).
+
+### Notes
+
+- **A `SavedVariables` written by an older version is safe**: a stored `gideon`,
+  `card`, `2` … value falls back to the guild card, silently and without an error.
+- The **GIDEON palette constants are untouched** and stay the single source of the
+  guild colours (`Core/Layout.lua`); the showcase still prints each one with its hex
+  code so a value can be dictated without ambiguity.
+- The combat panel is unchanged: no title, the three picture cards, one word after
+  the click (PING / CHASSEUR 44 px, BOSS 64 px), sound on the click only, bounded
+  close, drag, cross, CORRECT, the OK button of the placement, target `3445`.
+- **A client restart is needed** for the removed texture to disappear from the
+  loaded files (a `/reload` is not enough).
+
 ## [0.13.3] - 2026-09-25
 
 **The delivered style is now GIDEON.** Raid-lead decision after seeing it in the

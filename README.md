@@ -225,11 +225,12 @@ and opens again at the next intermission.
 /gr sim inter   # "Intermission group": the panel opens RIGHT AWAY, click your composition,
                 # correct it with REDO, then close it YOURSELF (X or Close). One single cycle.
 /gr sim style   # STYLE SHOWCASE: the three cards, the whole typography, the palette with its
-                # hex codes, the seven candidate card styles, the animations (no boss, no raid)
-/gr sim style 4 # same, with candidate style 4 applied to the live preview
+                # hex codes, THE guild card, the animations (no boss, no raid)
+/gr sim style 1 # same, with the guild card (the only style) applied to the live preview
 /gr sim anim off# switch the showcase animations off (persisted; "on" puts them back)
-/gr style gideon# which card style the intermission panel REALLY uses in a fight (persisted)
-/gr style shipped # go back to the delivered style
+/gr style 1     # the card style of the intermission panel, persisted (the ONLY style there is;
+                # "shipped", "bare", "nu" and "encartnu" all name it too)
+/gr style       # which card style a fight really uses, and that there is no choice left
 /gr sim ping    # PING HELP (= /gr pinghelp): how to bind one key per ping, and how to ping yourself
 /gr sim stop    # close the rehearsal or the help window (= the Close button, = the cross)
 ```
@@ -504,14 +505,23 @@ truncated nor pushed out of the frame. The green and the size come from the shar
 theme (`Core/Layout.lua`), never from literals scattered in the UI. `CORRECT`
 stays available, discreet, and brings the three pictures back.
 
-**The style of a card is a parameter.** `Layout.BUTTON_STYLES` holds the styles and
-`Layout.CHOICE_STYLE` names the one in use. Seven presets are defined as **data** — the five
-richer candidates, `card` (the former thin-bordered default, kept so the raid lead can
-go back to it) and `gideon`, which is **the DELIVERED style** since 2026-09-25 (see
-``The style showcase'' below) — and `/gr style <name>` picks the one the intermission
-panel really uses during a fight (persisted; an unknown value is refused). Adding a style is an entry in that table — `UI.ApplyCardStyle` reads
-whatever Core names, and tests lock the geometry, the padding and the border colours
-of every entry down.
+**The style of a card is a parameter — and there is only ONE style.** Since the
+raid-lead decision of 2026-09-25 (*"keep option 1"*), `Layout.BUTTON_STYLES` holds a
+**single entry**: the **thin card of option 1** of the validated board — a **1 px**
+border, a discreet dark fill behind the picture, no Blizzard button chrome, no text —
+painted with the **GIDEON constants** (`Core/Layout.lua`): **gold** at rest
+(`#D19A45`), **cyan** under the mouse (`#7ADBFA`), **bright gold** while pressed
+(`#FFE982`), **night-blue** background (`#0A0C22`, alpha 0.92). `Layout.SHIPPED_STYLE = "1"`
+is that style, `Layout.CHOICE_STYLE` names the one in use, `Layout.STYLE_ORDER` is
+**empty** — the candidate gallery (2 *encart doré*, 3 *bouton Blizzard*,
+4 *case d'action*, 5 *image nue + ombre*, 6 *double cadre*) and the former `card` and
+`gideon` presets are **deleted, data included**, with their texture and their
+generator. `/gr style <name>` accepts `1` / `shipped` / `bare` / `nu` / `encartnu`,
+persists the choice, and **refuses anything else** without persisting (nothing is
+guessed). A `SavedVariables` left over from an older version (`gideon`, `card`, `2`…)
+falls back to the guild card, silently and without an error. Adding a style back would
+be one entry in that table — `UI.ApplyCardStyle` reads whatever Core names, and tests
+lock the geometry, the padding, the palette and the **absence of any other style** down.
 
 **The "no leftover title" rule.** Each panel built by `Core/Layout.lua` carries its
 own id, and `Layout.violations()` refuses any text block the panel is not allowed to
@@ -563,7 +573,7 @@ not an orb state).
 **A new texture file needs a client RESTART** (a `/reload` does not load files
 added after the client started) — exactly like a new sound file.
 
-#### The style showcase (`/gr sim style`) — choosing the design in game
+#### The style showcase (`/gr sim style`) — seeing the design in game
 
 The raid lead asked for the simulation panel to become a **showcase**: *"on voit
 rien ^^ — il doit servir d'exemple pour voir les animations, polices, etc."*.
@@ -580,25 +590,32 @@ be mistaken for a pull) that displays:
   not reacting to the mouse, so the feedback is judged without guessing;
 - **the palette**: the theme roles and the eight `GIDEON_*` constants, **each with its
   hexadecimal code printed**, so the raid lead can dictate a value to change;
-- **the seven candidate styles**, clickable to apply live to the preview;
+- **the guild card**: **one single example**, drawn at the real size of a fight card,
+  with the hex codes of its border and of its background under it — labelled as *the
+  guild card*, not as a number. There is **no gallery left to browse**;
 - **the animations**: a fade-in at the opening and a discreet pulse on the first
   card, switched with `/gr sim anim on|off` (persisted).
 
-**The Gideon style.** The raid lead supplied GIDEON's artwork (chrome helmet, gold
+**The GIDEON identity.** The raid lead supplied GIDEON's artwork (chrome helmet, gold
 filigree, night-blue glass, cyan glow) with one instruction: *"we want a design
-unique to GIDEON"*. Its palette was **sampled from that picture** and lives as named
-constants in `Core/Layout.lua` — the single source: `GIDEON_NIGHT`, `GIDEON_PANEL`,
-`GIDEON_ROYAL`, `GIDEON_CYAN`, `GIDEON_GOLD`, `GIDEON_GOLD_HI`, `GIDEON_CHROME`,
-`GIDEON_MUTED`. The frame is a **64×64 nine-slice** TGA
-(`Texture/gideon-frame.tga`) generated deterministically by
-`tools/make_gideon_frame.py` — a **white mask with alpha**, tinted at runtime, so a
-single file covers every state: gold at rest, cyan on hover, bright gold pressed.
-**Gideon is the DELIVERED style** (raid-lead decision, 2026-09-25, after seeing it in
-the showcase): a fresh install gets the night-blue card with the gold border, the
-cyan halo under the mouse and the bright gold press. The former thin grey border is
-untouched and stays selectable with `/gr style card`; `/gr style shipped` always
-means "the delivered style, whatever it is", and is answered centrally so no stale
-alias can survive a change of default.
+unique to GIDEON"*. Its palette is **sampled from that picture** and lives as named
+constants in `Core/Layout.lua` — the single source, and **each is used exactly once**:
+`GIDEON_NIGHT` `#04050F`, `GIDEON_PANEL` `#0A0C22`, `GIDEON_ROYAL` `#08218E`,
+`GIDEON_CYAN` `#7ADBFA`, `GIDEON_GOLD` `#D19A45`, `GIDEON_GOLD_HI` `#FFE982`,
+`GIDEON_CHROME` `#FFFFFF`, `GIDEON_MUTED` `#A9B4C7`. The card style and the showcase
+both **read those constants** — one named constant per colour, here and nowhere else —
+so the hex code the showcase prints and the colour the client paints can never drift.
+
+After seeing the two designs in the showcase the raid lead ruled
+(2026-09-25): ***"keep option 1"***. So the guild identity is now carried by the
+**thin card of option 1 recoloured with the GIDEON palette** — a **1 px** border that
+goes **gold → cyan → bright gold**, on a night-blue fill — instead of by a thick
+nine-slice frame. The former nine-slice TGA (`Texture/gideon-frame.tga`) and its
+generator (`tools/make_gideon_frame.py`) are **removed** with it; the file is no
+longer listed in the `.toc` nor shipped in the package. The fonts
+(`Layout.WORD_FONT_FILE`), the cyan/gold variants of the giant word, the palette and
+the showcase itself are **untouched** — that is the design vocabulary the raid lead
+keeps.
 
 ## 4. In-game language — English by default, French on a frFR client
 
@@ -714,10 +731,12 @@ the **auto-open boss filter + intermission start sound**, the **delivered defaul
 target (measured id 3445) + `/gr diag`**, the **three pictures + one word panel with
 the click-only soundboards**, and the **0.13.1 pass (placement panel = the
 illustration alone, no title anywhere on the intermission panel, the word five
-notches bigger, the buttons turned into thin-bordered cards), and the **0.13.2
+notches bigger, the buttons turned into thin-bordered cards), the **0.13.2
 pass (the simulation panel turned into a style showcase, the Gideon style sampled
 from the artwork, the OK button back, and the fix of the applier bug that left every
-panel empty)**):
+panel empty)** and the **0.13.4 pass (the gauge of styles is retired: the guild card
+is the ONLY style, the five candidates 2..6 plus `card` and `gideon` deleted with
+their texture and their generator)**):
 
 ```
 $ make check
@@ -725,12 +744,12 @@ stylua --check .
 luacheck .
 Total: 0 warnings / 0 errors in 32 files        # luacheck
 python3 tools/check_toc.py GideonRaid.toc
-OK GideonRaid.toc                              # check_toc (23 files listed: 14 lua + 4 sounds + 5 textures)
+OK GideonRaid.toc                              # check_toc (22 files listed: 14 lua + 4 sounds + 4 textures)
 busted
-397 successes / 0 failures / 0 errors / 0 pending : 4.96 seconds
+398 successes / 0 failures / 0 errors / 0 pending : 5.01 seconds
 ```
 
-The 397 tests are spread over `intermission_spec.lua` (91 — including the
+The 398 tests are spread over `intermission_spec.lua` (91 — including the
 resolution of the **delivered target**: never configured vs explicit
 `/gr boss clear` vs player addition, and the **removal** of the old placement text
 blob: `setupView` and its locale keys must stay gone),
@@ -753,8 +772,11 @@ any leftover title**, no truncation of `Chasseur`/`BOSS`), `locale_spec.lua` (21
 the **silence gate** of the audio probe, the verdict of each of the 4 sound files, the
 report lines, and the wiring: **no sound is ever played when the client is audible**),
 `texture_spec.lua` (15 — TGA headers read byte by byte, the three orb screenshots
-**and the placement illustration**), `showcase_spec.lua` (37 — the style showcase: every section produces a block, the
-seven styles as data, the pinned SIMULATION banner, the palette with its hex codes,
+**and the placement illustration**), `showcase_spec.lua` (38 — the style showcase: every section produces a block,
+**the single style locked down** (`STYLE_ORDER` empty, one entry in `BUTTON_STYLES`
+and in `Config.STYLE_NAMES`, the five candidates plus `card` and `gideon` refused with
+no data and no file left, an old `SavedVariables` falling back to the guild card, the
+1 px gold→cyan→bright-gold border measured in **perceived luminance**), the pinned SIMULATION banner, the palette with its hex codes,
 the switchable animations, the showcase refused during a real fight, the placement
 panel = illustration + OK), `simulation_spec.lua` (14 — pure rehearsal +
 ping help), `pairing_spec.lua` (11) and `guard_spec.lua` (11 — anti-forbidden-API

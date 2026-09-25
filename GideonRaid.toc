@@ -111,15 +111,9 @@ Texture\3v1r.tga
 # size, tests/spec/texture_spec.lua compares it with the header of the file).
 Texture\placement.tga
 
-# THE GIDEON FRAME (the 9-slice border of the "GIDEON" card style, a CANDIDATE the
-# raid lead previews in the style showcase with /gr sim style gideon). Same rules
-# as every other texture: a 32-bit uncompressed TGA in Texture/, listed HERE (an
-# unlisted texture loaded by path is not loaded at all), and its real size is
-# compared with the header of the file by tests/spec/texture_spec.lua.
-# IT IS GENERATED, NOT HAND-MADE: tools/make_gideon_frame.py writes it from pure
-# arithmetic (no Pillow, no source image) and can verify it byte for byte:
-#     python3 tools/make_gideon_frame.py --check
-# It is WHITE on purpose (a 2 px border + a soft inner halo, 64x64): the colour
-# comes from the game (SetBackdropBorderColor), so the style is pure DATA - gold at
-# rest, CYAN on hover, bright gold on press.
-Texture\gideon-frame.tga
+# THE GIDEON FRAME IS GONE (0.13.4): Texture/gideon-frame.tga and its generator
+# tools/make_gideon_frame.py only served the `gideon` card style, which the raid
+# lead dropped ("keep option 1"). The guild identity now comes from the GIDEON
+# COLOURS applied to the 1 px border of the single remaining card
+# (Layout.GIDEON_* -> Layout.BUTTON_STYLES), so the file must NOT be listed here
+# any more: tests/spec/showcase_spec.lua fails if it comes back.

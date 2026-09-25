@@ -951,10 +951,11 @@ function UI.SimulationCommand(raw)
     elseif mode == "ping" then
         UI.SimulationPingStart()
     elseif mode == "style" then
-        -- `/gr sim style [1..6|gideon]`: the STYLE SHOWCASE - every font size, the
-        -- palette with its hex codes, the three states of a card, the seven frame
-        -- styles and the two animations, shown IN GAME so the raid lead chooses
-        -- there. An unknown candidate is refused by the showcase itself.
+        -- `/gr sim style [1|shipped]`: the STYLE SHOWCASE - every font size, the
+        -- palette with its hex codes, the three states of a card, the ONE guild card
+        -- and the two animations, shown IN GAME so the raid lead judges the design
+        -- there. Since the raid-lead decision of 2026-09-25 there is a single style,
+        -- so anything else is refused by the showcase itself.
         UI.ShowcaseOpen(options.argument)
     elseif mode == "anim" then
         -- `/gr sim anim on|off`: the showcase animations (fade-in + border pulse),

@@ -2,19 +2,22 @@
     tests/spec/showcase_spec.lua   (busted)
     VITRINE DE STYLE (UI/Showcase.lua) : la surface ou le raid lead VOIT, en jeu,
     tout ce que le design sait faire - au lieu de juger sur une planche HTML hors
-    du jeu.
+    du jeu. DEPUIS LA 0.13.4 IL N'Y A PLUS DE GALERIE : l'encart de la guilde est
+    le SEUL style (decision du raid lead, « garde l'option 1 »).
 
     Familles de tests :
       1. le PLAN est complet (chaque section produit au moins un bloc), sans
-         violation, sans identifiant en double ;
-      2. les SEPT styles de cadre candidats existent, sont dessines (bordure, fond,
-         ombre/cadre interne selon le style) et sont des DONNEES : ajouter un style
-         ne demande aucune ligne de rendu en plus ;
+         violation, sans identifiant en double, SANS BLOC VIDE NI CADRE FANTOME
+         laisse par les sections supprimees ;
+      2. IL N'EXISTE QU'UN STYLE : STYLE_ORDER vide, une seule entree dans
+         BUTTON_STYLES, une seule dans Config.STYLE_NAMES, et l'encart de la
+         guilde porte la palette GIDEON avec la bordure FINE de l'option 1 ;
       3. la PALETTE : les 8 constantes GIDEON et les 6 roles du panneau, chacun avec
          son code hexadecimal ecrit en clair ;
       4. l'allow-list de texte de la vitrine (regle structurelle de Layout) ;
-      5. le style CHOISI est persiste, une valeur inconnue est REFUSEE, et Gideon
-         reste un CANDIDAT (le style livre reste le defaut) ;
+      5. le style CHOISI est persiste, une valeur inconnue - ou un ANCIEN style
+         (`gideon`, `card`, `2`..) - est REFUSEE en commande et retombe proprement
+         sur l'encart de la guilde dans une sauvegarde ;
       6. les ANIMATIONS existent, sont BORNES et se coupent (et le panneau de combat
          n'en a AUCUNE) ;
       7. le bouton OK du PLACEMENT : present pendant le placement, absent en combat,
@@ -57,110 +60,162 @@ end
 describe("Vitrine : le plan (Core/Layout, pur)", function()
     local ns
     local L
-    local T
 
     before_each(function()
         ns = wowenv.loadCore()
         L = ns.Layout
-        T = ns.Textures
     end)
 
-    it("expose les SEPT styles candidats, dans un ordre STABLE", function()
-        assert.are.same({ "1", "2", "3", "4", "5", "6", "card" }, L.STYLE_ORDER)
-        for index = 1, #L.STYLE_ORDER do
-            local name = L.STYLE_ORDER[index]
-            assert.is_not_nil(L.BUTTON_STYLES[name], name .. " doit exister")
-            assert.is_true(L.isCandidateStyle(name))
+    it("n'a QU'UN SEUL style : la galerie de candidats a disparu", function()
+        -- STYLE_ORDER est VIDE : rien ne peut plus proposer un choix qui n'existe
+        -- pas, et aucune entree morte ne survit dans BUTTON_STYLES.
+        assert.are.same({}, L.STYLE_ORDER)
+        local names = {}
+        for name in pairs(L.BUTTON_STYLES) do
+            names[#names + 1] = name
         end
-        -- Le style LIVRE n'est PAS dans les sept : on ne propose pas au raid lead
-        -- de « choisir » ce qui est deja en place. Il reste PREVISUALISABLE a la
-        -- demande (`/gr sim style gideon`), ce qui sert a comparer Gideon a l'existant.
-        assert.are.equal("gideon", L.SHIPPED_STYLE)
+        table.sort(names)
+        assert.are.same({ "1" }, names)
+        assert.are.equal("1", L.SHIPPED_STYLE)
+        assert.are.equal(L.SHIPPED_STYLE, L.CHOICE_STYLE)
+        assert.is_true(L.isCandidateStyle("1"))
         assert.is_true(L.isCandidateStyle(L.SHIPPED_STYLE))
-        for index = 1, #L.STYLE_ORDER do
-            assert.are_not.equal(L.SHIPPED_STYLE, L.STYLE_ORDER[index])
+        assert.is_true(L.isCandidateStyle("shipped"))
+        -- LES SIX CANDIDATS DE LA PLANCHE, `card` ET `gideon` SONT SUPPRIMES :
+        -- plus de donnee, plus de resolution, plus de candidat.
+        for _, gone in ipairs({ "2", "3", "4", "5", "6", "card", "gideon" }) do
+            assert.is_nil(L.BUTTON_STYLES[gone], gone .. " ne doit plus avoir de donnee")
+            assert.is_nil(L.resolveStyle(gone), gone .. " ne doit plus se resoudre")
+            assert.is_false(L.isCandidateStyle(gone), gone .. " ne doit plus etre un candidat")
         end
-        assert.is_false(L.isCandidateStyle("nope"))
         assert.is_false(L.isCandidateStyle("8"))
+        assert.is_false(L.isCandidateStyle("nope"))
     end)
 
-    it("chaque style est une DONNEE complete (bordure, fond, padding, etats)", function()
-        for index = 1, #L.STYLE_ORDER do
-            local name = L.STYLE_ORDER[index]
-            local style = L.style(name)
+    it("l'encart de la guilde : bordure FINE (option 1) et palette GIDEON exacte", function()
+        local style = L.style("1")
+        -- LA SIGNATURE de l'option 1 : une bordure de 1 px, JAMAIS epaissie, un
+        -- fond discret et un padding de 6 px. L'identite GIDEON passe par la
+        -- COULEUR, jamais par l'epaisseur du cadre.
+        assert.are.equal(1, style.edgeSize, "la bordure doit rester FINE (1 px)")
+        assert.are.equal("Interface\\Buttons\\WHITE8X8", style.edgeFile)
+        assert.are.equal("Interface\\Buttons\\WHITE8X8", style.bgFile)
+        assert.are.equal(6, style.padding)
+        assert.are.same({ left = 1, right = 1, top = 1, bottom = 1 }, style.insets)
+        -- LES COULEURS SONT LES CONSTANTES ELLES-MEMES.
+        assert.are.same(L.colorOf(L.GIDEON_GOLD), style.border, "bordure au repos = or Gideon")
+        assert.are.same(L.colorOf(L.GIDEON_CYAN), style.borderHover, "survol = cyan Gideon")
+        assert.are.same(L.colorOf(L.GIDEON_GOLD_HI), style.borderPressed, "appui = or vif Gideon")
+        assert.are.equal(L.hexOf(L.GIDEON_PANEL), L.hexOfColor(style.background))
+        assert.is_true(style.background.a > 0.9 and style.background.a < 0.95, "fond sombre ~0,92")
+        -- AUCUN second cadre : le style 6 (« double cadre ») est supprime.
+        assert.is_nil(style.innerEdgeSize)
+        assert.is_nil(style.innerBorder)
+        assert.is_true(L.cardPadding("1") > 0, "l'encart reserve une marge interieure")
+    end)
+
+    it("chaque style declare est une DONNEE complete, et FINE (aucun second cadre)", function()
+        -- Il n'y a qu'UNE entree, mais elle est verifiee comme la galerie l'etait :
+        -- une bordure, un fond, un padding et les trois etats sont OBLIGATOIRES, et
+        -- l'epaisseur reste celle de l'option 1 (1 px) - le style 6, qui declarait
+        -- un second cadre interieur, a disparu avec la galerie.
+        local count = 0
+        for name, style in pairs(L.BUTTON_STYLES) do
+            count = count + 1
             assert.is_string(style.edgeFile, name .. " : bordure (edgeFile) manquante")
             assert.is_true(tonumber(style.edgeSize) > 0, name .. " : edgeSize invalide")
+            assert.are.equal(1, tonumber(style.edgeSize), name .. " : la bordure de l'option 1 doit rester FINE")
             assert.is_table(style.background, name .. " : fond (background) manquant")
             assert.is_table(style.border, name .. " : bordure au repos manquante")
-            -- LE RETOUR VISUEL : survol et appui sont des couleurs, pas du code.
             assert.is_table(style.borderHover, name .. " : bordure au survol manquante")
             assert.is_table(style.borderPressed, name .. " : bordure a l'appui manquante")
             assert.is_true(L.cardPadding(name) >= 0, name .. " : padding invalide")
+            assert.is_nil(style.innerEdgeSize, name .. " : plus aucun style ne porte de second cadre")
+            assert.is_nil(style.innerBorder, name .. " : plus aucun style ne porte de second cadre")
         end
+        assert.are.equal(1, count, "une seule entree de style")
     end)
 
-    it("le style GIDEON : palette exacte, bordure or, survol cyan, appui dore clair", function()
-        local style = L.style("gideon")
-        -- BORDURE 2 px (au repos) : GIDEON_GOLD.
-        assert.are.same(L.colorOf(L.GIDEON_GOLD), style.border)
-        -- SURVOL : cyan + halo (le halo est CUIT dans la texture d'encadrement,
-        -- donc la bordure entiere prend la teinte cyan).
-        assert.are.same(L.colorOf(L.GIDEON_CYAN), style.borderHover)
-        -- APPUI : l'eclat dore.
-        assert.are.same(L.colorOf(L.GIDEON_GOLD_HI), style.borderPressed)
-        -- FOND : le verre bleu nuit.
-        assert.are.equal(L.hexOf(L.GIDEON_PANEL), L.hexOfColor(style.background))
-        -- LA TEXTURE D'ENCOURAGEMENT EST GENREE PAR tools/make_gideon_frame.py et
-        -- declaree dans Core/Textures.lua (jamais ecrite a la main dans Core/Layout).
-        assert.are.equal(T.gideonFramePath(), style.edgeFile)
-    end)
-
-    it("les SIX autres styles se distinguent les uns des autres", function()
-        -- Deux styles identiques n'auraient aucun interet : le raid lead doit
-        -- pouvoir les DEPARTER a l'oeil (bordure ou fond differents).
-        local seen = {}
-        for index = 1, #L.STYLE_ORDER do
-            local name = L.STYLE_ORDER[index]
-            local style = L.style(name)
-            local key = L.hexOfColor(style.border) .. "/" .. L.hexOfColor(style.background) .. "/" .. style.edgeFile
-            assert.is_nil(seen[key], name .. " est indiscernable de " .. tostring(seen[key]))
-            seen[key] = name
+    it("le style de la guilde est le SEUL : chaque alias mene a la meme table", function()
+        -- « une seule source de verite » : `1`, `shipped`, `bare`, `nu` et `encartnu`
+        -- doivent tous rendre LA MEME table (aucune copie qui pourrait diverger).
+        local reference = L.BUTTON_STYLES["1"]
+        for _, alias in ipairs({ "1", "shipped", "bare", "nu", "encartnu", "livre", "default" }) do
+            local resolved = L.resolveStyle(alias)
+            assert.is_not_nil(resolved, alias)
+            assert.are.equal(reference, L.style(resolved), alias .. " : deux tables differentes")
+            assert.are.equal(reference, L.style(alias), alias)
         end
+        -- Un nom absent ne rend jamais nil : le repli est le style livre.
+        assert.are.equal(reference, L.style(nil))
+        assert.are.equal(reference, L.style("gideon"))
+        assert.are.equal(reference, L.style("card"))
     end)
 
-    it("un style peut porter un SECOND cadre (le « double cadre ») sans code en plus", function()
-        local double = L.style("6")
-        assert.is_true(tonumber(double.innerEdgeSize) > 0, "le style 6 doit declarer son cadre interne")
-        assert.is_table(double.innerBorder, "le style 6 doit declarer la couleur de son cadre interne")
-        assert.is_true(tonumber(double.innerInset) >= 0)
-        -- Les autres styles n'en ont pas : la donnee est ABSENTE, pas a zero.
-        for index = 1, #L.STYLE_ORDER do
-            local name = L.STYLE_ORDER[index]
-            if name ~= "6" then
-                assert.is_nil(L.style(name).innerEdgeSize, name .. " ne doit pas avoir de cadre interne")
+    it("le panneau de COMBAT dessine l'encart de la guilde, sans qu'on le lui dise", function()
+        -- Le defaut du panneau EST le style livre : les trois encarts de combat
+        -- portent tous le meme style, celui de la guilde, sans option passee.
+        local layout = L.intermissionPanel({ showChoices = true })
+        assert.are.equal("", table.concat(L.violations(layout), " | "))
+        local seen = 0
+        for index = 1, #layout.blocks do
+            local block = layout.blocks[index]
+            if block.kind == "image" then
+                seen = seen + 1
+                assert.are.equal(L.CHOICE_STYLE, block.style, "encart " .. index)
+                assert.are.equal(L.SHIPPED_STYLE, block.style, "encart " .. index)
+                assert.are.equal(L.cardPadding(L.CHOICE_STYLE), block.padding, "encart " .. index)
+                -- Un encart de COMBAT ne porte jamais d'action de vitrine.
+                assert.is_nil(block.action, "encart " .. index)
             end
         end
+        assert.are.equal(#L.INTERMISSION_CHOICE_ORDER, seen, "les trois compositions sont des encarts")
+        -- L'illustration du PLACEMENT suit exactement le meme style.
+        local placement = L.placementPanel()
+        assert.are.equal("", table.concat(L.violations(placement), " | "))
+        assert.are.equal(L.CHOICE_STYLE, placement.blocks[1].style)
     end)
 
-    it("resout les alias et REFUSE une valeur inconnue", function()
+    it("le retour visuel est une COULEUR : la bordure s'eclaire au survol et a l'appui", function()
+        -- On mesure la LUMINANCE PERCUE et pas le canal rouge : le survol passe de
+        -- l'or (#D19A45) au CYAN (#7ADBFA) - rouge en baisse, vert et bleu en
+        -- hausse, luminance globale en hausse.
+        local style = L.style(L.CHOICE_STYLE)
+        local function lum(color)
+            return (0.2126 * color.r) + (0.7152 * color.g) + (0.0722 * color.b)
+        end
+        assert.is_true(lum(style.borderHover) > lum(style.border), "la bordure doit s'eclairer au survol")
+        assert.is_true(lum(style.borderPressed) > lum(style.border), "la bordure doit s'eclairer a l'appui")
+        -- ... et les trois etats sont DISTINCTS : comparer n'a de sens que s'ils
+        -- ne partagent pas la meme couleur.
+        local seen = {}
+        for _, color in ipairs({ style.border, style.borderHover, style.borderPressed }) do
+            local hex = L.hexOfColor(color)
+            assert.is_nil(seen[hex], "deux etats partagent la meme couleur : " .. hex)
+            seen[hex] = true
+        end
+    end)
+
+    it("resout les alias de l'encart de la guilde et REFUSE tout le reste", function()
         assert.are.equal("1", L.resolveStyle("1"))
-        assert.are.equal("6", L.resolveStyle("6"))
-        assert.are.equal("gideon", L.resolveStyle("gideon"))
-        assert.are.equal("gideon", L.resolveStyle("GIDEON"))
-        assert.are.equal("gideon", L.resolveStyle("  gideon  "))
-        -- « shipped » ramene le style LIVRE (la valeur persistee est toujours un nom
-        -- canonique : jamais le mot « shipped »).
-        assert.are.equal(L.SHIPPED_STYLE, L.resolveStyle("shipped"))
-        assert.are.equal("card", L.resolveStyle("card"))
-        -- TOUT LE RESTE EST REFUSE (aucun repli silencieux).
-        for _, bad in ipairs({ "0", "7", "99", "nope", "gideonn", "-1", "" }) do
+        for _, alias in ipairs({ "bare", "nu", "encartnu", "  BaRe  " }) do
+            assert.are.equal("1", L.resolveStyle(alias), alias)
+        end
+        -- « shipped » (et ses synonymes) ramene le style LIVRE : la valeur persistee
+        -- est toujours un nom canonique, jamais le mot « shipped ».
+        for _, alias in ipairs({ "shipped", "livre", "default" }) do
+            assert.are.equal(L.SHIPPED_STYLE, L.resolveStyle(alias), alias)
+        end
+        -- TOUT LE RESTE EST REFUSE (aucun repli silencieux) : les anciens candidats,
+        -- l'ancien encart et n'importe quelle valeur inconnue.
+        for _, bad in ipairs({ "0", "2", "3", "4", "5", "6", "7", "99", "card", "gideon", "nue", "nope", "-1", "" }) do
             assert.is_nil(L.resolveStyle(bad), tostring(bad) .. " doit etre refuse")
         end
         assert.is_nil(L.resolveStyle(nil))
         assert.is_nil(L.resolveStyle(7))
     end)
 
-    it("la vitrine a SEPT sections, chacune avec du contenu", function()
+    it("la vitrine a SIX sections, chacune avec du contenu", function()
         local layout = L.showcasePanel()
         assert.are.equal(L.PANEL.SHOWCASE, layout.panel)
         assert.are.equal("", table.concat(L.violations(layout), " | "))
@@ -176,13 +231,20 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
         -- 4. la palette (deux fois : celle du panneau, puis celle de GIDEON).
         assert.is_not_nil(textBlock(layout, "paletteHeader"))
         assert.is_not_nil(textBlock(layout, "gideonPaletteHeader"))
-        -- 5. les styles de cadre.
+        -- 5. l'encart de la guilde, UN SEUL exemple.
         assert.is_not_nil(textBlock(layout, "stylesHeader"))
         assert.is_not_nil(textBlock(layout, "styleCap1"))
-        assert.is_not_nil(textBlock(layout, "styleCap7"))
         -- 6. les animations.
         assert.is_not_nil(textBlock(layout, "animHeader"))
         assert.is_not_nil(textBlock(layout, "animLine"))
+        -- AUCUN BLOC VIDE, AUCUN CADRE FANTOME : les sections supprimees (la galerie
+        -- des 7 candidats) ne laissent ni deuxieme exemple, ni legende, ni rangee
+        -- derriere elles.
+        assert.is_nil(textBlock(layout, "styleCap2"))
+        assert.is_nil(textBlock(layout, "styleCap7"))
+        assert.is_nil(textBlock(layout, "stylesPreview"))
+        assert.is_nil(textBlock(layout, "styleRow1"))
+        assert.is_nil(textBlock(layout, "styleCard2"))
         -- Le contenu est PLUS GRAND que la fenetre : il y a de quoi faire defiler.
         assert.is_true(layout.height > L.SHOWCASE_WINDOW_HEIGHT, "la vitrine doit etre scrollable")
     end)
@@ -218,38 +280,36 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
         end
     end)
 
-    it("les 7 styles sont DESSINES dans la vitrine, chacun dans son style", function()
+    it("l'encart de la guilde est DESSINE UNE SEULE FOIS, dans son style", function()
         local layout = L.showcasePanel()
-        local styleCards = {}
+        local cards = {}
         for _, block in ipairs(everyBlock(layout)) do
             if block.kind == "image" and type(block.id) == "string" and block.id:match("^styleCard%d+$") ~= nil then
-                styleCards[block.id] = block
+                cards[#cards + 1] = block
             end
         end
-        for index = 1, #L.STYLE_ORDER do
-            local block = styleCards["styleCard" .. index]
-            assert.is_not_nil(block, "styleCard" .. index .. " doit etre dessine")
-            -- Chaque encart porte SON style : c'est la donnee qui decide du rendu.
-            assert.are.equal(L.STYLE_ORDER[index], block.style)
-            -- ... et le meme echantillon pour tous (2 verts + 2 rouges), pour que
-            -- seule la CADRE change d'un encart a l'autre.
-            assert.are.equal(L.SHOWCASE_SAMPLE_STATE, block.state)
-            -- La legende donne le NUMERO et les deux codes hexa : le raid lead dicte
-            -- « style 3 » sans ambiguite.
-            local caption = textBlock(layout, "styleCap" .. index)
-            assert.is_not_nil(caption)
-            assert.is_true(contains(caption.text, L.hexOfColor(L.style(L.STYLE_ORDER[index]).border)))
-            -- La legende porte le NOM du style, dans la langue active : le raid
-            -- lead dicte « style 3 », « GIDEON » ou « card » sans ambiguite.
-            assert.is_true(contains(caption.text, ns.Locale.t(L.style(L.STYLE_ORDER[index]).labelKey)))
-        end
-        -- Le style PREVIEW est celui des compositions (selectionne en direct).
-        local preview = L.showcasePanel({ style = "gideon" })
-        for _, block in ipairs(everyBlock(preview)) do
-            if type(block.id) == "string" and block.id:match("^liveChoice%d+$") ~= nil then
-                assert.are.equal("gideon", block.style)
-            end
-        end
+        assert.are.equal(1, #cards, "UN SEUL encart d'exemple (plus de galerie)")
+        local card = cards[1]
+        assert.are.equal("styleCard1", card.id)
+        -- L'exemple porte LE style livre : la donnee decide du rendu.
+        assert.are.equal(L.CHOICE_STYLE, card.style)
+        -- ... et le meme echantillon que la planche validee (2 verts + 2 rouges).
+        assert.are.equal(L.SHOWCASE_SAMPLE_STATE, card.state)
+        -- PLUS RIEN A CLIQUER : l'apercu d'un candidat n'existe plus.
+        assert.is_nil(card.action)
+        -- La legende donne les DEUX codes hexa et le NOM du style, dans la langue
+        -- active : le raid lead dicte une valeur sans ambiguite.
+        local caption = textBlock(layout, "styleCap1")
+        assert.is_not_nil(caption)
+        local style = L.style(L.CHOICE_STYLE)
+        assert.is_true(contains(caption.text, L.hexOfColor(style.border)), caption.text)
+        assert.is_true(contains(caption.text, L.hexOfColor(style.background)), caption.text)
+        assert.is_true(contains(caption.text, ns.Locale.t(style.labelKey)), caption.text)
+        -- L'entete et la note disent que c'est L'ENCART DE LA GUILDE, le seul style.
+        assert.is_true(contains(textBlock(layout, "stylesHeader").text, "GUILD CARD"))
+        assert.is_true(contains(textBlock(layout, "stylesNote").text, "gallery is gone"))
+        -- ... et la note de contexte nomme ce que le COMBAT dessine.
+        assert.is_true(contains(textBlock(layout, "stylesCurrent").text, ns.Locale.t(style.labelKey)))
     end)
 
     it("la palette ecrit le CODE HEXADECIMAL en clair, pour les 8 constantes GIDEON", function()
@@ -411,19 +471,22 @@ describe("Vitrine : la configuration du raid lead", function()
     local ns
     local C
     local L
+    local T
 
     before_each(function()
         ns = wowenv.loadCore()
         C = ns.Config
         L = ns.Layout
+        T = ns.Textures
     end)
 
-    it("la liste des styles est le MIROIR EXACT de Core/Layout", function()
+    it("la liste des styles est le MIROIR EXACT de Core/Layout - et il n'y en a QU'UN", function()
         -- Core/Config.lua est charge AVANT Core/Layout.lua (il le faut : Layout
         -- mesure les libelles de Config), donc la liste est un miroir. Ce test est
         -- ce qui empeche le miroir de mentir : un style ajoute dans Layout sans etre
         -- ajoute ici est un style INUTILISABLE - il echoue ici au lieu de disparaitre
-        -- en silence.
+        -- en silence. Depuis la 0.13.4 il verrouille AUSSI l'unicite : UNE entree de
+        -- chaque cote, jamais une de plus.
         local names = {}
         for name in pairs(L.BUTTON_STYLES) do
             names[#names + 1] = name
@@ -435,34 +498,43 @@ describe("Vitrine : la configuration du raid lead", function()
         end
         table.sort(mirror)
         assert.are.same(names, mirror)
+        assert.are.equal(1, #names, "une seule source de verite : UN style")
+        assert.are.equal(1, #mirror)
         assert.are.equal(L.SHIPPED_STYLE, C.DEFAULT_STYLE)
+        assert.are.equal(L.SHIPPED_STYLE, C.STYLE_NAMES[1])
+        assert.are.same({}, L.STYLE_ORDER)
     end)
 
-    it("le style par defaut est le style LIVRE, et une valeur inconnue y retombe", function()
-        assert.are.equal("gideon", C.resolveStyleName(nil))
-        assert.are.equal("gideon", C.resolveStyleName(""))
-        assert.are.equal("gideon", C.resolveStyleName("nope"))
-        assert.are.equal("gideon", C.resolveStyleName(7))
-        assert.are.equal("gideon", C.resolveStyleName({}))
-        -- « shipped » n'est PAS un nom canonique : c'est un alias de commande,
-        -- resolu par Core/Layout.resolveStyle AVANT d'arriver ici.
-        assert.are.equal("gideon", C.resolveStyleName("shipped"))
+    it("une valeur inconnue - ou un ANCIEN style - retombe sur l'encart de la guilde", function()
+        -- Le resolver est TOTAL : jamais nil, jamais d'erreur, toujours le style
+        -- livre. Les anciens noms (`gideon`, `card`, les candidats `2`..`6`) sont
+        -- d'anciennes sauvegardes, pas des commandes.
+        for _, raw in ipairs({ nil, "", "nope", 7, "shipped", "gideon", "card", "2", "3", "6" }) do
+            assert.are.equal("1", C.resolveStyleName(raw), tostring(raw) .. " doit retomber sur le style livre")
+        end
+        assert.are.equal("1", C.resolveStyleName({}))
         assert.are.equal("1", C.resolveStyleName("1"))
-        assert.are.equal("gideon", C.resolveStyleName("gideon"))
+        assert.are.equal("1", C.resolveStyleName(" 1 "))
     end)
 
     it("la sauvegarde porte le style, l'apercu et les animations", function()
         local db = C.ensureDB({})
-        assert.are.equal("gideon", db.intermission.style)
-        assert.are.equal("gideon", db.intermission.showcaseStyle)
+        assert.are.equal("1", db.intermission.style)
+        assert.are.equal("1", db.intermission.showcaseStyle)
         assert.is_true(db.intermission.showcaseAnimations)
         assert.is_table(db.showcasePosition)
         -- Un style ABSURDE dans la sauvegarde ne casse rien : on retombe sur le livre.
         local broken = C.ensureDB({ intermission = { style = "hacker" } })
-        assert.are.equal("gideon", C.resolveIntermission(broken.intermission).style)
+        assert.are.equal("1", C.resolveIntermission(broken.intermission).style)
+        -- UNE SAUVEGARDE ANCIENNE retombe PROPREMENT sur l'encart de la guilde, sans
+        -- erreur et sans qu'un style supprime remonte jamais au panneau.
+        for _, old in ipairs({ "gideon", "card", "2", "6" }) do
+            local legacy = C.ensureDB({ intermission = { style = old } })
+            assert.are.equal("1", C.resolveIntermission(legacy.intermission).style, tostring(old))
+        end
         -- Un style choisi EST respecte.
-        local chosen = C.ensureDB({ intermission = { style = "gideon", showcaseAnimations = false } })
-        assert.are.equal("gideon", C.resolveIntermission(chosen.intermission).style)
+        local chosen = C.ensureDB({ intermission = { style = "1", showcaseAnimations = false } })
+        assert.are.equal("1", C.resolveIntermission(chosen.intermission).style)
         assert.is_false(C.resolveIntermission(chosen.intermission).showcaseAnimations)
         -- Les animations : seul un faux EXPLICITE les coupe (meme regle que Layout).
         for _, raw in ipairs({ nil, true, "false", 0, "" }) do
@@ -471,45 +543,26 @@ describe("Vitrine : la configuration du raid lead", function()
         assert.is_false(C.resolveIntermission({ showcaseAnimations = false }).showcaseAnimations)
     end)
 
-    it("la texture GIDEON est declaree ET presente sur le disque, en puissance de 2", function()
-        local width, height = ns.Textures.gideonFrameSize()
-        assert.are.equal(width, height)
-        -- Puissance de 2 (exigence explicite) : la 9 tranches du client n'accepte pas
-        -- n'importe quelle dimension.
-        local isPowerOfTwo = false
-        for exponent = 1, 12 do
-            if 2 ^ exponent == width then
-                isPowerOfTwo = true
+    it("le cadre GIDEON a disparu : ni donnee, ni entree au .toc, ni fichier", function()
+        -- La galerie est retiree : le cadre 9 tranches de l'ancien style `gideon` ne
+        -- doit plus exister nulle part - ni dans Core/Textures.lua, ni dans le .toc,
+        -- ni sur le disque (le generateur non plus : il sait se refaire si le raid
+        -- lead redemande un jour un cadre).
+        assert.is_nil(T.GIDEON_FRAME_FILE)
+        assert.is_nil(T.GIDEON_FRAME_SIZE)
+        assert.is_nil(T.gideonFramePath)
+        assert.is_nil(T.gideonFrameSize)
+        for _, entry in ipairs(wowenv.tocEntries()) do
+            assert.is_nil(entry:find("gideon%-frame"), "le .toc ne doit plus lister " .. entry)
+        end
+        for _, relative in ipairs({ "Texture/gideon-frame.tga", "tools/make_gideon_frame.py" }) do
+            -- `busted` tourne depuis la racine du depot (voir .busted).
+            local handle = io.open(relative, "rb")
+            assert.is_nil(handle, relative .. " doit avoir ete supprime")
+            if handle ~= nil then
+                handle:close()
             end
         end
-        assert.is_true(isPowerOfTwo, "la texture d'encadrement doit etre en puissance de 2 : " .. width)
-        assert.is_true(width >= 32 and width <= 64, "taille attendue : 32 ou 64 px")
-        -- Le chemin EN JEU nomme le fichier, et le FICHIER est bien la (committe).
-        assert.is_true(contains(ns.Textures.gideonFramePath(), "Texture\\gideon-frame.tga"))
-        local file = assert(io.open("Texture/gideon-frame.tga", "rb"), "Texture/gideon-frame.tga manquante")
-        local header = file:read(18)
-        file:close()
-        assert.are.equal(18, #header)
-        local bytes = { header:byte(1, 18) }
-        assert.are.equal(2, bytes[3], "TGA non compresse type 2 attendu")
-        assert.are.equal(32, bytes[17], "32 bits attendus (et non 24)")
-        assert.are.equal(width, bytes[13] + bytes[14] * 256)
-        assert.are.equal(height, bytes[15] + bytes[16] * 256)
-        -- La taille du fichier est celle d'une image NON COMPRESSEE :
-        -- 18 octets d'en-tete + largeur x hauteur x 4 octets.
-        local size = assert(io.open("Texture/gideon-frame.tga", "rb")):seek("end")
-        assert.are.equal(18 + width * height * 4, size)
-    end)
-
-    it("la texture GIDEON est REPRODUCTIBLE : le generateur la regenere a l'identique", function()
-        -- L'exigence est explicite : aucun binaire « sorti de nulle part ». Le
-        -- generateur deterministe de tools/ doit produire EXACTEMENT le fichier
-        -- committe (sinon la CI le dit ici).
-        local handle = assert(io.popen("python3 tools/make_gideon_frame.py --check 2>&1"))
-        local output = handle:read("*a")
-        local ok = handle:close()
-        assert.is_true(ok, "tools/make_gideon_frame.py --check a echoue : " .. output)
-        assert.is_true(contains(output, "OK"), output)
     end)
 end)
 
@@ -575,11 +628,22 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
     end)
 
     it("la vitrine refuse une valeur de style inconnue, et n'ouvre rien", function()
-        slash("sim style 99")
-        assert.is_nil(showcase())
-        assert.is_true(contains(messages(), "unknown style"))
-        -- Rien n'a ete persiste au passage.
-        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style)
+        -- Les anciens candidats, l'ancien encart et n'importe quelle valeur
+        -- inconnue sont REFUSES : rien n'est cree, rien n'est affiche, rien n'est
+        -- persiste.
+        for _, bad in ipairs({ "99", "gideon", "card", "2", "6" }) do
+            _G.DEFAULT_CHAT_FRAME.messages = {}
+            slash("sim style " .. bad)
+            assert.is_nil(showcase(), bad .. " ne doit pas ouvrir la vitrine")
+            assert.is_true(contains(messages(), "unknown style"), messages())
+        end
+        assert.are.equal("1", _G.GideonRaidDB.intermission.style, "rien n'a ete persiste")
+        -- ... alors que LE style de la guilde ouvre la vitrine.
+        slash("sim style 1")
+        assert.is_not_nil(showcase())
+        assert.is_true(showcase():IsShown())
+        slash("sim style shipped")
+        assert.is_true(showcase():IsShown())
     end)
 
     it("un vrai combat en cours FERME la porte a la vitrine", function()
@@ -624,53 +688,83 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         assert.are.equal(3, #stub.sounds - before, "chaque clic doit etre audible dans la vitrine")
     end)
 
-    it("`/gr sim style gideon` change l'APERCU en direct, sans toucher au combat", function()
+    it("la vitrine dessine l'encart de la guilde : bordure fine + OR de GIDEON", function()
         slash("sim style")
-        slash("sim style gideon")
         -- Les encarts de la vitrine sont DESSINES avec la bordure dorée de Gideon...
         local card = element("liveChoice1")
         local border = card.__backdropBorderColor
         assert.is_not_nil(border)
         assert.are.equal(ns.Layout.hexOf(ns.Layout.GIDEON_GOLD), ns.Layout.hexOfColor({ r = border[1], g = border[2], b = border[3] }))
-        -- ... et la texture d'encadrement est celle generee par tools/.
-        assert.are.equal(ns.Textures.gideonFramePath(), card.__backdrop.edgeFile)
-        -- LE PANNEAU DE COMBAT N'A PAS BOUGE : l'apercu est TRANSIENT, meme quand
-        -- on previsualise un autre candidat que le style livre.
-        slash("sim style 2")
-        assert.are.equal(ns.Layout.style("2").edgeFile, element("liveChoice1").__backdrop.edgeFile)
+        -- ... et la bordure est FINE : c'est la texture blanche 1x1 du client, plus
+        -- aucun cadre 9 tranches.
+        assert.are.equal("Interface\\Buttons\\WHITE8X8", card.__backdrop.edgeFile)
+        assert.are.equal(ns.Layout.style(ns.Layout.CHOICE_STYLE).edgeFile, card.__backdrop.edgeFile)
+        -- L'ENCART D'EXEMPLE est dessine dans le meme style, et il n'a plus d'action.
+        assert.are.equal("Interface\\Buttons\\WHITE8X8", element("styleCard1").__backdrop.edgeFile)
+        assert.is_nil(element("styleCard1").showcaseAction)
+        -- IL N'Y A PLUS D'APERCU A CHANGER : `/gr sim style 1` est accepte sans
+        -- toucher au style du combat, et un ancien style est REFUSE.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
+        slash("sim style 1")
+        assert.are.equal(ns.Layout.SHIPPED_STYLE, _G.GideonRaidDB.intermission.style)
+        slash("sim style gideon")
+        assert.is_true(contains(messages(), "unknown style"))
         assert.are.equal(ns.Layout.SHIPPED_STYLE, _G.GideonRaidDB.intermission.style)
     end)
 
     -- ------------------------------------------------------------ LE CHOIX REEL --
-    it("`/gr style gideon` persiste le style et l'applique au panneau de COMBAT", function()
-        slash("style gideon")
-        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style)
+    it("`/gr style 1` (et `shipped`) persiste le style et l'applique au panneau de COMBAT", function()
+        slash("style shipped")
+        assert.are.equal("1", _G.GideonRaidDB.intermission.style)
         slash("inter start")
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown())
         local card = _G.GideonRaidIntermissionPanel.buttons[1]
-        assert.are.equal(ns.Textures.gideonFramePath(), card.__backdrop.edgeFile)
-        -- `/gr style shipped` ramene le style LIVRE : GIDEON depuis la decision du
-        -- raid lead ("Style Gideon", 2026-09-25).
-        slash("style shipped")
-        assert.are.equal(ns.Layout.SHIPPED_STYLE, _G.GideonRaidDB.intermission.style)
-        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style)
-        -- L'ANCIEN encart a bords reste joignable : rien n'a ete perdu.
+        assert.are.equal("Interface\\Buttons\\WHITE8X8", card.__backdrop.edgeFile)
+        local red, green, blue = card:GetBackdropBorderColor()
+        assert.are.equal(
+            ns.Layout.hexOf(ns.Layout.GIDEON_GOLD),
+            ns.Layout.hexOfColor({ r = red, g = green, b = blue }),
+            "le panneau de combat dessine la bordure OR de Gideon"
+        )
+        -- TOUS les alias de l'encart de la guilde sont acceptes et persistent la
+        -- meme valeur canonique.
+        for _, alias in ipairs({ "1", "bare", "nu", "encartnu", "shipped" }) do
+            _G.SlashCmdList["GIDEONRAID"]("style " .. alias)
+            assert.are.equal("1", _G.GideonRaidDB.intermission.style, alias)
+        end
+        -- ... et un ANCIEN style est REFUSE : rien n'est persiste.
+        _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("style card")
-        assert.are.equal("card", _G.GideonRaidDB.intermission.style)
-        local plain = _G.GideonRaidIntermissionPanel.buttons[1]
-        assert.are.equal(ns.Layout.style("card").edgeFile, plain.__backdrop.edgeFile)
+        assert.is_true(contains(messages(), "unknown style"), messages())
+        assert.are.equal("1", _G.GideonRaidDB.intermission.style)
+    end)
+
+    it("une sauvegarde ANCIENNE retombe sur l'encart de la guilde, en combat", function()
+        -- Un joueur qui avait `gideon` (ou `card`, ou un candidat) dans son
+        -- SavedVariables ne casse rien : le panneau de combat dessine le style livre.
+        _G.GideonRaidDB.intermission.style = "gideon"
+        slash("inter start")
+        local panel = _G.GideonRaidIntermissionPanel
+        assert.is_true(panel:IsShown())
+        local style = ns.Layout.style(ns.Layout.CHOICE_STYLE)
+        for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
+            assert.are.equal(style.edgeFile, panel.buttons[index].__backdrop.edgeFile, "bouton " .. index)
+        end
+        -- Le resolver reste TOTAL : l'ancienne valeur ne remonte jamais telle quelle.
+        assert.are.equal("1", ns.Config.resolveIntermission(_G.GideonRaidDB.intermission).style)
     end)
 
     it("un style inconnu est REFUSE : rien n'est persiste, rien ne change", function()
-        slash("style gideon")
+        slash("style 1")
         slash("style 42")
         assert.is_true(contains(messages(), "unknown style"))
-        assert.are.equal("gideon", _G.GideonRaidDB.intermission.style, "la valeur refusee ne doit rien ecraser")
-        -- `/gr style` sans argument DIT ou on en est (et rappelle les candidats).
+        assert.are.equal("1", _G.GideonRaidDB.intermission.style, "la valeur refusee ne doit rien ecraser")
+        -- `/gr style` sans argument DIT ou on en est ET qu'il n'y a plus de choix.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("style")
         local text = messages()
-        assert.is_true(contains(text, "gideon"), text)
+        assert.is_true(contains(text, ns.Locale.t("style.1")), text)
+        assert.is_true(contains(text, "nothing left to choose"), text)
         assert.is_true(contains(text, "shipped"), text)
     end)
 
