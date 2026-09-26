@@ -4,6 +4,7 @@ std = "lua51"
 max_line_length = 140
 
 globals = {
+    "GetCursorPosition",
     "GideonRaid",
     "GideonRaidDB",
     "GideonRaidCharDB",

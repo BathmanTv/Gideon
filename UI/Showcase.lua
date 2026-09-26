@@ -134,21 +134,20 @@ local function ensureShowcase()
         return showcase
     end
     local s = CreateFrame("Frame", "GideonRaidStyleShowcase", UIParent, "BackdropTemplate")
-    s:SetMovable(true)
     s:EnableMouse(true)
-    s:RegisterForDrag("LeftButton")
-    s:SetClampedToScreen(true)
-    s:SetScript("OnDragStart", function(self)
-        if UI.IsPanelLocked() then
+    -- Movable through UI.AttachDrag only: no restricted API is ever called. The
+    -- showcase keeps its own OnUpdate (the animations) - the drag has its own driver.
+    UI.AttachDrag(s, {
+        isLocked = function()
+            return UI.IsPanelLocked()
+        end,
+        onLocked = function()
             UI.Print(Locale.t("panel.lockedHint"))
-            return
-        end
-        self:StartMoving()
-    end)
-    s:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.ShowcaseSavePosition()
-    end)
+        end,
+        onStop = function()
+            UI.ShowcaseSavePosition()
+        end,
+    })
     s:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",

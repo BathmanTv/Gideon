@@ -4,6 +4,32 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.6] - 2026-09-26
+
+**The addon no longer calls a single RESTRICTED API. That popup in game was ours.**
+
+### Fixed
+
+- **"GideonRaid has been blocked from an action only available to the Blizzard UI"**
+  (raid lead, screenshot in game). The addon moved its panels with the classic trio
+  `Frame:StartMoving` / `Frame:StopMovingOrSizing` / `Frame:SetClampedToScreen`, and
+  the client lists all three under **API functions/restricted** (change of
+  2025-06-17). A blocked call also taints the session, which is why the raid lead's
+  OWN macro stopped placing its raid marker until the addon was disabled and the UI
+  reloaded.
+- The drag is now done by hand in `UI.AttachDrag`: the start of the drag remembers
+  the cursor and the current anchor, a hidden **driver frame** re-anchors the panel
+  on every frame, and the release persists the position. The driver is a separate
+  frame so the style showcase keeps its own `OnUpdate` (the animations).
+- **Screen clamping is ours now**: the PURE rule `Layout.clampOffsets` (Core/Layout)
+  replaces `SetClampedToScreen`, so a panel can never be dragged out of the screen -
+  and the rule is provable out of game instead of trusted to the client.
+- A panel keeps its anchor when dragged (Blizzard's `StartMoving` used to re-anchor
+  it to `TOPLEFT`): the persisted block stays comparable with the delivered default.
+- **New automated guard**: `tests/spec/guard_spec.lua` fails the suite if any file
+  loaded by the client ever mentions `StartMoving`, `StopMovingOrSizing` or
+  `SetClampedToScreen` again.
+
 ## [0.13.5] - 2026-09-25
 
 **The base command is now `/gideon`. `/gr` is gone: it steals the group-chat

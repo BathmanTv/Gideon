@@ -23,6 +23,17 @@
 --
 local stub = {}
 
+--- Position du curseur simule. Le drag des panneaux est fait A LA MAIN par
+--- l'addon (UI.AttachDrag, sans API restreinte) : un test qui veut deplacer un
+--- panneau deplace CE curseur au lieu d'appeler l'ancienne StartMoving.
+local cursorX, cursorY = 0, 0
+
+--- @param x number
+--- @param y number
+function stub.setCursor(x, y)
+    cursorX, cursorY = x, y
+end
+
 function stub.install()
     local frames = {}
     local tickers = {}
@@ -154,7 +165,100 @@ function stub.install()
         function tex:Hide() end
         return tex
     end
-    function Frame:SetClampedToScreen() end
+
+    --- GEOMETRIE MINIMALE du client simule : l'ecran (UIParent) occupe 1920x1080 a
+    --- partir de (0, 0) et un cadre ancre a UIParent se deduit de son point, de son
+    --- point de reference et de ses decalages. C'est ce qu'il faut pour que la regle
+    --- de clamp (Layout.clampOffsets, qui remplace la SetClampedToScreen restreinte)
+    --- soit exercee DE BOUT EN BOUT par un drag simule : le vrai client, lui, fait
+    --- ce calcul pour de bon.
+    local SCREEN_WIDTH, SCREEN_HEIGHT = 1920, 1080
+
+    --- Coordonnees du point d'ancrage `name` sur l'ecran.
+    --- @param name string
+    --- @return number x, number y
+    local function screenAnchor(name)
+        local horizontal = SCREEN_WIDTH / 2
+        if name == "LEFT" or name == "TOPLEFT" or name == "BOTTOMLEFT" then
+            horizontal = 0
+        elseif name == "RIGHT" or name == "TOPRIGHT" or name == "BOTTOMRIGHT" then
+            horizontal = SCREEN_WIDTH
+        end
+        local vertical = SCREEN_HEIGHT / 2
+        if name == "TOP" or name == "TOPLEFT" or name == "TOPRIGHT" then
+            vertical = SCREEN_HEIGHT
+        elseif name == "BOTTOM" or name == "BOTTOMLEFT" or name == "BOTTOMRIGHT" then
+            vertical = 0
+        end
+        return horizontal, vertical
+    end
+
+    --- Rectangle du cadre sur l'ecran (left, right, bottom, top), ou nil quand il
+    --- n'est pas ancre a UIParent : les enfants d'une fenetre ne sont pas mesures,
+    --- donc la regle de clamp ne s'y applique pas.
+    --- @param frame table
+    --- @return number|nil left, number|nil right, number|nil bottom, number|nil top
+    local function frameRect(frame)
+        if frame == _G.UIParent then
+            return 0, SCREEN_WIDTH, 0, SCREEN_HEIGHT
+        end
+        local p = frame.__point
+        if type(p) ~= "table" or type(p[1]) ~= "string" then
+            return nil
+        end
+        local point = p[1]
+        local relativeTo, relativePoint, x, y = p[2], p[3], p[4], p[5]
+        if type(relativeTo) == "string" or type(relativeTo) == "number" then
+            -- SetPoint(point, x, y) : ancre a UIParent sur le point de meme nom.
+            relativePoint, x, y = point, relativeTo, relativePoint
+            relativeTo = _G.UIParent
+        end
+        if relativeTo ~= nil and relativeTo ~= _G.UIParent then
+            return nil
+        end
+        local targetX, targetY = screenAnchor(relativePoint or point)
+        targetX, targetY = targetX + (tonumber(x) or 0), targetY + (tonumber(y) or 0)
+        local halfWidth, halfHeight = frame:GetWidth() / 2, frame:GetHeight() / 2
+        local centerX = targetX
+        if point:find("LEFT", 1, true) then
+            centerX = targetX + halfWidth
+        elseif point:find("RIGHT", 1, true) then
+            centerX = targetX - halfWidth
+        end
+        local centerY = targetY
+        if point:find("TOP", 1, true) then
+            centerY = targetY - halfHeight
+        elseif point:find("BOTTOM", 1, true) then
+            centerY = targetY + halfHeight
+        end
+        return centerX - halfWidth, centerX + halfWidth, centerY - halfHeight, centerY + halfHeight
+    end
+
+    function Frame:GetLeft()
+        local left = frameRect(self)
+        return left
+    end
+    function Frame:GetRight()
+        local _, right = frameRect(self)
+        return right
+    end
+    function Frame:GetBottom()
+        local _, _, bottom = frameRect(self)
+        return bottom
+    end
+    function Frame:GetTop()
+        local _, _, _, top = frameRect(self)
+        return top
+    end
+
+    --- Echelle effective : le drag maison (UI.AttachDrag) divise la position du
+    --- curseur par elle. Le haricot travaille a l'echelle 1 (pixels = points).
+    --- GetLeft/GetRight/GetTop/GetBottom ne sont PAS fournis : la regle de clamp
+    --- retombe alors sur « aucune correction », et elle est testee a part, en pur,
+    --- dans layout_spec.lua.
+    function Frame:GetEffectiveScale()
+        return 1
+    end
     function Frame:SetScale(scale)
         self.__scale = scale
     end
@@ -292,8 +396,6 @@ function stub.install()
     function Frame:IsShown()
         return self.__shown == true
     end
-    function Frame:StartMoving() end
-    function Frame:StopMovingOrSizing() end
     function Frame:SetNormalTexture(texture)
         self.__normalTexture = texture
         return self:GetNormalTexture()
@@ -407,6 +509,7 @@ function stub.install()
         return f
     end
     _G.UIParent = setmetatable({}, Frame)
+    _G.UIParent:SetSize(SCREEN_WIDTH, SCREEN_HEIGHT)
     _G.DEFAULT_CHAT_FRAME = { messages = {} }
     function _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
         self.messages[#self.messages + 1] = msg
@@ -457,6 +560,12 @@ function stub.install()
     -- (_G.PlaySoundFile = nil) : l'addon doit alors rester SILENCIEUX sans lever.
     -- Le stub de la lecture de raccourci (GetBindingKey ci-dessus) n'existe toujours
     -- pas ici : hors client, aucun raccourci n'est connu (cas par defaut teste).
+    -- Curseur du client simule (voir stub.setCursor) : le drag maison lit cette
+    -- position a chaque image pour repositionner le panneau.
+    _G.GetCursorPosition = function()
+        return cursorX, cursorY
+    end
+
     local sounds = {}
     _G.PlaySoundFile = function(path, channel)
         sounds[#sounds + 1] = { path = path, channel = channel }

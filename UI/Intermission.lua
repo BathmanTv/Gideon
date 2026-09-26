@@ -412,17 +412,13 @@ local function ensurePanel()
 
     local p = CreateFrame("Frame", "GideonRaidIntermissionPanel", UIParent, "BackdropTemplate")
     p:SetSize(560, 360)
-    p:SetMovable(true)
     p:EnableMouse(true)
-    p:RegisterForDrag("LeftButton")
-    p:SetClampedToScreen(true)
-    p:SetScript("OnDragStart", function(self)
-        self:StartMoving()
-    end)
-    p:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.IntermissionSavePosition()
-    end)
+    -- Movable through UI.AttachDrag only: no restricted API is ever called.
+    UI.AttachDrag(p, {
+        onStop = function()
+            UI.IntermissionSavePosition()
+        end,
+    })
     p:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -832,21 +828,19 @@ local function ensurePingPanel()
         return pingPanel
     end
     local p = CreateFrame("Frame", "GideonRaidPingHelpPanel", UIParent, "BackdropTemplate")
-    p:SetMovable(true)
     p:EnableMouse(true)
-    p:RegisterForDrag("LeftButton")
-    p:SetClampedToScreen(true)
-    p:SetScript("OnDragStart", function(self)
-        if UI.IsPanelLocked() then
+    -- Movable through UI.AttachDrag only: no restricted API is ever called.
+    UI.AttachDrag(p, {
+        isLocked = function()
+            return UI.IsPanelLocked()
+        end,
+        onLocked = function()
             UI.Print(Locale.t("panel.lockedHint"))
-            return
-        end
-        self:StartMoving()
-    end)
-    p:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.SavePingPanelPosition()
-    end)
+        end,
+        onStop = function()
+            UI.SavePingPanelPosition()
+        end,
+    })
     p:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",

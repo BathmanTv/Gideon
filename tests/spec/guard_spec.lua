@@ -63,6 +63,15 @@ local NEVER_ANYWHERE = {
 local NEVER_EVEN_IN_A_STRING = { "C_Ping", "SendMacroPing", "PingSubjectType" }
 
 --- Lecture de raccourci : autorisee, mais encadree (voir le test dedie).
+--- APIs de deplacement que le client lui-meme classe RESTRICTED
+--- (warcraft.wiki.gg « Category:API functions/restricted », changement du
+--- 2025-06-17). Mesure en jeu le 2026-09-26 : les appeler a fait afficher
+--- « GideonRaid a ete bloque a cause d'une action qui n'est utilisable que par
+--- l'IU de Blizzard », et le taint casse ensuite les macros du joueur.
+--- Le deplacement est fait a la main par UI.AttachDrag.
+local RESTRICTED_DRAG = { "StartMoving", "StopMovingOrSizing", "SetClampedToScreen" }
+
+--- Lecture de raccourci : autorisee, mais encadree (voir le test dedie).
 local BINDING_LOOKUP = "GetBindingKey"
 
 --- Lecture audio : autorisee, mais encadree (voir le test dedie). Core/ n'a
@@ -97,6 +106,18 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
                 assert.is_nil(
                     code:find(token, 1, true),
                     ("%s contient %s : l'addon ne ping pas et ne fabrique plus de macro"):format(file, token)
+                )
+            end
+        end
+    end)
+
+    it("n'appelle AUCUNE API restreinte de deplacement (drag maison)", function()
+        for _, file in ipairs(files) do
+            local code = stripComments(readFile(file))
+            for _, token in ipairs(RESTRICTED_DRAG) do
+                assert.is_nil(
+                    code:find(token, 1, true),
+                    ("%s appelle %s : API restricted en 12.x, utiliser UI.AttachDrag"):format(file, token)
                 )
             end
         end

@@ -2344,4 +2344,42 @@ function Layout.showcasePanel(spec)
     })
 end
 
+--- How much a panel has to be pulled back to stay INSIDE the screen once the player
+--- dragged it there. PURE (numbers in, numbers out): this is the rule that replaces
+--- the client's Frame:SetClampedToScreen, which is a RESTRICTED API in 12.x (see
+--- UI.AttachDrag), so the behaviour stays provable out of game.
+---
+--- A rectangle that cannot be read, or a screen without a width/height, returns no
+--- correction at all: a missing measurement never blocks a drag, it only stops the
+--- clamping.
+--- @param frame table|nil { left, right, bottom, top }, in the frame's own scale
+--- @param screen table|nil { left, bottom, width, height }, same scale
+--- @return number dx, number dy offsets to ADD to the current ones (0, 0 = nothing)
+function Layout.clampOffsets(frame, screen)
+    if type(frame) ~= "table" or type(screen) ~= "table" then
+        return 0, 0
+    end
+    local left, right = tonumber(frame.left), tonumber(frame.right)
+    local bottom, top = tonumber(frame.bottom), tonumber(frame.top)
+    local width, height = tonumber(screen.width), tonumber(screen.height)
+    if not (left and right and bottom and top and width and height) then
+        return 0, 0
+    end
+    local screenLeft = tonumber(screen.left) or 0
+    local screenBottom = tonumber(screen.bottom) or 0
+    local dx = 0
+    if left < screenLeft then
+        dx = screenLeft - left
+    elseif right > screenLeft + width then
+        dx = (screenLeft + width) - right
+    end
+    local dy = 0
+    if bottom < screenBottom then
+        dy = screenBottom - bottom
+    elseif top > screenBottom + height then
+        dy = (screenBottom + height) - top
+    end
+    return dx, dy
+end
+
 return Layout

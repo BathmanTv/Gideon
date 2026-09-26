@@ -911,3 +911,51 @@ describe("Layout : fenetre d'aide au ping (deux langues)", function()
         assert.are.equal(3, #broken.keyLines)
     end)
 end)
+
+describe("Layout : clamp pur (le panneau ne peut pas sortir de l'ecran)", function()
+    -- SetClampedToScreen est une API RESTREINTE en 12.x (voir UI.AttachDrag) : la
+    -- regle est donc la NOTRE, pure, et c'est ici qu'elle est prouvee.
+    local ns = wowenv.loadCore()
+    local Layout = ns.Layout
+
+    local screen = { left = 0, bottom = 0, width = 1920, height = 1080 }
+
+    it("ne corrige RIEN quand le panneau est deja dedans", function()
+        local dx, dy = Layout.clampOffsets({ left = 700, right = 1200, bottom = 400, top = 760 }, screen)
+        assert.are.equal(0, dx)
+        assert.are.equal(0, dy)
+    end)
+
+    it("ramene le panneau qui depasse a gauche / a droite", function()
+        local dx = Layout.clampOffsets({ left = -30, right = 470, bottom = 400, top = 760 }, screen)
+        assert.are.equal(30, dx, "un panneau qui sort a gauche revient de 30 px")
+        dx = Layout.clampOffsets({ left = 1800, right = 2300, bottom = 400, top = 760 }, screen)
+        assert.are.equal(-380, dx, "un panneau qui sort a droite revient de sa largeur excedente")
+    end)
+
+    it("ramene le panneau qui depasse en bas / en haut", function()
+        local _, dy = Layout.clampOffsets({ left = 700, right = 1200, bottom = -20, top = 340 }, screen)
+        assert.are.equal(20, dy)
+        _, dy = Layout.clampOffsets({ left = 700, right = 1200, bottom = 1000, top = 1360 }, screen)
+        assert.are.equal(-280, dy)
+    end)
+
+    it("corrige sur les DEUX axes si necessaire", function()
+        local dx, dy = Layout.clampOffsets({ left = -10, right = 490, bottom = -5, top = 355 }, screen)
+        assert.are.equal(10, dx)
+        assert.are.equal(5, dy)
+    end)
+
+    it("ne corrige rien quand une mesure manque (jamais de drag bloque)", function()
+        assert.are.equal(0, (Layout.clampOffsets(nil, screen)))
+        assert.are.equal(0, (Layout.clampOffsets({ left = 0, right = 10, bottom = 0 }, screen)))
+        assert.are.equal(0, (Layout.clampOffsets({ left = 0, right = 10, bottom = 0, top = 10 }, nil)))
+        assert.are.equal(0, (Layout.clampOffsets({ left = 0, right = 10, bottom = 0, top = 10 }, { left = 0, bottom = 0 })))
+    end)
+
+    it("accepte un ecran decale (barre de menus au coin)", function()
+        local decale = { left = 100, bottom = 50, width = 1820, height = 1030 }
+        local dx = Layout.clampOffsets({ left = 90, right = 590, bottom = 400, top = 760 }, decale)
+        assert.are.equal(10, dx)
+    end)
+end)

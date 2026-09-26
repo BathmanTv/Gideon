@@ -354,25 +354,23 @@ local function ensurePanel()
     -- The size is NOT set here: Core/Layout.mainPanel() measures the content
     -- (labels included, in the active language) and UI.ApplyLayout applies it.
     panel:SetPoint("CENTER")
-    panel:SetMovable(true)
     panel:EnableMouse(true)
-    panel:RegisterForDrag("LeftButton")
-    panel:SetClampedToScreen(true)
-    -- DRAGGING. The panel is movable BY DEFAULT (GideonRaidDB.lockPanel = false):
-    -- in-game feedback showed that a panel the player cannot move is unusable.
-    -- /gideon lock (or the LOCK PANEL button) freezes the position; /gideon unlock frees
-    -- it again. The position is saved on every drag stop.
-    panel:SetScript("OnDragStart", function(self)
-        if UI.IsPanelLocked() then
+    -- DRAGGING (UI.AttachDrag: no restricted API). The panel is movable BY DEFAULT
+    -- (GideonRaidDB.lockPanel = false): in-game feedback showed that a panel the
+    -- player cannot move is unusable. /gideon lock (or the LOCK PANEL button) freezes
+    -- the position; /gideon unlock frees it again. The position is saved on every
+    -- drag stop.
+    UI.AttachDrag(panel, {
+        isLocked = function()
+            return UI.IsPanelLocked()
+        end,
+        onLocked = function()
             UI.Print(Locale.t("panel.lockedHint"))
-            return
-        end
-        self:StartMoving()
-    end)
-    panel:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        UI.SavePanelPosition()
-    end)
+        end,
+        onStop = function()
+            UI.SavePanelPosition()
+        end,
+    })
     panel:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -431,6 +429,101 @@ local function ensurePanel()
 
     panel:Hide()
     return panel
+end
+
+--- Makes `frame` draggable with the mouse WITHOUT a single restricted API.
+---
+--- WHY (measured in game, 2026-09-26): the usual trio of a draggable addon panel -
+--- Frame:StartMoving, Frame:StopMovingOrSizing and Frame:SetClampedToScreen - is
+--- listed by the client itself under "API functions/restricted" (change of
+--- 2025-06-17). Calling them got GideonRaid flagged in game with the popup
+--- "GideonRaid has been blocked from an action only available to the Blizzard UI",
+--- and a blocked call also taints the session, which then breaks the player's OWN
+--- macros. The move is therefore reproduced in plain Lua: OnDragStart remembers the
+--- cursor and the current anchor, a hidden driver frame re-anchors the panel on
+--- every frame (clamped to the screen by US, not by the client), OnDragStop hides
+--- the driver and hands over to `onStop` (which persists the position). The driver
+--- is a SEPARATE frame on purpose: the style showcase already uses its own OnUpdate
+--- for its animations, so a drag must never steal it.
+--- @param frame Frame the frame to make draggable
+--- @param opts table|nil { isLocked = function|nil, onLocked = function|nil, onStop = function|nil }
+function UI.AttachDrag(frame, opts)
+    opts = opts or {}
+    local dragging = false
+    local cursorX, cursorY, baseX, baseY = 0, 0, 0, 0
+    local point, relativePoint = "CENTER", "CENTER"
+
+    -- The driver is attached to the frame the way every other sub-element of a
+    -- panel is (p.redo, p.close, panel.lock): the tests drive a REAL drag through it.
+    local driver = CreateFrame("Frame")
+    driver:Hide()
+    frame.dragDriver = driver
+
+    --- Anchors the frame at the given offsets, then pulls it back INSIDE the screen
+    --- when it hangs out. Both rectangles are read in the frame's own effective
+    --- scale (the panels inherit UIParent's), so they are comparable.
+    local function place(offX, offY)
+        frame:ClearAllPoints()
+        frame:SetPoint(point, UIParent, relativePoint, offX, offY)
+        -- Clamping is OURS now (SetClampedToScreen is restricted): the rule is PURE
+        -- and lives in Core/Layout.lua, this layer only reads the two rectangles.
+        local dx, dy = ns.Layout.clampOffsets({
+            left = frame:GetLeft(),
+            right = frame:GetRight(),
+            bottom = frame:GetBottom(),
+            top = frame:GetTop(),
+        }, {
+            left = UIParent:GetLeft(),
+            bottom = UIParent:GetBottom(),
+            width = UIParent:GetWidth(),
+            height = UIParent:GetHeight(),
+        })
+        if dx ~= 0 or dy ~= 0 then
+            frame:ClearAllPoints()
+            frame:SetPoint(point, UIParent, relativePoint, offX + dx, offY + dy)
+        end
+    end
+
+    --- Re-anchors the frame where the cursor asks, in the frame's own scale.
+    local function follow()
+        local scale = frame:GetEffectiveScale() or 1
+        local x, y = GetCursorPosition()
+        place(baseX + (x / scale) - cursorX, baseY + (y / scale) - cursorY)
+    end
+
+    driver:SetScript("OnUpdate", function()
+        follow()
+    end)
+
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function()
+        if type(opts.isLocked) == "function" and opts.isLocked() then
+            if type(opts.onLocked) == "function" then
+                opts.onLocked()
+            end
+            return
+        end
+        local scale = frame:GetEffectiveScale() or 1
+        local x, y = GetCursorPosition()
+        cursorX, cursorY = x / scale, y / scale
+        local anchor, _, relative, offX, offY = frame:GetPoint(1)
+        point, relativePoint = anchor or "CENTER", relative or "CENTER"
+        baseX, baseY = offX or 0, offY or 0
+        dragging = true
+        driver:Show()
+    end)
+    frame:SetScript("OnDragStop", function()
+        driver:Hide()
+        if not dragging then
+            return
+        end
+        dragging = false
+        follow()
+        if type(opts.onStop) == "function" then
+            opts.onStop()
+        end
+    end)
 end
 
 function UI.Print(msg)

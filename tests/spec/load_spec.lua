@@ -1045,12 +1045,19 @@ describe("chargement de l'addon", function()
     -- ------------------------------------------------------------------------
     -- PANNEAU PRINCIPAL DEPLACABLE + POSITIONS PERSISTEES (3e retour en jeu)
     -- ------------------------------------------------------------------------
-    --- Simule un drag du joueur : la position est ecrite hors jeu par SetPoint,
-    --- puis le script OnDragStop du cadre enregistre cette position.
-    local function dragTo(frame, point, relativePoint, x, y)
-        frame:ClearAllPoints()
-        frame:SetPoint(point, _G.UIParent, relativePoint, x, y)
+    --- Simule un VRAI drag du joueur : le curseur bouge, la frame de service du
+    --- drag joue une image, puis le joueur relache. Le panneau n'est plus deplace
+    --- par le client (StartMoving/StopMovingOrSizing sont RESTREINTES en 12.x et
+    --- faisaient afficher « GideonRaid a ete bloque... ») : UI.AttachDrag recalcule
+    --- la position a la main, et c'est CE chemin que le test exerce.
+    local function dragTo(frame, fromX, fromY, toX, toY)
+        stub.setCursor(fromX, fromY)
+        frame:GetScript("OnDragStart")(frame)
+        assert.is_true(frame.dragDriver:IsShown(), "le drag doit demarrer")
+        stub.setCursor(toX, toY)
+        frame.dragDriver:GetScript("OnUpdate")()
         frame:GetScript("OnDragStop")(frame)
+        assert.is_false(frame.dragDriver:IsShown(), "le drag doit s'arreter")
     end
 
     it("le panneau principal est DEPLACABLE par defaut et sa position est memorisee", function()
@@ -1058,14 +1065,12 @@ describe("chargement de l'addon", function()
         local main = _G.GideonRaidPanel
         -- Le verrou n'est plus pose par defaut : c'est la cause du bug signale.
         assert.is_false(_G.GideonRaidDB.lockPanel)
-        local moved = false
-        main.StartMoving = function()
-            moved = true
-        end
-
         -- Le joueur deplace le panneau : la position part dans les SauvedVariables.
-        dragTo(main, "TOPLEFT", "TOPLEFT", -120, -40)
-        assert.are.equal("TOPLEFT", _G.GideonRaidDB.panelPosition.point)
+        -- Le drag maison GARDE l'ancre du panneau (l'ancienne StartMoving de
+        -- Blizzard le re-ancrait en TOPLEFT) : seuls les decalages bougent, donc le
+        -- bloc enregistre reste comparable au defaut livre (CENTER, 0, 0).
+        dragTo(main, 500, 500, 380, 460)
+        assert.are.equal("CENTER", _G.GideonRaidDB.panelPosition.point)
         assert.are.equal(-120, _G.GideonRaidDB.panelPosition.x)
         assert.are.equal(-40, _G.GideonRaidDB.panelPosition.y)
 
@@ -1079,24 +1084,20 @@ describe("chargement de l'addon", function()
 
         -- Deverrouille par defaut : le glisser est reellement autorise.
         main:GetScript("OnDragStart")(main)
-        assert.is_true(moved, "le glisser doit etre autorise par defaut")
+        assert.is_true(main.dragDriver:IsShown(), "le glisser doit etre autorise par defaut")
+        main:GetScript("OnDragStop")(main)
     end)
 
     it("/gideon lock fige le panneau, /gideon unlock le libere, la position est conservee", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         local main = _G.GideonRaidPanel
-        local moved
-        main.StartMoving = function()
-            moved = true
-        end
-        dragTo(main, "BOTTOMLEFT", "BOTTOMLEFT", 30, 50)
+        dragTo(main, 400, 400, 430, 450)
 
         _G.SlashCmdList["GIDEONRAID"]("lock")
         assert.is_true(_G.GideonRaidDB.lockPanel)
         assert.matches("Panel locked", messages())
-        moved = false
         main:GetScript("OnDragStart")(main)
-        assert.is_false(moved, "verrouille : le panneau ne bouge pas")
+        assert.is_false(main.dragDriver:IsShown(), "verrouille : le panneau ne bouge pas")
         assert.matches("Panel locked: /gideon unlock", messages())
         assert.matches("UNLOCK PANEL", main.lock:GetText())
 
@@ -1108,9 +1109,9 @@ describe("chargement de l'addon", function()
         assert.is_false(_G.GideonRaidDB.lockPanel)
         assert.matches("Panel unlocked", messages())
         assert.matches("LOCK PANEL", main.lock:GetText())
-        moved = false
         main:GetScript("OnDragStart")(main)
-        assert.is_true(moved, "deverrouille : le panneau se deplace a nouveau")
+        assert.is_true(main.dragDriver:IsShown(), "deverrouille : le panneau se deplace a nouveau")
+        main:GetScript("OnDragStop")(main)
         -- La position deplacee n'a pas ete perdue par le verrouillage.
         assert.are.equal(30, _G.GideonRaidDB.panelPosition.x)
     end)
@@ -1130,18 +1131,20 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim ping")
         local test = _G.GideonRaidPingHelpPanel
-        dragTo(test, "BOTTOMLEFT", "BOTTOMLEFT", 30, 50)
-        assert.are.equal("BOTTOMLEFT", _G.GideonRaidDB.pingPanelPosition.point)
-        assert.are.equal(30, _G.GideonRaidDB.pingPanelPosition.x)
-        assert.are.equal(50, _G.GideonRaidDB.pingPanelPosition.y)
+        local before = ns.UI.CapturePosition(test)
+        dragTo(test, 400, 400, 430, 450)
+        local after = _G.GideonRaidDB.pingPanelPosition
+        assert.are.equal(before.point, after.point, "l'ancre ne change pas")
+        assert.are.equal(before.x + 30, after.x)
+        assert.are.equal(before.y + 50, after.y)
         -- Elle se rouvre la ou le joueur l'a laissee.
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
         test:ClearAllPoints()
         test:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
         _G.SlashCmdList["GIDEONRAID"]("sim ping")
         local _, _, _, x, y = test:GetPoint(1)
-        assert.are.equal(30, x, "position restauree a l'ouverture suivante")
-        assert.are.equal(50, y)
+        assert.are.equal(after.x, x, "position restauree a l'ouverture suivante")
+        assert.are.equal(after.y, y)
     end)
 
     it("le panneau d'intermission est DEPLACABLE en placement et sa position est memorisee", function()
@@ -1153,18 +1156,14 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        local moved = false
-        panel.StartMoving = function()
-            moved = true
-        end
-        panel:GetScript("OnDragStart")(panel)
-        assert.is_true(moved, "le glisser doit etre autorise en placement")
         -- L'illustration n'intercepte PAS la souris (aucun script de drag a elle).
         assert.is_nil(panel.placement.__scripts)
-        dragTo(panel, "BOTTOMLEFT", "BOTTOMLEFT", -40, 25)
-        assert.are.equal("BOTTOMLEFT", _G.GideonRaidDB.intermission.position.point)
-        assert.are.equal(-40, _G.GideonRaidDB.intermission.position.x)
-        assert.are.equal(25, _G.GideonRaidDB.intermission.position.y)
+        local before = ns.UI.CapturePosition(panel)
+        dragTo(panel, 600, 300, 560, 325)
+        local after = _G.GideonRaidDB.intermission.position
+        assert.are.equal(before.point, after.point, "l'ancre ne change pas")
+        assert.are.equal(before.x - 40, after.x)
+        assert.are.equal(before.y + 25, after.y)
         -- `/gideon inter ok` valide SANS perdre la position : elle est re-appliquee a
         -- l'ouverture suivante (placement comme combat).
         _G.SlashCmdList["GIDEONRAID"]("inter ok")
@@ -1173,18 +1172,34 @@ describe("chargement de l'addon", function()
         panel:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local _, _, _, x, y = panel:GetPoint(1)
-        assert.are.equal(-40, x, "position restauree au placement suivant")
-        assert.are.equal(25, y)
+        assert.are.equal(after.x, x, "position restauree au placement suivant")
+        assert.are.equal(after.y, y)
+    end)
+
+    it("un drag tres loin ne peut PAS perdre le panneau hors de l'ecran", function()
+        -- La promesse que tenait SetClampedToScreen (restreinte en 12.x) est tenue
+        -- par la regle pure du Core, appliquee par UI.AttachDrag : le panneau est
+        -- ramene a l'interieur de l'ecran, meme si le joueur tire tres loin.
+        stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
+        local main = _G.GideonRaidPanel
+        dragTo(main, 500, 500, 9000, 9000)
+        assert.is_true(main:GetLeft() >= 0, "bord gauche dans l'ecran")
+        assert.is_true(main:GetRight() <= 1920, "bord droit dans l'ecran")
+        assert.is_true(main:GetBottom() >= 0, "bord bas dans l'ecran")
+        assert.is_true(main:GetTop() <= 1080, "bord haut dans l'ecran")
+        dragTo(main, 500, 500, -9000, -9000)
+        assert.is_true(main:GetLeft() >= 0)
+        assert.is_true(main:GetBottom() >= 0)
     end)
 
     it("/gideon resetposition remet les trois panneaux au centre", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         local main = _G.GideonRaidPanel
-        dragTo(main, "TOPLEFT", "TOPLEFT", -120, -40)
+        dragTo(main, 500, 500, 380, 460)
         _G.SlashCmdList["GIDEONRAID"]("sim ping")
-        dragTo(_G.GideonRaidPingHelpPanel, "TOPLEFT", "TOPLEFT", -50, -10)
+        dragTo(_G.GideonRaidPingHelpPanel, 500, 500, 450, 490)
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
-        assert.are_not.equal("CENTER", _G.GideonRaidDB.panelPosition.point)
+        assert.are_not.equal(0, _G.GideonRaidDB.panelPosition.x)
 
         _G.SlashCmdList["GIDEONRAID"]("resetposition")
         assert.are.equal("CENTER", _G.GideonRaidDB.panelPosition.point)
