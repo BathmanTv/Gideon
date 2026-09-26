@@ -17,7 +17,7 @@
         CLIENT LANGUAGE (the raid lead plays on a French client, so the name the
         client displays is French): it is a SAFETY NET only (no id read at all, or
         a new difficulty of the same boss), it is compared case-insensitively, no
-        translation is ever guessed, and `/gr boss name <text>` adds the exact text
+        translation is ever guessed, and `/gideon boss name <text>` adds the exact text
         the player sees. The DELIVERED default carries the two names of the guild's
         boss, one per language (EN + FR).
 
@@ -29,16 +29,16 @@
     panel to open on that boss, and EVERY difficulty opens it (the difficulty id
     is only logged, it never decides).
 
-    AN EXPLICIT CLEAR ALWAYS WINS over the delivered default: `/gr boss clear`
+    AN EXPLICIT CLEAR ALWAYS WINS over the delivered default: `/gideon boss clear`
     stamps `GideonRaidDB.intermission.bossTargetCleared = true`, and from then on
     the delivered target is DROPPED (only what the player adds afterwards counts).
     The two situations are therefore never confused:
       - NEVER CONFIGURED (no marker, empty lists - a fresh install or an older
         SavedVariables): the DELIVERED default applies (id 3445 + both names);
       - EXPLICITLY CLEARED (marker set): NOTHING opens by itself, as the player
-        asked, until `/gr boss <id>` names a target again.
+        asked, until `/gideon boss <id>` names a target again.
 
-    WHAT THE IDLOG IS STILL FOR: `/gr idlog on` prints and memorizes the raw
+    WHAT THE IDLOG IS STILL FOR: `/gideon idlog on` prints and memorizes the raw
     `ENCOUNTER_START` arguments (id, name, difficulty, group size), which is how
     the delivered values above were captured and how any other boss is measured
     later - nothing is ever invented.
@@ -106,13 +106,13 @@ BossFilter.REASON = {
     UNREADABLE = "unreadable",
 }
 
---- WHERE the EFFECTIVE target comes from - what `/gr boss`, `/gr boss list` and
---- `/gr diag` report so the raid lead always knows WHY the panel opens (or not).
+--- WHERE the EFFECTIVE target comes from - what `/gideon boss`, `/gideon boss list` and
+--- `/gideon diag` report so the raid lead always knows WHY the panel opens (or not).
 --- ASCII identifiers, never displayed: the rendering layer picks the message.
 BossFilter.SOURCE = {
     --- the DELIVERED default only: nothing was ever added by a player
     DEFAULT = "default",
-    --- the DELIVERED default + entries added by the player (`/gr boss <id>`)
+    --- the DELIVERED default + entries added by the player (`/gideon boss <id>`)
     MIXED = "mixed",
     --- the player's OWN entries only: they cleared the target first
     OWN = "own",
@@ -120,7 +120,7 @@ BossFilter.SOURCE = {
     CLEARED = "cleared",
 }
 
---- Values accepted by `/gr idlog on|off` (STRICT: anything else yields nil and
+--- Values accepted by `/gideon idlog on|off` (STRICT: anything else yields nil and
 --- the caller refuses it without persisting anything).
 BossFilter.SWITCHES = { on = true, off = false }
 
@@ -181,11 +181,11 @@ local function plainText(value)
     return text
 end
 
---- STRICT resolution of the value typed after `/gr boss` (`/gr boss <id>`).
+--- STRICT resolution of the value typed after `/gideon boss` (`/gideon boss <id>`).
 --- Accepted: a positive integer written as a string ("1234", " 1234 ") or as a
 --- number. Anything else - absent, empty, "Entombed Sentinels", "12.5", "-3",
 --- "0", a table - returns nil: the CALLER refuses it and persists NOTHING (same
---- mechanics as `/gr lang`, `/gr ping` and `/gr sound`).
+--- mechanics as `/gideon lang`, `/gideon ping` and `/gideon sound`).
 --- @param raw string|number|nil value typed by the player
 --- @return number|nil id
 function BossFilter.resolveId(raw)
@@ -339,7 +339,7 @@ local function unionLists(primary, secondary, max)
     return clampList(out, max)
 end
 
---- Is the target EXPLICITLY cleared by the player (`/gr boss clear`)? Only an
+--- Is the target EXPLICITLY cleared by the player (`/gideon boss clear`)? Only an
 --- exact `true` counts (same mechanics as enabledOf), so a hand-edited
 --- SavedVariables can never drop the delivered default by accident.
 --- @param raw any persisted GideonRaidDB.intermission.bossTargetCleared
@@ -349,14 +349,14 @@ function BossFilter.isCleared(raw)
 end
 
 --- THE EFFECTIVE TARGET of the auto-opening: what `evaluate` compares, what
---- `/gr boss` reports, what `/gr boss list` shows. PURE, TOTAL, deterministic.
+--- `/gideon boss` reports, what `/gideon boss list` shows. PURE, TOTAL, deterministic.
 ---   - the player's OWN entries are always read from the SavedVariables
 ---     (`bossIds` / `bossNames`, which hold ONLY what a player added);
 ---   - the DELIVERED default (`delivered.ids` / `delivered.names`) is the one built
 ---     into the addon by `Core/Config.lua`; it is a PARAMETER, so this module owns
 ---     no game data of its own;
 ---   - the delivered default is ADDED to the player's entries, UNLESS the player
----     explicitly cleared the target: `/gr boss clear` means "the player took the
+---     explicitly cleared the target: `/gideon boss clear` means "the player took the
 ---     list over", so the delivered default is dropped and only what is added
 ---     afterwards counts. An explicit clear therefore always wins, while a save
 ---     that was NEVER configured (fresh install, older SavedVariables) gets the
@@ -388,8 +388,8 @@ function BossFilter.resolveTarget(raw, delivered)
     return target
 end
 
---- One localized line saying WHERE the effective target comes from (`/gr boss`,
---- `/gr boss list`, `/gr diag`). Pure formatting: it reads nothing, it only renders
+--- One localized line saying WHERE the effective target comes from (`/gideon boss`,
+--- `/gideon boss list`, `/gideon diag`). Pure formatting: it reads nothing, it only renders
 --- the source carried by the resolved configuration.
 --- @param config table|nil resolved configuration
 --- @return string
@@ -421,7 +421,7 @@ local function labelOf(value, mine)
 end
 
 --- `"3445 (addon default), 1234 (added by you)"` (or `""` when nothing is
---- targeted): the ids of `/gr boss list`, each one labelled with its provenance, so
+--- targeted): the ids of `/gideon boss list`, each one labelled with its provenance, so
 --- the raid lead can tell what the ADDON ships from what a PLAYER added.
 --- @param list table|nil effective ids (resolved configuration)
 --- @param own table|nil ids persisted by the player
@@ -458,7 +458,7 @@ function BossFilter.annotateNames(list, own)
     return table.concat(parts, ", ")
 end
 
---- STRICT resolution of the value typed after `/gr idlog` (`on` / `off`):
+--- STRICT resolution of the value typed after `/gideon idlog` (`on` / `off`):
 --- accepted case-insensitively, anything else yields nil (the caller refuses it,
 --- nothing is persisted).
 --- @param raw string|nil
@@ -654,11 +654,11 @@ end
 --- THE DECISION: must the intermission panel open BY ITSELF on this encounter?
 --- PURE, TOTAL, DETERMINISTIC - this is the function that fixes the critical bug.
 --- Order of the rules (it matters):
----   1. the MANUAL OVERRIDE (`/gr inter on`): the player asked for the NEXT
+---   1. the MANUAL OVERRIDE (`/gideon inter on`): the player asked for the NEXT
 ---      encounter, whatever the boss -> OPEN (reason OVERRIDE);
 ---   2. an EMPTY allow-list: NOTHING opens (reason NO_TARGET). With the DELIVERED
 ---      default (id 3445 + the two names, `Core/Config.lua`) this only happens when
----      the player explicitly cleared the target (`/gr boss clear`, which drops the
+---      the player explicitly cleared the target (`/gideon boss clear`, which drops the
 ---      delivered default) or on a build without any delivered target at all;
 ---   3. the ID read on the encounter is in the allow-list -> OPEN (MATCH_ID). It
 ---      is the PRIMARY criterion: an integer, identical in every language;
@@ -796,7 +796,7 @@ function BossFilter.toList(raw)
     return out
 end
 
---- `"1234, 5678"` (or `""` when the list is empty): display helper of `/gr boss`,
+--- `"1234, 5678"` (or `""` when the list is empty): display helper of `/gideon boss`,
 --- `""` included so the caller never has to special-case a missing list.
 --- @param list table|nil ids
 --- @return string
@@ -817,14 +817,14 @@ function BossFilter.describeNames(list)
     return table.concat(names, ", ")
 end
 
---- One-line summary of the configured target, used by `/gr boss` and by the
+--- One-line summary of the configured target, used by `/gideon boss` and by the
 --- information messages: "ids 1234, 5678, names sentinelles inhumées". Three
 --- distinct states are NEVER confused:
 ---   - a target is configured -> the ids and/or the names;
 ---   - NO target at all (a bare table, or lists emptied by hand) -> "NONE - SAFE
 ---     DEFAULT: the panel will NOT open by itself";
 ---   - EXPLICITLY cleared (`bossTargetCleared`) -> "NONE - cleared on purpose with
----     /gr boss clear", so the player reads back their own decision instead of
+---     /gideon boss clear", so the player reads back their own decision instead of
 ---     believing the addon lost its target.
 --- @param config table|nil resolved configuration
 --- @return string
@@ -848,7 +848,7 @@ function BossFilter.targetSummary(config)
     return table.concat(parts, ", ")
 end
 
---- Localized text of an id for a message (`/gr boss` refusals), "none" when there
+--- Localized text of an id for a message (`/gideon boss` refusals), "none" when there
 --- is nothing to name.
 --- @param value any
 --- @return string

@@ -462,7 +462,7 @@ describe("Vitrine : le plan (Core/Layout, pur)", function()
         local offLine = textBlock(off, "animLine")
         assert.is_true(contains(onLine.text, ns.Locale.t("ui.wordEnabled")), onLine.text)
         assert.is_true(contains(offLine.text, ns.Locale.t("ui.wordDisabled")), offLine.text)
-        assert.is_true(contains(onLine.text, "/gr sim anim"), "la commande doit etre rappelee")
+        assert.is_true(contains(onLine.text, "/gideon sim anim"), "la commande doit etre rappelee")
     end)
 end)
 
@@ -621,10 +621,10 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
     end
 
     -- ------------------------------------------------------------- OUVERTURE ---
-    it("`/gr sim style` ouvre la vitrine, avec le bandeau SIMULATION visible", function()
+    it("`/gideon sim style` ouvre la vitrine, avec le bandeau SIMULATION visible", function()
         slash("sim style")
         local panel = showcase()
-        assert.is_not_nil(panel, "la vitrine doit exister apres /gr sim style")
+        assert.is_not_nil(panel, "la vitrine doit exister apres /gideon sim style")
         assert.is_true(panel:IsShown())
         -- Le bandeau est DESSINE et il dit qu'on n'est pas en combat.
         local banner = element("showcaseBanner")
@@ -712,7 +712,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         -- L'ENCART D'EXEMPLE est dessine dans le meme style, et il n'a plus d'action.
         assert.are.equal("Interface\\Buttons\\WHITE8X8", element("styleCard1").__backdrop.edgeFile)
         assert.is_nil(element("styleCard1").showcaseAction)
-        -- IL N'Y A PLUS D'APERCU A CHANGER : `/gr sim style 1` est accepte sans
+        -- IL N'Y A PLUS D'APERCU A CHANGER : `/gideon sim style 1` est accepte sans
         -- toucher au style du combat, et un ancien style est REFUSE.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("sim style 1")
@@ -723,7 +723,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
     end)
 
     -- ------------------------------------------------------------ LE CHOIX REEL --
-    it("`/gr style 1` (et `shipped`) persiste le style et l'applique au panneau de COMBAT", function()
+    it("`/gideon style 1` (et `shipped`) persiste le style et l'applique au panneau de COMBAT", function()
         slash("style shipped")
         assert.are.equal("1", _G.GideonRaidDB.intermission.style)
         slash("inter start")
@@ -769,7 +769,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         slash("style 42")
         assert.is_true(contains(messages(), "unknown style"))
         assert.are.equal("1", _G.GideonRaidDB.intermission.style, "la valeur refusee ne doit rien ecraser")
-        -- `/gr style` sans argument DIT ou on en est ET qu'il n'y a plus de choix.
+        -- `/gideon style` sans argument DIT ou on en est ET qu'il n'y a plus de choix.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("style")
         local text = messages()
@@ -800,7 +800,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         assert.is_true(pulsed[4] < 1, "la bordure doit pulser (alpha < 1) : " .. tostring(pulsed[4]))
     end)
 
-    it("`/gr sim anim off` coupe les animations ET les persiste", function()
+    it("`/gideon sim anim off` coupe les animations ET les persiste", function()
         slash("sim anim off")
         assert.is_false(_G.GideonRaidDB.intermission.showcaseAnimations)
         slash("sim style")
@@ -820,7 +820,7 @@ describe("Vitrine : les commandes (UI/Showcase.lua, avec le client stubbe)", fun
         slash("sim anim banana")
         assert.is_true(_G.GideonRaidDB.intermission.showcaseAnimations)
         assert.is_true(contains(messages(), "on|off"))
-        -- `/gr sim anim` sans argument dit ou on en est, sans rien changer.
+        -- `/gideon sim anim` sans argument dit ou on en est, sans rien changer.
         slash("sim anim")
         assert.is_true(contains(messages(), "showcase animations"))
     end)

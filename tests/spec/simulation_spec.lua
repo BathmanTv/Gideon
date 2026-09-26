@@ -83,7 +83,7 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
         assert.is_nil(S.stateKeyForPing({}))
     end)
 
-    it("resout les sous-commandes /gr sim et REFUSE toute valeur inconnue", function()
+    it("resout les sous-commandes /gideon sim et REFUSE toute valeur inconnue", function()
         assert.are.equal("inter", S.resolveCommand("inter"))
         assert.are.equal("inter", S.resolveCommand("group"))
         assert.are.equal("inter", S.resolveCommand("groupe"))
@@ -99,7 +99,7 @@ describe("Simulation : constantes, resolution des commandes et des pings (pur)",
         assert.is_nil(S.resolveCommand({}))
     end)
 
-    it("parse /gr sim : la sous-commande SEULE, toute option est REFUSEE", function()
+    it("parse /gideon sim : la sous-commande SEULE, toute option est REFUSEE", function()
         local mode, options = S.parseCommand("inter")
         assert.are.equal("inter", mode)
         assert.are.same({}, options)

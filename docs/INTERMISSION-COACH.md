@@ -48,7 +48,7 @@ Each state also carries: the visual label ("3 GREEN + 1 RED", "3 VERTS +
 computation), the **ONE action line** (two variants: with ping / without ping,
 selected by the policy) and the button text (number as a hint). **Every displayed
 field of a `CONVENTION` record is a locale key** (`state.actionPing.3V1R`, …)
-resolved by `copyRecord` through `ns.Locale.t`, so `/gr lang` applies without a
+resolved by `copyRecord` through `ns.Locale.t`, so `/gideon lang` applies without a
 reload.
 
 **Ping naming**: raidstrats guide convention, **by dominant color** — 3 green →
@@ -125,7 +125,7 @@ Three points make this rule playable:
    with no addon → addon communication (which does not exist in instances).
 3. **The addon never pings and never prepares a macro.** See §4.
 
-### 2.2 Ping policies (configurable: `/gr ping`)
+### 2.2 Ping policies (configurable: `/gideon ping`)
 
 The policy is persisted in `GideonRaidDB.intermission.pingMode` and resolved by
 the pure, total `ns.Config.resolvePingMode` (an unknown value — absent, typo,
@@ -143,15 +143,15 @@ receives a contradictory instruction. In `color` mode the `CHASER`/`MIDDLE` keep
 their movement order and simply ping their own ping on the way.
 
 The policy **decides who must ping** but is **no longer displayed permanently on
-the panel**: it stays available on demand (`/gr ping`, `/gr inter status`).
+the panel**: it stays available on demand (`/gideon ping`, `/gideon inter status`).
 
 ### 2.3 Evening flow (implemented end to end)
 
 | # | Player action | What the addon does |
 |---|---|---|
-| a | before the pull, types `/gr` | the main panel opens; its button **PLACE INTERMISSION PANEL** switches to **placement mode**: the intermission frame is shown, dragged where the player wants it and its **position is saved in the SavedVariables** |
-| b | places the frame where it must appear (drag it with the left button), prepares the ping keybind (Options > Keybindings), then presses **OK** | **OK saves the position and closes the panel** — the body says it explicitly: *place the panel where you want it to appear, then press OK: during the fight it opens by itself* (EN + FR); the close cross or **Close** **cancels** instead of validating; `/gr inter place` reopens it at will |
-| c | pulls the boss | `ENCOUNTER_START` is the **starting gun of the pre-computed schedule**, but **only when the encounter is the configured target boss** (`/gr boss <id>`; §2.8). The four event arguments are read **once, under `pcall`**, and only to compare the encounter id (and the optional name): they drive nothing else, and a value that cannot be read (a *secret* value in 12.x) is never a match. 1–2 s (**lead = 2 s by default**) before each intermission the panel **opens by itself** with the three choices, and the **intermission start sound** plays once (§2.7) |
+| a | before the pull, types `/gideon` | the main panel opens; its button **PLACE INTERMISSION PANEL** switches to **placement mode**: the intermission frame is shown, dragged where the player wants it and its **position is saved in the SavedVariables** |
+| b | places the frame where it must appear (drag it with the left button), prepares the ping keybind (Options > Keybindings), then presses **OK** | **OK saves the position and closes the panel** — the body says it explicitly: *place the panel where you want it to appear, then press OK: during the fight it opens by itself* (EN + FR); the close cross or **Close** **cancels** instead of validating; `/gideon inter place` reopens it at will |
+| c | pulls the boss | `ENCOUNTER_START` is the **starting gun of the pre-computed schedule**, but **only when the encounter is the configured target boss** (`/gideon boss <id>`; §2.8). The four event arguments are read **once, under `pcall`**, and only to compare the encounter id (and the optional name): they drive nothing else, and a value that cannot be read (a *secret* value in 12.x) is never a match. 1–2 s (**lead = 2 s by default**) before each intermission the panel **opens by itself** with the three choices, and the **intermission start sound** plays once (§2.7) |
 | d | clicks the composition seen above their head | state in very large type, role, `PING: YES/NO`, one action line. **The three composition buttons then disappear** — only the result and the **REDO** button stay, so a second click by accident is impossible; REDO brings the three choices back (empty state), as many times as needed |
 | e | — | at the end of the intermission the panel **closes by itself** |
 | f | next intermission | same cycle, **automatically** (schedule: 46.3 s, then 148.9 / 251.5 / 353.2 s after the pull) |
@@ -170,9 +170,9 @@ from the chat**, driven by the pure module `Core/Simulation.lua`:
 
 | Entry | Command (aliases) | What happens |
 |---|---|---|
-| **Intermission group** | `/gr sim inter` (`sim group`, `sim groupe`) | the intermission panel **opens RIGHT AWAY** (fourth in-game feedback: the former 3 s delay is gone) **WITH its three composition buttons** (`1V3R` / `2V2R` / `3V1R`, each sized on its own label) — fifth in-game feedback: the panel had lost them, and they are its whole point. The player clicks the composition they see, reads the state / role / `PING: YES/NO` / the action line and **the three buttons disappear** (only the result and **REDO** stay, exactly like the real flow), corrects it, and **closes the panel themselves** (close cross or Close button). **ONE single cycle**: nothing closes it automatically, nothing relaunches it, and the chat reports it when it closes; `/gr sim stop` does the same |
-| **Ping help** | `/gr sim ping` (= `/gr pinghelp`) | a **short information window** (draggable, position persisted, closable with its Close button or the cross) that explains **how to bind one key per ping** (`Options > Keybindings > Ping`) and the **operational reminder** - `PING: YES = PING YOURSELF`: hover YOUR OWN character frame, press your key, and you ping yourself. There is **no guided sequence any more** (fourth in-game feedback): no countdown, no `PING PLACED` button, no `Avertissement -> En route -> Aide` progression, no announced-ping counter |
-| Leave | `/gr sim stop`, the **Close** button or the close cross | closes the rehearsal or the help window and gives an honest report |
+| **Intermission group** | `/gideon sim inter` (`sim group`, `sim groupe`) | the intermission panel **opens RIGHT AWAY** (fourth in-game feedback: the former 3 s delay is gone) **WITH its three composition buttons** (`1V3R` / `2V2R` / `3V1R`, each sized on its own label) — fifth in-game feedback: the panel had lost them, and they are its whole point. The player clicks the composition they see, reads the state / role / `PING: YES/NO` / the action line and **the three buttons disappear** (only the result and **REDO** stay, exactly like the real flow), corrects it, and **closes the panel themselves** (close cross or Close button). **ONE single cycle**: nothing closes it automatically, nothing relaunches it, and the chat reports it when it closes; `/gideon sim stop` does the same |
+| **Ping help** | `/gideon sim ping` (= `/gideon pinghelp`) | a **short information window** (draggable, position persisted, closable with its Close button or the cross) that explains **how to bind one key per ping** (`Options > Keybindings > Ping`) and the **operational reminder** - `PING: YES = PING YOURSELF`: hover YOUR OWN character frame, press your key, and you ping yourself. There is **no guided sequence any more** (fourth in-game feedback): no countdown, no `PING PLACED` button, no `Avertissement -> En route -> Aide` progression, no announced-ping counter |
+| Leave | `/gideon sim stop`, the **Close** button or the close cross | closes the rehearsal or the help window and gives an honest report |
 
 **What the rehearsal banner says.** A rehearsal is a **single cycle the player
 closes**, so the panel carries a **two-line** banner:
@@ -234,7 +234,7 @@ run and state and:
   timeline armed), and **stopped the moment a real encounter starts**;
 - takes **no option at all** (the former `cycles=N` is gone: one single cycle, the
   player closes it) and refuses anything else: a trailing token
-  (`/gr sim inter cycles=3`), an unknown sub-command (`/gr sim bidon`) or a
+  (`/gideon sim inter cycles=3`), an unknown sub-command (`/gideon sim bidon`) or a
   non-table argument are **rejected with a message**, never guessed;
 - the rehearsal **arms no clock at all**: it owns no ticker, so nothing in it can
   advance, close or relaunch the panel on its own.
@@ -259,8 +259,8 @@ remembers where the player left it:
 
 | Panel | SavedVariables key | Restored |
 |---|---|---|
-| main panel (`/gr`) | `GideonRaidDB.panelPosition` | at `ADDON_LOADED` and every time the panel is shown |
-| intermission panel | `GideonRaidDB.intermission.position` | on placement, opening and `/gr show` |
+| main panel (`/gideon`) | `GideonRaidDB.panelPosition` | at `ADDON_LOADED` and every time the panel is shown |
+| intermission panel | `GideonRaidDB.intermission.position` | on placement, opening and `/gideon show` |
 | ping help window | `GideonRaidDB.pingPanelPosition` | before each opening |
 
 Each position is a `{ point, relativePoint, x, y }` block, saved on **drag stop**
@@ -269,9 +269,9 @@ Each position is a `{ point, relativePoint, x, y }` block, saved on **drag stop*
 (`Config.POSITION_POINTS`): a hand-edited SavedVariables holding `point = "BANANA"`
 falls back to `CENTER` instead of raising inside `SetPoint`.
 
-**Lock / unlock.** `/gr lock` and `/gr unlock` (same effect as the **LOCK PANEL /
+**Lock / unlock.** `/gideon lock` and `/gideon unlock` (same effect as the **LOCK PANEL /
 UNLOCK PANEL** button of the main panel) freeze or free every panel; the choice is
-persisted in `GideonRaidDB.lockPanel` and survives a `/reload`. `/gr resetposition`
+persisted in `GideonRaidDB.lockPanel` and survives a `/reload`. `/gideon resetposition`
 brings the three panels back to the center of the screen. Dragging a locked panel
 prints a hint instead of doing nothing silently.
 
@@ -280,7 +280,7 @@ carries `lockPanel = true` — the **old hard-coded default**, which no player c
 change (no command existed) — and no schema marker. On the first load after the
 update, `Config.ensureDB` sees `panelSchema ~= Config.PANEL_SCHEMA`, forces
 `lockPanel = false` **once**, and stamps the schema. From then on the player's own
-choice (`/gr lock`) is respected, and a **non-boolean** value (hand-edited file)
+choice (`/gideon lock`) is respected, and a **non-boolean** value (hand-edited file)
 counts as "not locked": the resolver is total, it never raises and never locks the
 player out.
 
@@ -345,7 +345,7 @@ stubbed API, on every commit.
 ### 2.7 Assignment soundboards (one sound per composition)
 
 Raid-lead request: the moment the player **declares** their orb composition — a click
-on one of the three buttons, in the **real flow** as in the **`/gr sim inter`
+on one of the three buttons, in the **real flow** as in the **`/gideon sim inter`
 rehearsal** — the soundboard of **that** state is heard, **once**.
 
 | State | File (in `Sound/`) | Client path |
@@ -368,7 +368,7 @@ Behaviours, frozen out of game:
 
 - **no sound without a declaration**: the panel is silent until a composition is
   clicked; a state that is not canonical is refused, nothing is guessed;
-- **once**: re-declaring the same composition (`/gr inter 3V1R` twice, a forced
+- **once**: re-declaring the same composition (`/gideon inter 3V1R` twice, a forced
   click, a panel refresh, the engine ticks) **cannot** replay it;
 - **CORRECT re-arms it**: `REDO` then a click plays the sound of the composition
   declared next — even when it is the same one (documented behaviour: a correction
@@ -376,9 +376,9 @@ Behaviours, frozen out of game:
 - **a new intermission and a new rehearsal re-arm it** (`beginIntermission`,
   `UI.SimulationInterStart`), so the same composition is sounded at every
   intermission of the evening;
-- **`/gr sound test <state>`** plays one soundboard on request (no fight needed) and
+- **`/gideon sound test <state>`** plays one soundboard on request (no fight needed) and
   names the file; an unknown state is refused and nothing is played; when the
-  preference is **off** nothing plays and the chat says so (`/gr sound on` first) —
+  preference is **off** nothing plays and the chat says so (`/gideon sound on` first) —
   the test never contradicts the setting;
 - the three shipped files are **silent placeholders** (0.2 s of silence, Ogg
   Vorbis): replacing them with the raid lead's recordings is a **file drop** with
@@ -392,21 +392,21 @@ Same module, same rules, one **fourth** file: the raid lead's own recording,
 already in the repository (**do not rename, re-encode or overwrite it**). It is
 played **once at the very beginning of every intermission** — i.e. at the moment
 the panel opens by itself, 2 s before the intermission — and **once per
-`/gr sim inter` rehearsal**.
+`/gideon sim inter` rehearsal**.
 
 | Concern | Where | Why there |
 |---|---|---|
 | the file name, its client path, "one playback per intermission" | `Core/Sound.lua` (`START_FILE`, `Sound.startPath`, `Sound.newStartGate`, `Sound.takeIntermissionStart`) | the rule is an **identity** carried by the caller: the wiring hands a **token** that names the intermission (encounter + rank, or the rehearsal). The same token is refused (`REASON.ALREADY`), a new token always plays — so the sound is **never doubled** and the next intermission always sounds, without any explicit re-arm |
 | the actual playback | `UI/Intermission.lua` (`playStartSound` → `playSoundFile`, `UI.SoundTestStart`) | `PlaySoundFile` stays confined to `UI/`, on the `Master` channel, under `pcall` |
 | the trigger | `UI.beginIntermission` (real flow, the token is `enc:<encounter>:i<rank>`) and `UI.SimulationInterStart` (token `sim:<n>`) | the sound follows the **opening of the panel**, in the real flow as in the rehearsal |
-| the test entry | `/gr sound test start` | hear the file on request, without waiting for a pull; the test bypasses the gate and never consumes an intermission |
-| the **health check** | `/gr diag` (see §2.8) | verifies **in game** that the four files are loaded and playable (the boolean returned by `PlaySoundFile`) **without making any noise**, and prints the verdict per file |
+| the test entry | `/gideon sound test start` | hear the file on request, without waiting for a pull; the test bypasses the gate and never consumes an intermission |
+| the **health check** | `/gideon diag` (see §2.8) | verifies **in game** that the four files are loaded and playable (the boolean returned by `PlaySoundFile`) **without making any noise**, and prints the verdict per file |
 
 The file is **listed in `GideonRaid.toc`** — an unlisted sound is not loaded by the
 client and `PlaySoundFile` then fails silently — and a test checks the entry and
 the file on disk (magic bytes `OggS`).
 
-### 2.8 Which boss may open the panel (`/gr boss`) — the target is DELIVERED
+### 2.8 Which boss may open the panel (`/gideon boss`) — the target is DELIVERED
 
 **Reported bug, critical:** *"the window opens by itself during ANY boss fight! It
 must be limited to the boss we want."* The auto-open used to fire on **every**
@@ -419,7 +419,7 @@ BossFilter.evaluate(observation, configuration) -> { shouldOpen, reason, id, nam
 
 Order of the rules (it matters):
 
-1. **manual override** (`/gr inter on` → `overrideEncounter = true`): the player
+1. **manual override** (`/gideon inter on` → `overrideEncounter = true`): the player
    explicitly asked for the **next** encounter, whatever the boss → **OPEN**
    (`reason = override`); consumed at the end of that encounter;
 2. **empty allow-list** (`bossIds` and `bossNames` both empty): **SAFE DEFAULT,
@@ -457,29 +457,29 @@ the decision; `Config.BOSS_DIFFICULTIES` documents the table and
 
 | State | Stored as | Effect | Reported as |
 | --- | --- | --- | --- |
-| **never configured** (fresh install, empty SavedVariables) | `bossIds = {}`, `bossNames = {}`, `bossTargetCleared = false` | the **delivered default** applies: id `3445` + the two names open the panel | `/gr diag` → *"the default DELIVERED with the addon"* |
-| **cleared on purpose** (`/gr boss clear`) | `bossTargetCleared = true` | the delivered default is **dropped too**: nothing opens by itself any more, until `/gr boss <id>` names a target again | `/gr boss` → *"cleared ON PURPOSE"*, and the refusal message at a pull names `/gr boss 3445` to put it back |
-| **player addition** (`/gr boss 2594`) | `bossIds = { 2594 }` | **added to** the delivered default: both open | `/gr boss list` labels each entry *added by you* / *addon default* |
+| **never configured** (fresh install, empty SavedVariables) | `bossIds = {}`, `bossNames = {}`, `bossTargetCleared = false` | the **delivered default** applies: id `3445` + the two names open the panel | `/gideon diag` → *"the default DELIVERED with the addon"* |
+| **cleared on purpose** (`/gideon boss clear`) | `bossTargetCleared = true` | the delivered default is **dropped too**: nothing opens by itself any more, until `/gideon boss <id>` names a target again | `/gideon boss` → *"cleared ON PURPOSE"*, and the refusal message at a pull names `/gideon boss 3445` to put it back |
+| **player addition** (`/gideon boss 2594`) | `bossIds = { 2594 }` | **added to** the delivered default: both open | `/gideon boss list` labels each entry *added by you* / *addon default* |
 
 Only an exact `bossTargetCleared = true` counts (same strictness as every other
 boolean of the addon), so a hand-edited SavedVariables can never neutralise the
 delivered default by accident, and a deliberate clear can never be mistaken for a
-lost configuration. `/gr boss` prints the effective target **and where it comes
-from**; `/gr boss list` adds the provenance of every entry.
+lost configuration. `/gideon boss` prints the effective target **and where it comes
+from**; `/gideon boss list` adds the provenance of every entry.
 
 **Measuring the id of ANOTHER boss (this is how the delivered id was obtained):**
 
-1. `/reload`, then `/gr idlog on` (persisted);
+1. `/reload`, then `/gideon idlog on` (persisted);
 2. pull the boss: the chat prints
    `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20` — each
    field is read under `pcall`, and an unreadable one prints `unreadable` instead of
    a fake number;
-3. read the `id=…` back with `/gr boss list` (the last 10 encounters seen are
+3. read the `id=…` back with `/gideon boss list` (the last 10 encounters seen are
    memorized, newest first) — no screenshot needed;
-4. `/gr boss <id>` **once**: the panel now opens on that boss **too**; `/gr boss`
-   confirms the target and `/gr boss list` shows the provenance.
+4. `/gideon boss <id>` **once**: the panel now opens on that boss **too**; `/gideon boss`
+   confirms the target and `/gideon boss list` shows the provenance.
 
-**`/gr diag` (READ-ONLY health report, one command):** the effective target and its
+**`/gideon diag` (READ-ONLY health report, one command):** the effective target and its
 source, the delivered default, the idlog state, the ping policy, and a verdict per
 sound file (the four of them), obtained from the **boolean returned by
 `PlaySoundFile`** (*`true`* = the client **will** play the file, *`false`/`nil`* =
@@ -487,9 +487,9 @@ missing file / file added after the client started / refused playback). That cal
 **is** a playback, so it is only made when it **cannot be heard**: Master channel
 **enabled** (otherwise a disabled channel answers "nothing will play" even for a
 file that is there — the verdict would be a lie) **and** its volume at 0. With the
-sound on, `/gr diag` plays **nothing** and says so, with the procedure to get the
-verdict (`/console Sound_MasterVolume 0` → `/gr diag` → `/console
-Sound_MasterVolume 1`) or to hear a file **on purpose** (`/gr sound test
+sound on, `/gideon diag` plays **nothing** and says so, with the procedure to get the
+verdict (`/console Sound_MasterVolume 0` → `/gideon diag` → `/console
+Sound_MasterVolume 1`) or to hear a file **on purpose** (`/gideon sound test
 1v3r|2v2r|3v1r|start`). A client that refuses to answer reads **UNKNOWN**, never a
 fake *KO*. The whole rule is `Core/Diag.probeGate` (pure, covered by
 `tests/spec/diag_spec.lua`); the rendering layer only injects the two CVars and the
@@ -505,8 +505,8 @@ anywhere.
 
 - display the plan prepared out of game (partner, role, position, pairs);
 - **place** the intermission panel where the player wants it (position persisted),
-  **drag the main panel** (movable by default, position persisted, `/gr lock` to
-  freeze it, `/gr resetposition` to recenter everything) and do the same with the
+  **drag the main panel** (movable by default, position persisted, `/gideon lock` to
+  freeze it, `/gideon resetposition` to recenter everything) and do the same with the
   ping help window;
 - display the **three composition buttons** named after the **visible
   composition** — `1 green + 3 red`, `2 green + 2 red`, `3 green + 1 red` — with
@@ -523,7 +523,7 @@ anywhere.
   room went dark, then close itself at the end;
 - play **one soundboard per composition** (1V3R / 2V2R / 3V1R) **once**, the moment
   the player declares it — real flow and rehearsal alike — on the `Master` channel,
-  with `/gr sound on|off` to mute it and `/gr sound test 1v3r|2v2r|3v1r` to hear one
+  with `/gideon sound on|off` to mute it and `/gideon sound test 1v3r|2v2r|3v1r` to hear one
   on request;
 - offer **REDO**: a mistaken click is corrected in one click, as many times as
   needed;
@@ -610,7 +610,7 @@ left, and what is now implemented:
   `Warning` instruction would be a lie), even though « Attaque » and « Aide »
   exist as separate native keybinds.
 
-`/gr inter ping` prints the chosen line **and the names that were tried**, which
+`/gideon inter ping` prints the chosen line **and the names that were tried**, which
 is exactly what the in-game confirmation has to check (see §9).
 
 ## 5. Data contract (GIDEON → addon)
@@ -663,7 +663,7 @@ In `GideonRaidDB.intermission` (values resolved and clamped by
 
 | Key | Default | Effect |
 |---|---|---|
-| `enabled` | `true` | enables/disables the whole module (`/gr inter on|off`) |
+| `enabled` | `true` | enables/disables the whole module (`/gideon inter on|off`) |
 | `startOnEncounterStart` | `true` | arms the pre-computed schedule on `ENCOUNTER_START` |
 | `autoShowPanel` | `true` | opens the panel when an intermission starts |
 | `scale` | `1.0` | panel scale (clamped 0.5 – 3.0) |
@@ -671,13 +671,13 @@ In `GideonRaidDB.intermission` (values resolved and clamped by
 | `visibilitySeconds` | `3` | visibility window (clamped 1 – 10) |
 | `durationSeconds` | `20` | intermission duration, after which the panel closes itself (clamped, > visibility) |
 | `scheduleSeconds` | `{46.3, 148.9, 251.5, 353.2}` | **pre-computed intermission times**, in seconds since the pull (positive numbers only, sorted, 12 entries max) |
-| `pingMode` | `"anchors"` | **ping policy**: `anchors` (only the `1V3R` anchors ping), `color` (every state pings its own ping), `none` (nobody pings) — see `/gr ping`; an unknown value falls back to `"anchors"` |
-| `soundEnabled` | `true` | **soundboard preference**: `true` plays the sound of the declared composition and the intermission start sound once (see §2.7), `false` mutes both — see `/gr sound on|off`; only an **exact `false`** mutes: an absent field (an older SavedVariables) or a hand-edited value falls back to the default |
-| `bossIds` | `{}` | **allow-list of encounter ids that may open the panel by itself** (`/gr boss <id>`; §2.8). **EMPTY BY DEFAULT = NOTHING opens automatically** (safe default). Positive integers only, de-duplicated, sorted, 12 max |
+| `pingMode` | `"anchors"` | **ping policy**: `anchors` (only the `1V3R` anchors ping), `color` (every state pings its own ping), `none` (nobody pings) — see `/gideon ping`; an unknown value falls back to `"anchors"` |
+| `soundEnabled` | `true` | **soundboard preference**: `true` plays the sound of the declared composition and the intermission start sound once (see §2.7), `false` mutes both — see `/gideon sound on|off`; only an **exact `false`** mutes: an absent field (an older SavedVariables) or a hand-edited value falls back to the default |
+| `bossIds` | `{}` | **allow-list of encounter ids that may open the panel by itself** (`/gideon boss <id>`; §2.8). **EMPTY BY DEFAULT = NOTHING opens automatically** (safe default). Positive integers only, de-duplicated, sorted, 12 max |
 | `bossNames` | `{}` | **secondary criterion**, same rule but on the encounter *name*: trimmed, lower case, compared case-insensitively, **empty by default and never guessed** — an encounter name is translated by the client |
-| `idlog` | `false` | **encounter id log** (`/gr idlog on|off`): when on, every `ENCOUNTER_START` prints `encounter seen: id=… name=… difficulty=… group=…` (an unreadable value prints `unreadable`) and memorizes the last 10 observations |
-| `seenEncounters` | `{}` | the ring filled by the idlog, **newest first, 10 max** (`/gr boss list`): only observations that carry something (an id, a name, or a value that failed to read) |
-| `overrideEncounter` | `false` | **manual override**: `true` (armed by `/gr inter on`) opens the panel on the **next** encounter whatever the boss; **consumed at the end of that encounter**; cleared by `/gr inter off` |
+| `idlog` | `false` | **encounter id log** (`/gideon idlog on|off`): when on, every `ENCOUNTER_START` prints `encounter seen: id=… name=… difficulty=… group=…` (an unreadable value prints `unreadable`) and memorizes the last 10 observations |
+| `seenEncounters` | `{}` | the ring filled by the idlog, **newest first, 10 max** (`/gideon boss list`): only observations that carry something (an id, a name, or a value that failed to read) |
+| `overrideEncounter` | `false` | **manual override**: `true` (armed by `/gideon inter on`) opens the panel on the **next** encounter whatever the boss; **consumed at the end of that encounter**; cleared by `/gideon inter off` |
 | `position` | `CENTER` | intermission panel position, saved on drag and drop (placement mode) |
 
 Outside `intermission`, the top level of the SavedVariables holds the **language
@@ -685,8 +685,8 @@ preference** and the **panel preferences** (positions + lock):
 
 | Key | Default | Effect |
 |---|---|---|
-| `locale` | `"auto"` | in-game language: `"auto"` (follow the client), `"en"`, `"fr"` — see `/gr lang` |
-| `lockPanel` | `false` | `true` freezes every panel (`/gr lock`), `false` lets the player drag them (`/gr unlock`, the UNLOCK PANEL button). Only a real boolean can lock: anything else counts as "not locked" |
+| `locale` | `"auto"` | in-game language: `"auto"` (follow the client), `"en"`, `"fr"` — see `/gideon lang` |
+| `lockPanel` | `false` | `true` freezes every panel (`/gideon lock`), `false` lets the player drag them (`/gideon unlock`, the UNLOCK PANEL button). Only a real boolean can lock: anything else counts as "not locked" |
 | `panelSchema` | `1` | schema marker of the panel preferences: an older SavedVariables (no marker) is **unlocked once** and stamped — see §2.5 |
 | `panelPosition` | `{ CENTER, CENTER, 0, 0 }` | **main panel** position, saved on every drag stop, restored at `ADDON_LOADED` |
 | `pingPanelPosition` | `{ CENTER, CENTER, 0, 0 }` | **ping help window** position, saved on every drag stop, restored at the next opening |
@@ -694,73 +694,73 @@ preference** and the **panel preferences** (positions + lock):
 ## 7. Commands and keybinding
 
 ```
-/gr                       main panel (plan + PLACE INTERMISSION PANEL button
+/gideon                       main panel (plan + PLACE INTERMISSION PANEL button
                           + the two SIMULATION buttons)
-/gr plan                  detailed plan in the chat
-/gr lang                  detected language, effective language, how to change
-/gr lang auto|en|fr       rules on the language and persists it in the SavedVariables
-/gr ping                  current ping policy and what it means for the roles
-/gr ping anchors|color|none   rules on the PING POLICY and persists it (default anchors)
-/gr sound                 is the assignment soundboard enabled? (and how to change it)
-/gr sound on | off        enables/disables the assignment soundboard (persisted; an
+/gideon plan                  detailed plan in the chat
+/gideon lang                  detected language, effective language, how to change
+/gideon lang auto|en|fr       rules on the language and persists it in the SavedVariables
+/gideon ping                  current ping policy and what it means for the roles
+/gideon ping anchors|color|none   rules on the PING POLICY and persists it (default anchors)
+/gideon sound                 is the assignment soundboard enabled? (and how to change it)
+/gideon sound on | off        enables/disables the assignment soundboard (persisted; an
                           unknown value is REFUSED and nothing is written)
-/gr sound test 1v3r       plays ONE soundboard now (also 2v2r, 3v1r) and names the
+/gideon sound test 1v3r       plays ONE soundboard now (also 2v2r, 3v1r) and names the
                           file it played; an unknown state is refused, nothing plays
-                          when the sound is off (`/gr sound on` first)
-/gr sound test start      plays the intermission START sound now and names the file
-/gr inter                 shows/hides the intermission panel (close cross too)
-/gr inter start|stop      starts/stops ONE intermission manually
-/gr inter place           placement mode: drag the panel, prepare the ping, press OK
-/gr inter ping            which ping to use, which key, and the binding names tried
-/gr inter 3V1R            declares your COMPOSITION (also: 2V2R, 1V3R, "3 verts")
-/gr inter 2               only "2" is accepted as a number (unambiguous)
-/gr inter on | off        enables/disables the module; `on` ALSO arms the MANUAL
+                          when the sound is off (`/gideon sound on` first)
+/gideon sound test start      plays the intermission START sound now and names the file
+/gideon inter                 shows/hides the intermission panel (close cross too)
+/gideon inter start|stop      starts/stops ONE intermission manually
+/gideon inter place           placement mode: drag the panel, prepare the ping, press OK
+/gideon inter ping            which ping to use, which key, and the binding names tried
+/gideon inter 3V1R            declares your COMPOSITION (also: 2V2R, 1V3R, "3 verts")
+/gideon inter 2               only "2" is accepted as a number (unambiguous)
+/gideon inter on | off        enables/disables the module; `on` ALSO arms the MANUAL
                           OVERRIDE: the panel opens on the NEXT encounter whatever
                           the boss (consumed at the end of that encounter)
-/gr inter status          module state + timeline + schedule + auto-open target
-/gr boss                  the EFFECTIVE auto-open target + WHERE it comes from + idlog
-/gr boss <id>             ADDS an encounter id to the target allow-list (persisted;
+/gideon inter status          module state + timeline + schedule + auto-open target
+/gideon boss                  the EFFECTIVE auto-open target + WHERE it comes from + idlog
+/gideon boss <id>             ADDS an encounter id to the target allow-list (persisted;
                           anything that is not a POSITIVE INTEGER is refused and
                           nothing is written). The DELIVERED target (id 3445,
                           Entombed Sentinels) stays active unless it was cleared
-/gr boss name <text>      adds the exact encounter NAME (secondary criterion,
+/gideon boss name <text>      adds the exact encounter NAME (secondary criterion,
                           language-dependent; the addon already delivers the EN and
                           FR names of the target boss)
-/gr boss list             the two lists WITH their provenance (addon default /
+/gideon boss list             the two lists WITH their provenance (addon default /
                           added by you) + the manual override + the last encounters
-/gr boss clear            empties both lists AND drops the DELIVERED default -> nothing
-                          opens any more until an id is added again (`/gr boss 3445`)
-/gr idlog [on|off]        logs every encounter seen (id / name / difficulty / group)
+/gideon boss clear            empties both lists AND drops the DELIVERED default -> nothing
+                          opens any more until an id is added again (`/gideon boss 3445`)
+/gideon idlog [on|off]        logs every encounter seen (id / name / difficulty / group)
                           and memorizes the last 10 (persisted)
-/gr diag                  READ-ONLY health report: the effective target + its source,
+/gideon diag                  READ-ONLY health report: the effective target + its source,
                           the delivered default, the idlog state, the ping policy,
                           and a verdict per sound file (the 4 of them). It NEVER
                           plays a sound when the game sound is on: the audio check
                           runs only with the Master channel enabled and its volume
                           at 0 (see §9 item 21)
-/gr sim                   simulation help (what it does, how to leave)
-/gr sim inter             SIMULATION: the panel opens RIGHT AWAY, no boss (aliases: group, groupe)
+/gideon sim                   simulation help (what it does, how to leave)
+/gideon sim inter             SIMULATION: the panel opens RIGHT AWAY, no boss (aliases: group, groupe)
                           -> ONE rehearsal, YOU close it (X or Close)
-/gr sim ping              PING HELP (= /gr pinghelp): bind one key per ping, then ping YOURSELF
-/gr sim stop              closes the rehearsal or the ping help window
-/gr lock                  freezes the panels where they are (persisted)
-/gr unlock                lets them be dragged again (persisted, also a panel button)
-/gr resetposition         brings the main panel, the intermission panel and the ping help window to the center
+/gideon sim ping              PING HELP (= /gideon pinghelp): bind one key per ping, then ping YOURSELF
+/gideon sim stop              closes the rehearsal or the ping help window
+/gideon lock                  freezes the panels where they are (persisted)
+/gideon unlock                lets them be dragged again (persisted, also a panel button)
+/gideon resetposition         brings the main panel, the intermission panel and the ping help window to the center
 ```
 
-`/gr inter 1` or `/gr inter 3` are **refused** with a message asking for the
+`/gideon inter 1` or `/gideon inter 3` are **refused** with a message asking for the
 dominant color: the module never guesses the composition from the number.
-`/gr ping` with an unknown value is refused the same way (nothing is persisted).
-`/gr sound` with a value that is not `on` or `off` is refused the same way, and
-`/gr sound test <state>` refuses a state that is not `1v3r` / `2v2r` / `3v1r` /
+`/gideon ping` with an unknown value is refused the same way (nothing is persisted).
+`/gideon sound` with a value that is not `on` or `off` is refused the same way, and
+`/gideon sound test <state>` refuses a state that is not `1v3r` / `2v2r` / `3v1r` /
 `start` (nothing is played).
-`/gr boss <value>` refuses anything that is not a **positive integer** (`abc`,
+`/gideon boss <value>` refuses anything that is not a **positive integer** (`abc`,
 `0`, `-3`, `12.5`, `1e3`) **without persisting anything** — no encounter id is ever
-guessed, and the one the addon delivers is the one **measured in game** (`/gr idlog
-on`, raid lead, 2026-09-24) — and `/gr idlog <value>` accepts only `on` or `off`.
-`/gr diag` takes no argument: it is a read-only report, it writes nothing and it
+guessed, and the one the addon delivers is the one **measured in game** (`/gideon idlog
+on`, raid lead, 2026-09-24) — and `/gideon idlog <value>` accepts only `on` or `off`.
+`/gideon diag` takes no argument: it is a read-only report, it writes nothing and it
 never plays a sound when the game sound is on.
-`/gr inter macro` **no longer exists**: the macro route is dead (see §4).
+`/gideon inter macro` **no longer exists**: the macro route is dead (see §4).
 
 A **binding** `GIDEONRAID_INTERMISSION` (no default key) is declared in
 `Bindings.xml`: assign it in *Options > Keybindings > GideonRaid*. It only opens
@@ -771,22 +771,22 @@ the panel; the ping keybinds are the client's own (ping system).
 ```bash
 busted                                    # 331 tests: 88 for this module (including the
                                           #  DELIVERED target: never configured vs explicit
-                                          #  /gr boss clear vs player addition), 49 for the real
+                                          #  /gideon boss clear vs player addition), 49 for the real
                                           #  loading (panels, close cross, simulations, button
                                           #  order, placement OK button, rehearsal buttons),
                                           # 45 for the AUTO-OPEN BOSS FILTER (the delivered
                                           #  default target id 3445 + the EN/FR names, every
                                           #  difficulty, explicit clear vs never configured,
-                                          #  good/wrong/unreadable id, empty name, /gr boss +
-                                          #  /gr idlog wiring, idlog ring, manual override),
+                                          #  good/wrong/unreadable id, empty name, /gideon boss +
+                                          #  /gideon idlog wiring, idlog ring, manual override),
                                           # 31 for the SOUNDS (starter table state -> file,
-                                          #  .toc + files on disk + packaging, bounded /gr sound
+                                          #  .toc + files on disk + packaging, bounded /gideon sound
                                           #  preference, one playback per assignment, one playback
                                           #  per intermission for the start sound, survival to a
                                           #  failing or absent PlaySoundFile),
                                           # 22 for the pure panel geometry + button sizing (EN + FR),
                                           # 21 for the language, 20 for the ping policy,
-                                          # 19 for /gr diag (silence gate, verdict per sound file,
+                                          # 19 for /gideon diag (silence gate, verdict per sound file,
                                           #  report lines, and NO sound played when the client is
                                           #  audible),
                                           # 14 for the rehearsal + ping help (pure),
@@ -855,7 +855,7 @@ Covered by `tests/spec/pingpolicy_spec.lua` (20 tests): the role of each state
 **only `1V3R` pings**, `color` where the three states ping their own ping,
 `none` where nobody pings, the wording of each action line, an unknown policy
 resolved to `anchors`, the refusal to name a ping for a role that must not ping,
-the persistence of `/gr ping`, the refusal of an unknown value, and the fact
+the persistence of `/gideon ping`, the refusal of an unknown value, and the fact
 that **the policy is no longer displayed permanently** on the panel.
 
 Covered by `tests/spec/load_spec.lua` (49 tests, real loading, `.toc` order)
@@ -882,9 +882,9 @@ no `%` and no ` s`), appends the explanatory note, keeps the state / the ping ba
 OWN character frame`), the group reminder and the explicit "**CANNOT detect a
 ping**" line, carries the bound key when the injected resolver knows it and `no key
 bound` otherwise, and stays sane when the resolver is missing, raises or returns
-nonsense; the `/gr sim` argument parser accepts `inter` with its aliases (`group`,
+nonsense; the `/gideon sim` argument parser accepts `inter` with its aliases (`group`,
 `groupe`), `ping` and `stop`, and **refuses any trailing option** (the former
-`/gr sim inter cycles=N`); all the simulation locale keys are present in **both**
+`/gideon sim inter cycles=N`); all the simulation locale keys are present in **both**
 languages.
 
 Covered by `tests/spec/layout_spec.lua` (22 tests, pure geometry, no client): the
@@ -921,8 +921,8 @@ Covered by `tests/spec/load_spec.lua` (49 tests): the real loading in `.toc` ord
 (11 files), the evening flow (arming, automatic opening, closing, reopening,
 `ENCOUNTER_END`, placement mode and its saved position), the **main panel made
 movable by default** (the drag is really allowed, the position is persisted on drag
-stop, restored when the panel is shown again, `/gr lock` freezes it, `/gr unlock`
-frees it, `/gr resetposition` recenters the three panels, the LOCK/UNLOCK button
+stop, restored when the panel is shown again, `/gideon lock` freezes it, `/gideon unlock`
+frees it, `/gideon resetposition` recenters the three panels, the LOCK/UNLOCK button
 does the same as the command), the **button order of the main panel** (PLACE, SIM:
 PING, SIM: INTER, then the LOCK utility), the fact that **the three composition
 buttons disappear once one is clicked** (CORRECT brings them back, in a real
@@ -940,15 +940,15 @@ without touching the clock, cancelling the placement) and the **two simulations*
 click, REDO, **the player closes it** - nothing closes or relaunches it by itself -
 the layout that keeps the big state below the banner in **both languages**, the ping
 help window with its bound-key lines and its honest "no detection" wording, opened
-by `/gr sim ping` **and** `/gr pinghelp`, closed by its button, its cross or
-`/gr sim stop`, the **refusals** (a trailing option, an unknown sub-command) and the
+by `/gideon sim ping` **and** `/gideon pinghelp`, closed by its button, its cross or
+`/gideon sim stop`, the **refusals** (a trailing option, an unknown sub-command) and the
 `ENCOUNTER_START` isolation).
 
 Covered by `tests/spec/locale_spec.lua` (21 tests): default English, every key
 served in **both** languages, `GetLocale()` returning `"frFR"` → French,
 `"enUS"`/`"deDE"` → English, explicit override beating detection, unknown value →
-English, the auto-preference following the client, `/gr lang` printing the
-detected / effective / preferred language, `/gr lang fr|en|auto` persisted in the
+English, the auto-preference following the client, `/gideon lang` printing the
+detected / effective / preferred language, `/gideon lang fr|en|auto` persisted in the
 SavedVariables, refusal of an unknown value, missing key → the key itself, no
 exception.
 
@@ -959,7 +959,7 @@ they are kept here as a record and are no longer open questions.
 
 1. **Exact binding command names of the ping keybinds** — THE priority item
    (the keybinds themselves ARE confirmed to exist: §4). Bind each ping in
-   *Options > Keybindings > ping system*, then run `/gr inter ping` after
+   *Options > Keybindings > ping system*, then run `/gideon inter ping` after
    declaring an `1V3R`/`2V2R`/`3V1R`: the line shows the key only if one of the
    candidates of §4 is the real command name. If no key is displayed, dump the
    real names (`/dump GetBindingKey("PING_WARNING")`, `GetBindingName`,
@@ -999,7 +999,7 @@ they are kept here as a record and are no longer open questions.
     tooltip reads `Close` in English / `Fermer` in French, and that the cross on
     the intermission panel **cancels** the placement mode and **does not** stop
     the automatic reopening at the next intermission.
-11. **SIMULATION mode in the client** (`/gr sim inter`, `/gr sim ping`): the
+11. **SIMULATION mode in the client** (`/gideon sim inter`, `/gideon sim ping`): the
     out-of-game tests drive both with a stubbed API, so what remains to be seen in
     game is the *real* rendering. Check that the panel opens **immediately** after
     the command (no more 3 s delay), that it **stays open until YOU close it** (X or
@@ -1008,7 +1008,7 @@ they are kept here as a record and are no longer open questions.
     fight, that the big state is drawn **below** the banner (and not on top of it),
     and that a boss pull during a rehearsal **stops** it (the encounter then arms
     the normal schedule exactly once).
-12. **The keys listed in the ping help window** (`/gr sim ping` or `/gr pinghelp`)
+12. **The keys listed in the ping help window** (`/gideon sim ping` or `/gideon pinghelp`)
     depend on the binding names of item 1: as long as the real command names are
     unknown, a line honestly reads `no key bound`. Verify the ping really shows on
     screen **while grouped** (alone, nothing appears — that is expected and stated
@@ -1025,11 +1025,11 @@ they are kept here as a record and are no longer open questions.
 14. **Dragging the panels in the client.** The drag, the persistence on drag stop
     and the LOCK/UNLOCK button are covered out of game with a stubbed frame; what
     remains to be seen is the *real* feeling: the main panel really moves with the
-    left button, the position survives a `/reload`, `/gr lock` freezes it,
-    `/gr resetposition` recenters the three panels, and the ping help window
+    left button, the position survives a `/reload`, `/gideon lock` freezes it,
+    `/gideon resetposition` recenters the three panels, and the ping help window
     reopens where it was dragged.
-15. **The NEW layout in the client, in French AND in English** (`/gr lang fr`, then
-    `/gr lang en`): no label touches or leaves the frame on the main panel (the
+15. **The NEW layout in the client, in French AND in English** (`/gideon lang fr`, then
+    `/gideon lang en`): no label touches or leaves the frame on the main panel (the
     frame is ≈360 px wide) and the ping help window fits as well; on the
     intermission panel the big state, the SIMULATION banner, the `PING: OUI/NON`
     line, the ROLE line and the action line are **all separated** (the fourth test
@@ -1049,27 +1049,27 @@ they are kept here as a record and are no longer open questions.
 17. **The intermission panel is now ≈650 px wide** (as wide as its three composition
     labels require, vertically and horizontally). Nothing to confirm technically, but
     worth a look in game at the player's UI scale: if the panel feels too wide, the
-    icon of the fix is `scale` in `GideonRaidDB.intermission` (`/gr inter` status shows
+    icon of the fix is `scale` in `GideonRaidDB.intermission` (`/gideon inter` status shows
     it), or a shorter label in `Core/Locale.lua` (`state.buttonLabel.*`) - never a
     hard-coded size in `UI/`.
 18. **The assignment soundboards in the client** (see §2.7 and
     `docs/TESTPLAN.md` §3.5d): the three shipped files are SILENT placeholders, so
-    what must be checked first is the plumbing — `/gr sound` says `enabled`,
-    `/gr sound test 1v3r` (then `2v2r`, `3v1r`) plays and names each file,
-    `/gr sound off` then a click on a composition plays **nothing** while the panel
-    keeps rendering, and `/gr sound on` restores it. The **real** sounds only exist
+    what must be checked first is the plumbing — `/gideon sound` says `enabled`,
+    `/gideon sound test 1v3r` (then `2v2r`, `3v1r`) plays and names each file,
+    `/gideon sound off` then a click on a composition plays **nothing** while the panel
+    keeps rendering, and `/gideon sound on` restores it. The **real** sounds only exist
     once the raid lead has dropped his three recordings in `Sound/` (same names,
     Ogg Vorbis, `README.md` §3.3): after replacing them there is **nothing to
     rebuild**, only a `/reload`.
 19. **THE AUTO-OPEN FILTER (critical bug fix) — CONFIRMED IN GAME (2026-09-24), and
     the target is now DELIVERED** (see §2.8 and `docs/TESTPLAN.md` §3.5e):
-    - **the measurement is DONE**: `/gr idlog on` + a heroic pull (20 players) gave
+    - **the measurement is DONE**: `/gideon idlog on` + a heroic pull (20 players) gave
       `encounter seen: id=3445 name=Sentinelles inhumées difficulty=15 group=20`.
       That id is now **shipped with the addon** (`Config.DEFAULT_BOSS_IDS`), with
       the FR name measured in game **and** the official EN name as a secondary
       criterion — so the panel opens on the right boss **with no command typed by
       anybody**;
-    - what is **left to check in game**: (a) `/gr boss` and `/gr diag` really show
+    - what is **left to check in game**: (a) `/gideon boss` and `/gideon diag` really show
       *"the default DELIVERED with the addon"* on a client that never configured
       anything; (b) the panel opens on the **Mythic (16)** pull of the same boss
       (the difficulty is deliberately **not** filtered: Heroic 15 is validated, 16
@@ -1077,38 +1077,38 @@ they are kept here as a record and are no longer open questions.
       the panel (the bug), in real flow (2 s before the intermission, closing at the
       end, reopening at the next one);
     - check that **no warning appears at login** any more (there is a target again),
-      and that after `/gr boss clear` the refusal message explains itself (it names
-      `/gr boss 3445` to put the target back);
-    - check `/gr inter on` really opens the panel on the **next** encounter,
+      and that after `/gideon boss clear` the refusal message explains itself (it names
+      `/gideon boss 3445` to put the target back);
+    - check `/gideon inter on` really opens the panel on the **next** encounter,
       whatever the boss, and that it is **consumed** at the end of that encounter
       (the one after it must not open);
     - **restart the client** before judging: a sound file added after the launch is
       not loaded (see item 20).
 20. **The intermission START sound in the client** (`Sound/intermission-start.ogg`,
-    §2.7): `/gr sound test start` plays the raid lead's recording and names the
+    §2.7): `/gideon sound test start` plays the raid lead's recording and names the
     file; then, on the target boss, the sound must be heard **exactly once** at the
     opening of **each** intermission (never twice for the same one, and again at the
-    next one), and once at every `/gr sim inter`. What remains to be heard is the
+    next one), and once at every `/gideon sim inter`. What remains to be heard is the
     **real audio mix**: is it loud enough at the start of the intermission (the
     `Master` channel follows the game volume), and is 3.22 s the right length
     before the panel becomes the thing to read?
-21. **`/gr diag`, the audio verdict — the ONE thing that really needs a client**
+21. **`/gideon diag`, the audio verdict — the ONE thing that really needs a client**
     (`docs/TESTPLAN.md` §3.5f): the report is provable out of game (331 tests,
     `tests/spec/diag_spec.lua`), but the **meaning of the boolean returned by
     `PlaySoundFile`** can only be confirmed in a client. What to check:
-    - with the game sound **on**, `/gr diag` must play **NOTHING** and print the four
+    - with the game sound **on**, `/gideon diag` must play **NOTHING** and print the four
       files as *NOT TESTED* + the procedure (this is the "no noise in a raid"
       promise, and the only case that runs in a normal raid);
-    - with the master volume at **0** (channel enabled), `/gr diag` must print four
+    - with the master volume at **0** (channel enabled), `/gideon diag` must print four
       *present and playable [OK]* — that is the confirmation that a **volume of 0**
       does **not** make the client answer *nothing will play* (if it does, the
       report's own caveat fires: "ALL FOUR files came back as not playable"); the
-      fallback is then `/gr sound test 1v3r|2v2r|3v1r|start` plus a **restart**, and
+      fallback is then `/gideon sound test 1v3r|2v2r|3v1r|start` plus a **restart**, and
       the gate is the single place to adjust (`Core/Diag.probeGate`);
-    - with the sound **off/disabled** (Ctrl+S), `/gr diag` must print four *NOT
+    - with the sound **off/disabled** (Ctrl+S), `/gideon diag` must print four *NOT
       TESTED* and explain that a disabled channel would lie;
     - to see a real **KO**, temporarily rename one file in `Sound/` (say
-      `assign-3v1r.ogg`), **restart the client**, run `/gr diag` → that one line must
+      `assign-3v1r.ogg`), **restart the client**, run `/gideon diag` → that one line must
       read *NOT playable [KO]* while the other three read *[OK]*, then restore the
       file and restart again. This is the only way to validate the negative case,
       and it costs one restart.

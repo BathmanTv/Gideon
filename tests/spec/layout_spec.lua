@@ -411,7 +411,7 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
 
     it("le panneau d'intermission n'a AUCUN bouton d'action : ni OK, ni Fermer", function()
         -- Le panneau de placement n'affiche plus QUE l'illustration (raid lead :
-        -- « aucun bouton ») et la validation passe par `/gr inter ok` : il ne
+        -- « aucun bouton ») et la validation passe par `/gideon inter ok` : il ne
         -- reste donc aucun bouton OK. Le bouton « Fermer » avait deja disparu au
         -- profit de la croix. CORRIGER reste, seul, dans sa ligne d'actions.
         for _, lang in ipairs({ "en", "fr" }) do
@@ -468,7 +468,7 @@ describe("Layout : boutons dimensionnes sur leur libelle (EN et FR)", function()
     end)
 end)
 
-describe("Layout : panneau principal /gr (ordre, bords, deux langues)", function()
+describe("Layout : panneau principal /gideon (ordre, bords, deux langues)", function()
     local ns = wowenv.loadCore()
     local L = ns.Layout
 
@@ -777,7 +777,7 @@ describe("Layout : panneau d'intermission (images, ordre fige, deux langues)", f
         -- nouvelle illustration (un repere visuel pour voir la taille et
         -- l'emplacement qu'aura la fenetre) PUIS le petit bouton OK qui enregistre
         -- la position et ferme (« Remet oui ok »). Aucun texte, aucune composition :
-        -- `/gr inter ok` fait la meme chose que le bouton, l'annulation par la
+        -- `/gideon inter ok` fait la meme chose que le bouton, l'annulation par la
         -- croix, le deplacement par le drag.
         for _, lang in ipairs({ "en", "fr" }) do
             ns.Locale.setActive(lang)

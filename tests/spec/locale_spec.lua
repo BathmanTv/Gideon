@@ -6,7 +6,7 @@
          l'anglais est la langue OFFICIELLE (defaut), le francais est servi
          automatiquement sur un client frFR, et rien ne leve jamais ;
       2. le cablage (GideonRaid.lua) : detection GetLocale(), preference
-         persistee (GideonRaidDB.locale) et commande en jeu /gr lang.
+         persistee (GideonRaidDB.locale) et commande en jeu /gideon lang.
 
     Aucun mock d'API de combat : GetLocale est la SEULE API appelee, par le
     cablage uniquement (Core/ reste pur).
@@ -116,7 +116,7 @@ describe("Locale : traductions", function()
     end)
 end)
 
-describe("Langue : detection du client, preference persistee et /gr lang", function()
+describe("Langue : detection du client, preference persistee et /gideon lang", function()
     local ns
 
     before_each(function()
@@ -210,17 +210,17 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("en", _G.GideonRaid.locale)
     end)
 
-    it("/gr lang affiche la langue detectee, la langue effective et la regle", function()
+    it("/gideon lang affiche la langue detectee, la langue effective et la regle", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("lang")
         local text = messages()
         assert.matches("client detected = enUS", text)
         assert.matches("effective = en", text)
         assert.matches("preference = auto", text)
-        assert.matches("/gr lang auto|en|fr", text)
+        assert.matches("/gideon lang auto|en|fr", text)
     end)
 
-    it("/gr lang fr persiste la preference et bascule le panneau en francais", function()
+    it("/gideon lang fr persiste la preference et bascule le panneau en francais", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("lang fr")
         assert.are.equal("fr", _G.GideonRaidDB.locale)
@@ -236,7 +236,7 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("CORRIGER", panel.redo:GetText())
     end)
 
-    it("/gr lang en gagne sur un client frFR", function()
+    it("/gideon lang en gagne sur un client frFR", function()
         _G.GetLocale = function()
             return "frFR"
         end
@@ -250,7 +250,7 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("Boss", panel.wordBig:GetText())
     end)
 
-    it("/gr lang auto revient a la langue du client", function()
+    it("/gideon lang auto revient a la langue du client", function()
         _G.GetLocale = function()
             return "frFR"
         end
@@ -261,7 +261,7 @@ describe("Langue : detection du client, preference persistee et /gr lang", funct
         assert.are.equal("fr", _G.GideonRaid.locale)
     end)
 
-    it("/gr lang avec une valeur inconnue est refuse et ne persiste rien", function()
+    it("/gideon lang avec une valeur inconnue est refuse et ne persiste rien", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("lang deDE")
         assert.are.equal("auto", _G.GideonRaidDB.locale)

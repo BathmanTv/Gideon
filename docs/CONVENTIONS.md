@@ -95,9 +95,9 @@ GideonRaid/                      <- REPOSITORY ROOT = ADDON ROOT
 │   ├── Locale.lua               <- in-game strings (en/fr) + language resolution
 │   ├── Sound.lua                <- sounds (PURE): state -> .ogg file, one playback
 │   │                               per assignment, one playback per intermission
-│   │                               for the START sound, bounded /gr sound preference
+│   │                               for the START sound, bounded /gideon sound preference
 │   ├── BossFilter.lua           <- WHICH boss may open the panel (PURE): allow-list
-│   │                               of encounter ids (`/gr boss`), optional name list,
+│   │                               of encounter ids (`/gideon boss`), optional name list,
 │   │                               every event argument read under pcall
 │   ├── Config.lua               <- defaults + SavedVariables
 │   ├── Pairing.lua              <- pairing engine (PURE)
@@ -309,7 +309,7 @@ A task is finished if, **and only if**:
    `PlaySoundFile` (<https://warcraft.wiki.gg/wiki/API_PlaySoundFile>) is called
    **in `UI/` only**, **under `pcall`** and behind a `type()` guard, on the
    `Master` channel. `Core/Sound.lua` decides **which** file and **when** (pure
-   table `state -> file`, one-playback-per-assignment gate, bounded `/gr sound`
+   table `state -> file`, one-playback-per-assignment gate, bounded `/gideon sound`
    preference) and **never plays anything**: a missing file or a refused call must
    leave the addon silent, without a Lua error and without interrupting the
    rendering. The same rule covers the **intermission START sound**
@@ -320,22 +320,22 @@ A task is finished if, **and only if**:
    sound) and must **never** be excluded by `.pkgmeta`; `tests/spec/guard_spec.lua`
    fails if the call leaves `UI/` or loses its guard.
 9. **Which boss may open the panel is a PURE decision** (`Core/BossFilter.lua`,
-   `/gr boss`): an **allow-list of encounter ids** (the primary, language-independent
+   `/gideon boss`): an **allow-list of encounter ids** (the primary, language-independent
    criterion) plus an optional list of **names** (secondary: the client translates
    names, nothing is ever guessed), resolved by `BossFilter.resolveTarget` into the
    **effective** target = the delivered default **plus** the entries of the player.
    The **delivered default** (`Config.DEFAULT_BOSS_IDS` = `{ 3445 }`,
    `Config.DEFAULT_BOSS_NAMES` = the official EN name + the FR name **measured in
    game**) is what makes the panel open with **no command typed**; the id is
-   **measured** with `/gr idlog on`, never invented. An **explicit**
-   `/gr boss clear` (`bossTargetCleared`, an exact `true` only) **drops** the
+   **measured** with `/gideon idlog on`, never invented. An **explicit**
+   `/gideon boss clear` (`bossTargetCleared`, an exact `true` only) **drops** the
    delivered default: the two states are never confused, so an empty allow-list
    still means **NOTHING opens** and a deliberate choice is never undone. The
    rendering layer **renders** that decision (under `pcall`) and never compares an
    id or a name itself. **The difficulty is never part of the decision** (every
    difficulty of the target boss opens the panel): `Config.BOSS_DIFFICULTIES`
    documents the table, unfiltered on purpose.
-10. **A diagnostic reads, it never plays** (`Core/Diag.lua`, `/gr diag`). The
+10. **A diagnostic reads, it never plays** (`Core/Diag.lua`, `/gideon diag`). The
     report is pure (the rendering layer injects the CVars and the answers) and the
     audio check is behind the **silence gate** `Diag.probeGate`: `PlaySoundFile` is
     only called when the Master channel is **enabled** (a disabled channel answers

@@ -57,7 +57,7 @@
     With the "anchors" policy the raid goes from ~20 pings to at most ~8 (one
     ping per anchor, 4 per side), which keeps the ping channel readable (the
     client also rate-limits pings per player).
-    The policy is CONFIGURABLE (Core/Config.lua -> pingMode, /gr ping):
+    The policy is CONFIGURABLE (Core/Config.lua -> pingMode, /gideon ping):
       "anchors" (default) : only the ANCHOR states ping;
       "color"             : raidstrats variant - every state pings its own ping
                             (1V3R Warning, 2V2R OnMyWay, 3V1R Assist);
@@ -272,7 +272,7 @@ end
      CORRECT stays (snapshot.showRedo = true), which brings them back.
 ]]
 --- The record fields that are DISPLAYED hold a LOCALE KEY, never a literal:
---- copyRecord() resolves them through Locale.t, so /gr lang applies immediately,
+--- copyRecord() resolves them through Locale.t, so /gideon lang applies immediately,
 --- without a reload. Structural fields (key, greens, reds, numbers, position,
 --- ping, complement) are language-independent and stay literal.
 local CONVENTION = {
@@ -506,7 +506,7 @@ local function copyRecord(rec, mode)
         buttonLabel = Locale.t(rec.buttonLabel),
         -- THE ONE WORD the panel writes after the click ("Ping" / "BOSS" /
         -- "Chasseur"): resolved HERE like every other displayed string, so
-        -- /gr lang applies immediately and the rendering layer writes no literal.
+        -- /gideon lang applies immediately and the rendering layer writes no literal.
         word = Locale.t(rec.word),
     }
 end
@@ -651,7 +651,7 @@ function Intermission.shouldPing(raw, pingMode)
 end
 
 --- Localized explanation of a ping policy (pure, never raises): used by the UI
---- and by /gr ping. The policy is NOT displayed on the combat panel any more.
+--- and by /gideon ping. The policy is NOT displayed on the combat panel any more.
 --- @param pingMode string|nil raw policy
 --- @return string line, string resolvedMode
 function Intermission.pingPolicyLine(pingMode)
@@ -955,7 +955,7 @@ Intermission.AUTO_CLOSE_MARGIN_SECONDS = 5
 
 --- Default safety delay (seconds), MEASURED on the real timings of the target
 --- boss: lead 2 s + visibility 3 s + duration 20 s = a 25 s window, plus the 5 s
---- margin above. `/gr ` never needs to touch it; Config clamps any persisted
+--- margin above. `/gideon ` never needs to touch it; Config clamps any persisted
 --- value.
 Intermission.DEFAULT_AUTO_CLOSE_SECONDS = 30
 
@@ -1204,7 +1204,7 @@ end
      THE PANEL", drag/keybind/procedure lines, the OK label) was DELETED with its
      locale keys: it was the last title a player could read at the top of the
      intermission window, and the raid lead asked for it to go for good. The
-     placement is validated by `/gr inter ok` (UI.IntermissionConfirmSetup), the
+     placement is validated by `/gideon inter ok` (UI.IntermissionConfirmSetup), the
      cross cancels and the picture is dragged to the wanted spot.
 ]]
 

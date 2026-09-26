@@ -55,12 +55,12 @@
     "Chasseur" and "BOSS" are never truncated nor pushed out of the frame in
     French as in English.
 
-    THE PLACEMENT PANEL (/gr inter place): the panel displays ONE picture - the
+    THE PLACEMENT PANEL (/gideon inter place): the panel displays ONE picture - the
     illustration the raid lead delivered (Layout.placementPanel, Core/Textures.
     placement*) - and NOTHING ELSE. No button, no label, no composition: the
     picture is the visual reference of the window the player is about to place
     (its size and its spot). It stays draggable, the close cross cancels and
-    `/gr inter ok` validates the position.
+    `/gideon inter ok` validates the position.
 
     WHAT A PANEL MAY WRITE (the "no leftover title" rule). Each panel built here
     carries its `panel` id, and Layout.violations() REFUSES any text block whose
@@ -251,7 +251,7 @@ function Layout.animationsEnabled(raw)
 end
 
 --- The word used in game for a boolean setting ("enabled"/"disabled"), so no UI/
---- file ever writes it: the SAME two keys `/gr sound` already uses, which exist in
+--- file ever writes it: the SAME two keys `/gideon sound` already uses, which exist in
 --- both languages of Core/Locale.lua.
 --- @param value any
 --- @return string
@@ -1443,7 +1443,7 @@ function Layout.violations(layout)
 
     -- THE PLACEMENT PANEL: the illustration, and the small OK button UNDER it
     -- (brought back on the raid lead's explicit request: it saves the position and
-    -- closes, exactly like `/gr inter ok`). NOTHING ELSE: no composition row, no
+    -- closes, exactly like `/gideon inter ok`). NOTHING ELSE: no composition row, no
     -- title, no label. The illustration stays the only CONTENT.
     if layout.panel == Layout.PANEL.PLACEMENT then
         if #blocks < 1 or #blocks > 2 then
@@ -1670,7 +1670,7 @@ end
      screen (top to bottom): the rendering layer copies it.
 ]]
 
---- Main panel (/gr) BUTTON ORDER, top to bottom (raid lead's request, fourth
+--- Main panel (/gideon) BUTTON ORDER, top to bottom (raid lead's request, fourth
 --- in-game test): the three buttons of the EVENING FLOW first - place the panel,
 --- the ping explanation window, then the rehearsal - and the LOCK/UNLOCK utility
 --- LAST, set apart by an extra space (it is not a step of the flow).
@@ -1681,7 +1681,7 @@ Layout.MAIN_PANEL_ORDER = { "place", "simPing", "simInter", "lock" }
 --- Extra space above the utility button, so it reads as a separate tool.
 Layout.MAIN_PANEL_UTILITY_GAP = 14
 
---- Main panel (/gr): title, body, then the four buttons IN THE ORDER of
+--- Main panel (/gideon): title, body, then the four buttons IN THE ORDER of
 --- MAIN_PANEL_ORDER.
 --- @param spec table|nil { bodyLines = array of strings, locked = boolean|nil }
 function Layout.mainPanel(spec)
@@ -1775,7 +1775,7 @@ function Layout.intermissionPanel(spec)
                 align = "center",
                 state = Layout.INTERMISSION_CHOICE_ORDER[index],
                 -- THE STYLE OF THE COMBAT CARDS: whatever the raid lead picked
-                -- (`/gr style <1..6|gideon|shipped>`, persisted) or the delivered
+                -- (`/gideon style <1..6|gideon|shipped>`, persisted) or the delivered
                 -- one by default. Core only NAMES it: the rendering layer applies
                 -- the table, so the combat panel is byte-for-byte the same look
                 -- until a style is chosen.
@@ -1805,7 +1805,7 @@ function Layout.intermissionPanel(spec)
 
     -- Action row: CORRECT, and nothing else. THERE IS NO OK BUTTON ANY MORE: the
     -- raid lead asked the placement panel to show the illustration alone (no
-    -- button at all), and the placement is validated by `/gr inter ok` - which
+    -- button at all), and the placement is validated by `/gideon inter ok` - which
     -- saves the position exactly like the former button did. The close cross
     -- ("X", chrome, always present) closes/cancels the panel in every mode.
     local actions = {}
@@ -1833,14 +1833,14 @@ function Layout.intermissionPanel(spec)
     return Layout.build({ panel = Layout.PANEL.INTERMISSION, minWidth = Layout.INTERMISSION_WIDTH, blocks = blocks })
 end
 
---- PLACEMENT panel (`/gr inter place`, the PLACE button of the main panel): the
+--- PLACEMENT panel (`/gideon inter place`, the PLACE button of the main panel): the
 --- illustration the raid lead delivered, PLUS the small OK button UNDER it.
 --- WHY the illustration: the placement step exists so the player SEES the size and
 --- the spot the window will occupy during the fight. A button row and a written
 --- procedure turned that screen into a form; the picture alone is the reference,
 --- and the frame it is drawn in IS the frame the fight will show.
 --- WHY the OK button (raid lead's explicit decision, "Remet oui ok"): it saves the
---- position and closes, exactly like the `/gr inter ok` command - which stays
+--- position and closes, exactly like the `/gideon inter ok` command - which stays
 --- available as a backup. It is SMALL (Layout.PLACEMENT_OK_MIN_WIDTH) and sits
 --- UNDER the illustration; it carries no composition and no title.
 --- The panel stays DRAGGABLE (position saved on drag stop) and the close cross
@@ -2143,7 +2143,7 @@ end
 
      `style` and `realStyle` both name the card style: with a single style they
      resolve to the same table, and the note under the example says which card the
-     COMBAT panel uses. NOTHING here is part of the combat layout: /gr sim style
+     COMBAT panel uses. NOTHING here is part of the combat layout: /gideon sim style
      is the only way in, and the fixed strip above (Layout.showcaseBannerPanel)
      never leaves the screen.
 

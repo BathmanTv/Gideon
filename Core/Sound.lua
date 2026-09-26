@@ -8,7 +8,7 @@
 
     WHAT IT IS FOR: as soon as the player has DECLARED their orb composition
     (click on one of the three buttons of the intermission panel - real flow or
-    `/gr sim inter` rehearsal), the raid lead wants the soundboard OF THAT STATE
+    `/gideon sim inter` rehearsal), the raid lead wants the soundboard OF THAT STATE
     to be heard, ONCE. One file per canonical state of Core/Intermission.lua:
 
         1V3R -> Sound/assign-1v3r.ogg      2V2R -> Sound/assign-2v2r.ogg
@@ -27,7 +27,7 @@
          re-arms the gate: CORRECT (then a new click) and every new intermission
          replay the sound - the natural behaviour, documented in
          docs/INTERMISSION-COACH.md and docs/TESTPLAN.md.
-      3. THE PREFERENCE IS BOUNDED: Sound.resolveSwitch is STRICT (`/gr sound
+      3. THE PREFERENCE IS BOUNDED: Sound.resolveSwitch is STRICT (`/gideon sound
          on|off`, anything else yields nil and the CALLER refuses it without
          persisting anything) and Sound.resolveEnabled is TOTAL: only an exact
          `false` disables the sound, everything else - absent, a string, a
@@ -88,7 +88,7 @@ Sound.FILE_NAMES = { "assign-1v3r.ogg", "assign-2v2r.ogg", "assign-3v1r.ogg" }
 --- THE INTERMISSION START SOUND (raid-lead recording): played ONCE at the very
 --- BEGINNING of every intermission - i.e. when the panel opens by itself, 2 s
 --- before the intermission, which IS the beginning of the intermission - and once
---- per `/gr sim inter` rehearsal. See Sound.takeIntermissionStart.
+--- per `/gideon sim inter` rehearsal. See Sound.takeIntermissionStart.
 Sound.START_FILE = "intermission-start.ogg"
 
 --- EVERY sound file of the addon, built from the two constants above (a new file
@@ -102,10 +102,10 @@ ALL_FILE_NAMES[#ALL_FILE_NAMES + 1] = Sound.START_FILE
 Sound.ALL_FILE_NAMES = ALL_FILE_NAMES
 
 --- Default of the player preference: the sound is ENABLED (the raid lead
---- requested it; `/gr sound off` mutes it).
+--- requested it; `/gideon sound off` mutes it).
 Sound.DEFAULT_ENABLED = true
 
---- Values accepted by `/gr sound on|off` and their meaning. STRICT and bounded:
+--- Values accepted by `/gideon sound on|off` and their meaning. STRICT and bounded:
 --- anything else is refused by the caller (see resolveSwitch).
 Sound.SWITCHES = { on = true, off = false }
 
@@ -166,11 +166,11 @@ function Sound.pathFor(state)
     return Sound.FOLDER .. file
 end
 
---- STRICT resolution of the value typed after `/gr sound` (`on` / `off`).
+--- STRICT resolution of the value typed after `/gideon sound` (`on` / `off`).
 --- Accepted (case-insensitive, surrounding spaces ignored): "on" -> true,
 --- "off" -> false. Anything else - absent, empty, "yes", a number, a table -
 --- returns nil: the CALLER refuses it and persists NOTHING (same mechanics as
---- `/gr lang` and `/gr ping`).
+--- `/gideon lang` and `/gideon ping`).
 --- @param raw string|nil
 --- @return boolean|nil
 function Sound.resolveSwitch(raw)
@@ -221,7 +221,7 @@ end
 --- Refusals (nil + reason), in this order:
 ---   - "unknown"  : the declaration is not one of the three canonical states
 ---                  (no sound without a declaration, nothing is guessed);
----   - "disabled" : the player turned the sound off (`/gr sound off`);
+---   - "disabled" : the player turned the sound off (`/gideon sound off`);
 ---   - "already"  : this SAME state has already been sounded for the current
 ---                  assignment (ONE playback per assignment: a refresh, a tick
 ---                  or a repeated declaration cannot double the sound).
@@ -262,7 +262,7 @@ end
      Requested by the raid lead: ONE playback at the very BEGINNING of every
      intermission - that is the moment the intermission panel opens by itself
      (it opens 2 s BEFORE the intermission: it IS the beginning of the
-     intermission) - and once per `/gr sim inter` rehearsal.
+     intermission) - and once per `/gideon sim inter` rehearsal.
 
      The rule "ONE playback per intermission" is enforced HERE, in the pure
      module, as an IDENTITY: the wiring hands a TOKEN that names the intermission

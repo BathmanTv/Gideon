@@ -32,17 +32,17 @@ function wowenv.loadCore()
     wowenv.load("Core/Locale.lua", ns)
     -- Core/Sound.lua vient JUSTE APRES Locale.lua : il porte la table pure
     -- « etat canonique -> fichier de son », la garde « un seul son par
-    -- assignation » et les resolveurs BORNES de la preference /gr sound.
+    -- assignation » et les resolveurs BORNES de la preference /gideon sound.
     -- Core/Config.lua le lit, il doit donc etre charge avant lui.
     wowenv.load("Core/Sound.lua", ns)
     -- Core/BossFilter.lua vient egalement AVANT Config.lua : il porte la
-    -- allow-list d'ids d'encounter (critere PRINCIPAL, /gr boss <id>), celle des
+    -- allow-list d'ids d'encounter (critere PRINCIPAL, /gideon boss <id>), celle des
     -- noms (SECONDARY, dependante de la langue) et la DECISION pure « ce combat
     -- est-il le boss cible ? » (liste vide = aucune ouverture automatique).
     wowenv.load("Core/BossFilter.lua", ns)
     -- Core/Diag.lua vient juste APRES BossFilter.lua (meme ordre que le .toc) : il ne
     -- depend que de Locale et Sound, deja charges, et il porte le RAPPORT de
-    -- `/gr diag` (les 4 fichiers de son + la cible effective + l'idlog + le ping).
+    -- `/gideon diag` (les 4 fichiers de son + la cible effective + l'idlog + le ping).
     -- Il est PUR : aucun appel client, c'est UI/Panel.lua qui lui injecte les CVars
     -- et les reponses de PlaySoundFile.
     wowenv.load("Core/Diag.lua", ns)

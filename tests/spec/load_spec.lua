@@ -87,15 +87,15 @@ describe("chargement de l'addon", function()
         -- Core/Locale.lua d'abord : la couche de langue est une dependance.
         assert.are.equal("Core/Locale.lua", files[2])
         -- Core/Sound.lua juste apres Locale.lua et AVANT Config.lua : Config en
-        -- resout la preference bornee (/gr sound), et il porte la table pure
+        -- resout la preference bornee (/gideon sound), et il porte la table pure
         -- « etat -> fichier de son » du son d'assignation.
         assert.are.equal("Core/Sound.lua", files[3])
         -- Core/BossFilter.lua AVANT Config.lua : Config en resout l'allow-list
         -- d'ids d'encounter du filtre d'ouverture auto (dont le DEFAUT LIVRE :
-        -- id 3445 + les deux noms, /gr boss <id>).
+        -- id 3445 + les deux noms, /gideon boss <id>).
         assert.are.equal("Core/BossFilter.lua", files[4])
         -- Core/Diag.lua juste apres BossFilter.lua : il ne depend que de Locale et
-        -- Sound (deja charges) et il porte le rapport de /gr diag. Il ne contient
+        -- Sound (deja charges) et il porte le rapport de /gideon diag. Il ne contient
         -- AUCUN appel client : c'est UI/Panel.lua qui lui injecte les CVars et les
         -- reponses de PlaySoundFile.
         assert.are.equal("Core/Diag.lua", files[5])
@@ -195,13 +195,13 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
         local text = messages()
-        assert.matches("/gr inter", text)
+        assert.matches("/gideon inter", text)
         assert.matches("place", text)
         assert.is_false(contains(text, "macro"))
         assert.is_false(contains(text, "roster assign"))
     end)
 
-    it("mode placement : bouton du panneau principal, /gr inter ok sauvegarde et ferme", function()
+    it("mode placement : bouton du panneau principal, /gideon inter ok sauvegarde et ferme", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.GideonRaidPanel.place:Click()
         local panel = _G.GideonRaidIntermissionPanel
@@ -217,7 +217,7 @@ describe("chargement de l'addon", function()
         assert.is_false(panel.redo:IsShown())
         assert.is_true(panel.placement:IsShown())
         assert.are.equal(ns.Textures.placementPath(), panel.placement.picture:GetTexture())
-        -- Aucun bouton du tout : la validation passe par `/gr inter ok` (le bouton
+        -- Aucun bouton du tout : la validation passe par `/gideon inter ok` (le bouton
         -- OK a disparu avec le reste du texte du panneau).
         assert.is_nil(panel.ok)
         _G.SlashCmdList["GIDEONRAID"]("inter ok")
@@ -226,7 +226,7 @@ describe("chargement de l'addon", function()
         assert.matches("Placement saved", messages())
     end)
 
-    it("/gr inter place ouvre aussi le mode placement et la CROIX annule", function()
+    it("/gideon inter place ouvre aussi le mode placement et la CROIX annule", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter place")
         local panel = _G.GideonRaidIntermissionPanel
@@ -242,7 +242,7 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         -- Le filtre d'ouverture auto est une allow-list d'ids persistee, vide par
         -- defaut : le test NOMME donc la cible avant de tirer, comme le raid lead
-        -- le fera en jeu (/gr boss <id>), et les arguments lus sont ceux reels de
+        -- le fera en jeu (/gideon boss <id>), et les arguments lus sont ceux reels de
         -- l'evenement.
         pullTargetBoss()
         local panel = _G.GideonRaidIntermissionPanel
@@ -375,7 +375,7 @@ describe("chargement de l'addon", function()
         local panel = _G.GideonRaidIntermissionPanel
         buttonFor(panel, "1V3R"):Click()
         -- Le clic affiche UN SEUL mot : ni le mot "PING", ni la touche bindi, ni la
-        -- moindre consigne. La touche reste accessible dans /gr sim ping.
+        -- moindre consigne. La touche reste accessible dans /gideon sim ping.
         assert.are.equal(ns.Locale.t("state.word.1V3R"), panel.word:GetText())
         assert.is_false(panel.word:GetText():find("Q", 1, true) ~= nil)
         assert.is_nil(panel.body)
@@ -544,7 +544,7 @@ describe("chargement de l'addon", function()
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
         -- Le panneau porte l'illustration et RIEN d'autre : aucun bouton (le
-        -- bouton OK a disparu, `/gr inter ok` valide desormais).
+        -- bouton OK a disparu, `/gideon inter ok` valide desormais).
         assert.is_true(panel.placement:IsShown())
         assert.is_nil(panel.ok)
         panel.closeCross:Click()
@@ -556,17 +556,17 @@ describe("chargement de l'addon", function()
     -- ------------------------------------------------------------------------
     -- SIMULATION : entrees, refus et isolation du flux reel
     -- ------------------------------------------------------------------------
-    it("/gr sim affiche l'aide et REFUSE une sous-commande inconnue", function()
+    it("/gideon sim affiche l'aide et REFUSE une sous-commande inconnue", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim")
-        assert.matches("/gr sim", messages())
+        assert.matches("/gideon sim", messages())
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("sim bidon")
         assert.matches("Unknown simulation", messages())
         -- L'aide generale annonce la simulation, et rien n'a ete lance.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
-        assert.matches("/gr sim", messages())
+        assert.matches("/gideon sim", messages())
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
         -- La fenetre d'aide au ping n'est meme pas construite : rien n'a ete lance.
         assert.is_nil(_G.GideonRaidPingHelpPanel)
@@ -751,7 +751,7 @@ describe("chargement de l'addon", function()
             assert.are.equal("", button:GetText(), key .. " : un texte est dessine sur l'image")
         end
         -- La croix est la (elle ferme le panneau) ; OK a disparu (il valait une
-        -- POSITION et `/gr inter ok` le remplace : le panneau de placement
+        -- POSITION et `/gideon inter ok` le remplace : le panneau de placement
         -- n'affiche plus aucun bouton). La croix est du "chrome" attache au coin
         -- du cadre, hors plan (Core ne la place pas).
         assert.is_truthy(panel.closeCross)
@@ -857,7 +857,7 @@ describe("chargement de l'addon", function()
         for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
             assert.is_false(panel.buttons[index]:IsShown(), "aucune composition pendant le placement")
         end
-        -- ... et `/gr inter ok` valide vraiment : il sauvegarde la position et ferme.
+        -- ... et `/gideon inter ok` valide vraiment : il sauvegarde la position et ferme.
         _G.SlashCmdList["GIDEONRAID"]("inter ok")
         assert.is_false(panel:IsShown())
         assert.is_table(_G.GideonRaidDB.intermission.position)
@@ -906,7 +906,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
-        -- /gr inter (ou /gr inter stop) pendant la repetition : elle est terminee,
+        -- /gideon inter (ou /gideon inter stop) pendant la repetition : elle est terminee,
         -- sinon la repetition suivante serait refusee sans raison visible.
         _G.SlashCmdList["GIDEONRAID"]("inter")
         assert.is_false(panel:IsShown())
@@ -921,7 +921,7 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
     end)
 
-    it("/gr sim inter refuse TOUTE option (l'ancien cycles=N a disparu)", function()
+    it("/gideon sim inter refuse TOUTE option (l'ancien cycles=N a disparu)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim inter cycles=3")
         assert.matches("no option here", messages())
@@ -936,7 +936,7 @@ describe("chargement de l'addon", function()
         assert.is_nil(_G.GideonRaidPingHelpPanel)
     end)
 
-    it("accepte les alias /gr sim group et /gr sim groupe", function()
+    it("accepte les alias /gideon sim group et /gideon sim groupe", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("sim groupe")
         assert.is_true(_G.GideonRaidIntermissionPanel:IsShown())
@@ -988,7 +988,7 @@ describe("chargement de l'addon", function()
         assert.is_true(help:IsShown())
         help.closeCross:Click()
         assert.is_false(help:IsShown())
-        -- /gr sim stop la ferme aussi (rapport honnete, rien d'autre ne tourne).
+        -- /gideon sim stop la ferme aussi (rapport honnete, rien d'autre ne tourne).
         _G.SlashCmdList["GIDEONRAID"]("sim ping")
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
@@ -1007,10 +1007,10 @@ describe("chargement de l'addon", function()
         _G.SlashCmdList["GIDEONRAID"]("sim stop")
     end)
 
-    it("/gr pinghelp ouvre la meme fenetre d'aide (alias documente)", function()
+    it("/gideon pinghelp ouvre la meme fenetre d'aide (alias documente)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
-        assert.matches("/gr pinghelp", messages())
+        assert.matches("/gideon pinghelp", messages())
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("pinghelp")
         local help = _G.GideonRaidPingHelpPanel
@@ -1082,7 +1082,7 @@ describe("chargement de l'addon", function()
         assert.is_true(moved, "le glisser doit etre autorise par defaut")
     end)
 
-    it("/gr lock fige le panneau, /gr unlock le libere, la position est conservee", function()
+    it("/gideon lock fige le panneau, /gideon unlock le libere, la position est conservee", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         local main = _G.GideonRaidPanel
         local moved
@@ -1097,7 +1097,7 @@ describe("chargement de l'addon", function()
         moved = false
         main:GetScript("OnDragStart")(main)
         assert.is_false(moved, "verrouille : le panneau ne bouge pas")
-        assert.matches("Panel locked: /gr unlock", messages())
+        assert.matches("Panel locked: /gideon unlock", messages())
         assert.matches("UNLOCK PANEL", main.lock:GetText())
 
         -- Le verrou survit a un rechargement (marqueur de schema pose).
@@ -1165,7 +1165,7 @@ describe("chargement de l'addon", function()
         assert.are.equal("BOTTOMLEFT", _G.GideonRaidDB.intermission.position.point)
         assert.are.equal(-40, _G.GideonRaidDB.intermission.position.x)
         assert.are.equal(25, _G.GideonRaidDB.intermission.position.y)
-        -- `/gr inter ok` valide SANS perdre la position : elle est re-appliquee a
+        -- `/gideon inter ok` valide SANS perdre la position : elle est re-appliquee a
         -- l'ouverture suivante (placement comme combat).
         _G.SlashCmdList["GIDEONRAID"]("inter ok")
         assert.is_false(panel:IsShown())
@@ -1177,7 +1177,7 @@ describe("chargement de l'addon", function()
         assert.are.equal(25, y)
     end)
 
-    it("/gr resetposition remet les trois panneaux au centre", function()
+    it("/gideon resetposition remet les trois panneaux au centre", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         local main = _G.GideonRaidPanel
         dragTo(main, "TOPLEFT", "TOPLEFT", -120, -40)
@@ -1202,9 +1202,9 @@ describe("chargement de l'addon", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
         local text = messages()
-        assert.matches("/gr lock", text)
-        assert.matches("/gr unlock", text)
-        assert.matches("/gr resetposition", text)
+        assert.matches("/gideon lock", text)
+        assert.matches("/gideon unlock", text)
+        assert.matches("/gideon resetposition", text)
         -- Un verrou sans SauvedVariables ne leve pas.
         local saved = _G.GideonRaidDB
         _G.GideonRaidDB = nil
@@ -1395,7 +1395,7 @@ describe("fermeture bornee du panneau d'intermission", function()
         assert.is_true(panel:IsShown())
         panel.closeCross:Click()
         assert.is_false(panel:IsShown())
-        -- Rouverte a la main (/gr inter = bascule), puis refermee par la bascule.
+        -- Rouverte a la main (/gideon inter = bascule), puis refermee par la bascule.
         _G.SlashCmdList["GIDEONRAID"]("inter")
         assert.is_true(panel:IsShown())
         _G.SlashCmdList["GIDEONRAID"]("inter")

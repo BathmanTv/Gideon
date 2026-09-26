@@ -278,7 +278,7 @@ describe("Textures : l'illustration du panneau de placement", function()
     local Textures = ns.Textures
 
     it("est livree en TGA 32 bits non compresse, dans Texture/ et listee au .toc", function()
-        -- Pendant `/gr inter place`, le panneau n'affiche QUE cette illustration :
+        -- Pendant `/gideon inter place`, le panneau n'affiche QUE cette illustration :
         -- elle sert de repere visuel (taille et emplacement de la fenetre). Le
         -- client retail ne charge pas de PNG, la livraison est donc convertie par
         -- tools/make_textures.py en TGA 32 bits NON compresse.

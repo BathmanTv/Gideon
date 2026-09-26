@@ -893,7 +893,7 @@ describe("Intermission : panneau de placement (avant le pull)", function()
         -- Le raid lead a demande le RETOUR du bouton OK (« Remet oui ok ») : le
         -- panneau de placement affiche l'illustration PUIS un petit bouton OK qui
         -- enregistre la position et ferme (UI.IntermissionConfirmSetup), exactement
-        -- comme `/gr inter ok` - qui reste disponible en secours. Rien d'autre :
+        -- comme `/gideon inter ok` - qui reste disponible en secours. Rien d'autre :
         -- aucune composition, aucun texte.
         local layout = L.placementPanel()
         assert.are.equal(L.PANEL.PLACEMENT, layout.panel)
@@ -1221,7 +1221,7 @@ describe("Config : bloc intermission", function()
         end
     end)
 
-    it("VIDE EXPLICITEMENT (/gr boss clear) : plus de cible, et le defaut ne revient pas", function()
+    it("VIDE EXPLICITEMENT (/gideon boss clear) : plus de cible, et le defaut ne revient pas", function()
         local c = Config.resolveIntermission({ bossIds = {}, bossNames = {}, bossTargetCleared = true })
         assert.are.same({}, c.bossIds, "efface = aucune cible : le panneau ne s'ouvre sur rien")
         assert.are.same({}, c.bossNames)

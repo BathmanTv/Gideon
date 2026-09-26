@@ -1,7 +1,7 @@
 ## Interface: 120100
 ## Title: GideonRaid
-## Notes: Helps pairing players with complementary debuffs and running the Entombed Sentinels intermission. Integrated with the GIDEON Discord bot. Bilingual in game: English by default, French on a frFR client (/gr lang).
-## Notes-frFR: Aide a l'appariement et a l'intermission (Entombed Sentinels). Ne lit aucune API de combat. Bilingue en jeu : anglais par defaut, francais sur client frFR (/gr lang).
+## Notes: Helps pairing players with complementary debuffs and running the Entombed Sentinels intermission. Integrated with the GIDEON Discord bot. Bilingual in game: English by default, French on a frFR client (/gideon lang).
+## Notes-frFR: Aide a l'appariement et a l'intermission (Entombed Sentinels). Ne lit aucune API de combat. Bilingue en jeu : anglais par defaut, francais sur client frFR (/gideon lang).
 ## Version: @project-version@
 ## Author: Guilde (via GIDEON)
 ## SavedVariables: GideonRaidDB
@@ -17,19 +17,19 @@
 # Core/Sound.lua comes right AFTER Locale.lua and BEFORE Config.lua: it owns the
 # pure table "canonical state -> soundboard file", the one-playback-per-assignment
 # gate and the BOUNDED preference resolved by Config.resolveIntermission
-# (/gr sound on|off). It depends on nothing else, so it stays out of the way of
+# (/gideon sound on|off). It depends on nothing else, so it stays out of the way of
 # the module order below.
 # Core/BossFilter.lua also comes BEFORE Config.lua: Config resolves the auto-open
-# allow-list (encounter ids + names, `/gr boss <id>`) with it, and the UI layer
+# allow-list (encounter ids + names, `/gideon boss <id>`) with it, and the UI layer
 # asks it WHICH boss may open the panel by itself (the DELIVERED default target is
 # encounter id 3445, with the English and French names as a secondary criterion).
 # Core/Diag.lua comes right AFTER Core/BossFilter.lua: it builds the report of
-# `/gr diag` (the four sound files + the effective target + the idlog + the ping)
+# `/gideon diag` (the four sound files + the effective target + the idlog + the ping)
 # and depends only on Locale and Sound, both already loaded. It contains NO client
 # call: the rendering layer (UI/Panel.lua) injects the CVars and the answers of
 # PlaySoundFile into it.
 # Core/Diag.lua is PURE: it never plays a sound itself. The silence gate it owns
-# (ProbeGate) is what keeps `/gr diag` from making any noise in a raid.
+# (ProbeGate) is what keeps `/gideon diag` from making any noise in a raid.
 # Core/Config.lua holds the DELIVERED DEFAULT of the auto-open target
 # (Config.DEFAULT_BOSS_IDS / Config.DEFAULT_BOSS_NAMES): encounter id 3445,
 # measured in game by the raid lead on 2026-09-24 (heroic pull, 20 players), plus
@@ -102,7 +102,7 @@ Texture\3v1r.tga
 
 # THE ILLUSTRATION OF THE PLACEMENT PANEL (the drawing the raid lead delivered).
 # It is NOT a state: it never appears during a fight, it is the reference the
-# player uses to see the size and the spot the window will occupy (/gr inter
+# player uses to see the size and the spot the window will occupy (/gideon inter
 # place, "PLACE INTERMISSION PANEL"). Same rules as the three cards: a 32-bit
 # uncompressed TGA in Texture/ (never in assets/), listed HERE (a texture loaded
 # by path and not listed is not loaded at all), produced by

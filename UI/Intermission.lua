@@ -28,16 +28,16 @@
 
     FLOW OF A RAID EVENING (only the ENCOUNTER_START arguments are read, and ALWAYS
     under pcall - see the boss filter block further down):
-      a. before the pull, /gr -> "PLACE INTERMISSION PANEL": the frame is shown
+      a. before the pull, /gideon -> "PLACE INTERMISSION PANEL": the frame is shown
          in placement mode and displays ONLY the Gideon illustration the raid
          lead delivered (no button, no text). It is dragged where the player
-         wants it, the position is saved in the SavedVariables and `/gr inter ok`
+         wants it, the position is saved in the SavedVariables and `/gideon inter ok`
          validates it;
-      b. the player prepares the ping keybind and confirms with `/gr inter ok`
+      b. the player prepares the ping keybind and confirms with `/gideon inter ok`
          -> panel closed;
       c. ENCOUNTER_START decides: IF the encounter is the configured target boss
-         (allow-list of encounter ids, `/gr boss <id>`) OR the manual override is
-         armed (/gr inter on), the pre-computed schedule is armed and the panel
+         (allow-list of encounter ids, `/gideon boss <id>`) OR the manual override is
+         armed (/gideon inter on), the pre-computed schedule is armed and the panel
          opens BY ITSELF shortly before each intermission. On any other boss
          NOTHING opens (safe default) and the chat says how to configure the right
          boss;
@@ -49,9 +49,9 @@
     WHICH BOSS: the allow-list of ENCOUNTER_START ids is the PRIMARY criterion (an
     integer, identical in every game language) and it is EMPTY by default, so the
     panel NEVER opens on its own until the raid lead names the right boss. The id
-    of Entombed Sentinels is NOT known yet: `/gr idlog on` prints and memorizes
+    of Entombed Sentinels is NOT known yet: `/gideon idlog on` prints and memorizes
     what ENCOUNTER_START reports ("encounter seen: id=<id> name=<n> difficulty=<d>
-    group=<g>"), and that line is what `/gr boss <id>` is given. The names are a
+    group=<g>"), and that line is what `/gideon boss <id>` is given. The names are a
     SECONDARY criterion, language dependent, therefore empty by default too.
 
     THE PANEL IS THE RAID LEAD'S SURFACE, NOT A DOCUMENT (in-game report: "enleve
@@ -84,10 +84,10 @@
     assignment soundboards (`Sound/assign-*.ogg`) play ONCE, on the Master
     channel, when the player CLICKS one of the three composition buttons - in the
     real flow as in a rehearsal - and NOTHING plays at any other moment: not when
-    the panel opens (by itself or through `/gr sim inter`), not when it closes,
+    the panel opens (by itself or through `/gideon sim inter`), not when it closes,
     not on a tick, not in a simulation that was not clicked. `Sound/
     intermission-start.ogg` STAYS packaged (the raid lead may want it back) and
-    `/gr sound test start` plays it on REQUEST, but no automatic playback path
+    `/gideon sound test start` plays it on REQUEST, but no automatic playback path
     exists any more - tests/spec/sound_spec.lua fails if one comes back.
     Core/Sound.lua owns the pure table state -> file and the one-playback-per-
     assignment gate; THIS file is the only one that calls PlaySoundFile, under
@@ -277,16 +277,16 @@ end
          keeps the pure gate (Sound.newStartGate / Sound.takeIntermissionStart):
          the raid lead can get the automatic playback back with a handful of
          lines, and the gate is still covered by tests/spec/sound_spec.lua;
-       - `/gr sound test start` (UI.SoundTestStart below) still plays it ON
+       - `/gideon sound test start` (UI.SoundTestStart below) still plays it ON
          REQUEST, so the file can be checked in game without waiting for a pull.
 
      THIS layer therefore calls no start sound at any point: opening the panel
-     (automatic or `/gr sim inter`), closing it, a tick or a re-render are all
+     (automatic or `/gideon sim inter`), closing it, a tick or a re-render are all
      SILENT. tests/spec/sound_spec.lua guards that silence: it fails as soon as
      an automatic playback path comes back.
 ]]
 
---- Remembers the current assignment (CORRECT, `/gr inter stop`, every new
+--- Remembers the current assignment (CORRECT, `/gideon inter stop`, every new
 --- intermission and every rehearsal): the NEXT click plays the sound of the
 --- composition it declares - the natural behaviour after a correction.
 function UI.ResetAssignSound()
@@ -294,7 +294,7 @@ function UI.ResetAssignSound()
     return soundAssigner
 end
 
---- `/gr sound test start`: plays the INTERMISSION START sound on request, so the
+--- `/gideon sound test start`: plays the INTERMISSION START sound on request, so the
 --- raid lead can check it WITHOUT waiting for a pull. The player preference is
 --- honoured, exactly like the three assignment soundboards: a muted sound stays
 --- silent and says so, so a test can never contradict the setting.
@@ -314,7 +314,7 @@ function UI.SoundTestStart()
     return true
 end
 
---- `/gr sound test <1v3r|2v2r|3v1r|start>`: plays ONE sound on request, so the
+--- `/gideon sound test <1v3r|2v2r|3v1r|start>`: plays ONE sound on request, so the
 --- raid lead can hear and identify the files WITHOUT waiting for a fight.
 --- BOUNDED: an unknown value is REFUSED (nothing is played), and the player
 --- preference is honoured - a muted sound stays silent and says so, so a test can
@@ -520,7 +520,7 @@ local function ensurePanel()
     -- THE PLACEMENT ILLUSTRATION (the drawing of the WINDOW itself). A plain card
     -- (no Button: there is nothing to click on the picture) holding the picture
     -- the raid lead delivered. Core/Layout.placementPanel() sizes it and names its
-    -- style; the panel is DRAGGABLE, the cross cancels and /gr inter ok validates.
+    -- style; the panel is DRAGGABLE, the cross cancels and /gideon inter ok validates.
     p.placement = UI.CreateCard("Frame", p, ns.Layout.CHOICE_STYLE)
 
     -- REDO / CORRECT: forgets the declaration and brings the three pictures back.
@@ -535,7 +535,7 @@ local function ensurePanel()
 
     -- THE OK BUTTON OF THE PLACEMENT PANEL (raid-lead decision: "Remet oui ok").
     -- A small, discreet button UNDER the illustration: it saves the position and
-    -- closes, exactly like `/gr inter ok` - which stays available as a backup. It
+    -- closes, exactly like `/gideon inter ok` - which stays available as a backup. It
     -- is part of the PLACEMENT layout only (Core/Layout.placementPanel): during a
     -- fight the layout does not contain it, so the applier hides it, and it can
     -- never be drawn over the three composition cards.
@@ -653,7 +653,7 @@ function UI.IntermissionRefresh()
         -- and NOTHING ELSE. No composition, no label: the picture IS the reference
         -- of the size and the spot the window will occupy during the fight. The OK
         -- button saves the position and closes (UI.IntermissionConfirmSetup), the
-        -- cross cancels, `/gr inter ok` does the same as the button, and the panel
+        -- cross cancels, `/gideon inter ok` does the same as the button, and the panel
         -- is dragged to the wanted spot like the combat panel.
         return UI.ApplyLayout(p, Layout.placementPanel(c.style), panelElements(p))
     end
@@ -671,7 +671,7 @@ function UI.IntermissionRefresh()
     end
     spec.showChoices = snap.showButtons
     spec.showRedo = snap.showRedo
-    -- THE STYLE OF THE CARDS: the raid lead's choice (`/gr style`), the delivered
+    -- THE STYLE OF THE CARDS: the raid lead's choice (`/gideon style`), the delivered
     -- one by default. It travels WITH the layout, so the combat panel's look is
     -- decided in ONE place (Core/Layout.BUTTON_STYLES) and this layer only applies
     -- the table it is handed.
@@ -735,7 +735,7 @@ end
 --- Hides the panel. Nothing is left running: the auto-close guard is DISARMED
 --- (the panel is gone; the next opening re-arms it) and a rehearsal is forgotten
 --- (a rehearsal that is no longer on screen must not stay "running", otherwise
---- the next /gr sim inter would be refused).
+--- the next /gideon sim inter would be refused).
 function UI.IntermissionHide()
     local p = ensurePanel()
     setupMode = false
@@ -743,7 +743,7 @@ function UI.IntermissionHide()
     Intermission.disarmCloseGuard(closeGuard)
     if simRun ~= nil then
         -- Hiding the panel ENDS a rehearsal: a rehearsal that is no longer on
-        -- screen must not stay "running" (the next /gr sim inter would be refused
+        -- screen must not stay "running" (the next /gideon sim inter would be refused
         -- and the player would be stuck with a hidden simulation).
         simRun = nil
         simState = nil
@@ -753,7 +753,7 @@ end
 --[[ SIMULATION MODE (rehearsal alone, with no boss and no raid) ----------------
 
      Two entries, reachable from the MAIN panel (two buttons) and from the chat
-     (/gr sim inter | group | groupe, /gr sim ping, /gr sim stop):
+     (/gideon sim inter | group | groupe, /gideon sim ping, /gideon sim stop):
 
        1. "INTERMISSION GROUP": the intermission panel opens RIGHT AWAY (fourth
           in-game test: the former 3 s delay is gone), the player clicks their
@@ -916,7 +916,7 @@ function UI.PingHelpRefresh()
     return UI.ApplyLayout(p, layout, pingHelpElements(p))
 end
 
---- Shows the ping help window (`/gr sim ping`, the main-panel button), where the
+--- Shows the ping help window (`/gideon sim ping`, the main-panel button), where the
 --- player left it (persisted position).
 function UI.PingHelpShow()
     local p = ensurePingPanel()
@@ -932,7 +932,7 @@ function UI.PingHelpHide()
     end
 end
 
---- `/gr sim` with no argument and the main-panel SIMULATION buttons land here.
+--- `/gideon sim` with no argument and the main-panel SIMULATION buttons land here.
 --- The whole argument is parsed by Core (mode + no option any more); an unknown
 --- sub-command or a trailing option is REFUSED with a message, nothing is
 --- guessed and nothing is launched.
@@ -951,22 +951,22 @@ function UI.SimulationCommand(raw)
     elseif mode == "ping" then
         UI.SimulationPingStart()
     elseif mode == "style" then
-        -- `/gr sim style [1|shipped]`: the STYLE SHOWCASE - every font size, the
+        -- `/gideon sim style [1|shipped]`: the STYLE SHOWCASE - every font size, the
         -- palette with its hex codes, the three states of a card, the ONE guild card
         -- and the two animations, shown IN GAME so the raid lead judges the design
         -- there. Since the raid-lead decision of 2026-09-25 there is a single style,
         -- so anything else is refused by the showcase itself.
         UI.ShowcaseOpen(options.argument)
     elseif mode == "anim" then
-        -- `/gr sim anim on|off`: the showcase animations (fade-in + border pulse),
-        -- persisted. Unknown value refused, like `/gr sound on|off`.
+        -- `/gideon sim anim on|off`: the showcase animations (fade-in + border pulse),
+        -- persisted. Unknown value refused, like `/gideon sound on|off`.
         UI.ShowcaseAnimationsCommand(options.argument)
     else
         UI.SimulationStop()
     end
 end
 
---- Starts the "INTERMISSION GROUP" rehearsal (`/gr sim inter`, aliases group and
+--- Starts the "INTERMISSION GROUP" rehearsal (`/gideon sim inter`, aliases group and
 --- groupe, plus the main-panel button): the panel opens IMMEDIATELY and the
 --- PLAYER closes it (fourth in-game test). ONE cycle, no automatic close, no
 --- relaunch, no boss, and the ENCOUNTER_START timeline is left alone.
@@ -1018,7 +1018,7 @@ function UI.SimulationInterStart(options)
     UI.Print(Locale.t("cmd.sim.inter"))
 end
 
---- Starts... rather, SHOWS the PING HELP window (`/gr sim ping`, main-panel
+--- Starts... rather, SHOWS the PING HELP window (`/gideon sim ping`, main-panel
 --- button): how to bind the keys and the operational reminder. The addon never
 --- pings and detects nothing.
 function UI.SimulationPingStart()
@@ -1035,7 +1035,7 @@ function UI.SimulationPingStart()
     UI.Print(Locale.format("cmd.sim.pingStart", Simulation.pingSequenceLine()))
 end
 
---- Stops the REHEARSAL (`/gr sim stop`, the close cross, the Close button) and
+--- Stops the REHEARSAL (`/gideon sim stop`, the close cross, the Close button) and
 --- hides the ping help window. Idempotent: with nothing running it says so.
 function UI.SimulationStop()
     local stopped = false
@@ -1155,7 +1155,7 @@ local function beginIntermission(c)
     return true
 end
 
---- Manual start (`/gr inter start`): verbose, the player asked for it.
+--- Manual start (`/gideon inter start`): verbose, the player asked for it.
 function UI.IntermissionStart()
     local c = config()
     if not c.enabled then
@@ -1163,7 +1163,7 @@ function UI.IntermissionStart()
         return
     end
     if simulationRunning() then
-        -- A rehearsal is running: stop it first (/gr sim stop) so a simulated
+        -- A rehearsal is running: stop it first (/gideon sim stop) so a simulated
         -- intermission is never mistaken for a real one.
         UI.Print(Locale.t("sim.refused.running"))
         return
@@ -1339,12 +1339,12 @@ end
        - an EMPTY allow-list means NO AUTOMATIC OPENING (SAFE DEFAULT). A panel
          that does not open is better than a panel that opens on the wrong boss -
          and the chat says how to configure the right boss;
-       - `/gr inter on` stays the MANUAL OVERRIDE: it arms the panel for the NEXT
+       - `/gideon inter on` stays the MANUAL OVERRIDE: it arms the panel for the NEXT
          encounter whatever the boss, and it is CONSUMED at the end of it;
        - the arguments are read UNDER pcall (in 12.x an argument may be a SECRET
          value, and comparing one raises): an id that cannot be read is simply NOT
          a match, hence no opening - never a Lua error, never the wrong boss;
-       - `/gr idlog on` is the MEASUREMENT mechanism: the real id of the target
+       - `/gideon idlog on` is the MEASUREMENT mechanism: the real id of the target
          boss is read in game ("encounter seen: id=<id> ..."), never invented.
 
      Everything else of the flow is unchanged: the schedule arms on the pull, the
@@ -1377,7 +1377,7 @@ function UI.BossRefusalMessage(decision, resolved)
     if reason == BossFilter.REASON.NO_TARGET then
         local c = type(resolved) == "table" and resolved or {}
         if c.bossTargetCleared == true then
-            -- `/gr boss clear` was used: the short message names the command that
+            -- `/gideon boss clear` was used: the short message names the command that
             -- brings the target back instead of repeating the whole procedure.
             return Locale.t("cmd.boss.clearedHint")
         end
@@ -1392,7 +1392,7 @@ function UI.BossRefusalMessage(decision, resolved)
     return Locale.t("cmd.boss.notTargetNoId")
 end
 
---- IDLOG (`/gr idlog on`): the measurement mechanism. Every `ENCOUNTER_START` is
+--- IDLOG (`/gideon idlog on`): the measurement mechanism. Every `ENCOUNTER_START` is
 --- printed - each value read under pcall, an unreadable value says so instead of
 --- showing a fake number - and memorized NEWEST FIRST in the SavedVariables
 --- (`GideonRaidDB.intermission.seenEncounters`, bounded), so the raid lead can
@@ -1422,7 +1422,7 @@ end
 --- MUST know it, otherwise the feature looks like a broken addon. Two different
 --- situations, and only the FIRST one is worth a warning:
 ---   - no target at all (a build without any delivered default): warn;
----   - the target was cleared ON PURPOSE (`/gr boss clear`, `bossTargetCleared`): the
+---   - the target was cleared ON PURPOSE (`/gideon boss clear`, `bossTargetCleared`): the
 ---     player knows what they did, and a warning at every login would read as if the
 ---     addon had forgotten something - stay silent.
 --- Recomputed on every login: as soon as a target exists again, nothing is printed.
@@ -1455,7 +1455,7 @@ function UI.IntermissionOnEncounterStart(encounter)
 
     -- IDLOG: measured BEFORE any decision, and even when the coach is disabled -
     -- the player asked for it explicitly and it is a measurement tool, not a
-    -- decision. The id logged here is what `/gr boss <id>` will be given.
+    -- decision. The id logged here is what `/gideon boss <id>` will be given.
     if c.idlog then
         UI.RecordSeenEncounter(encounter)
     end
@@ -1507,7 +1507,7 @@ function UI.IntermissionSetEnabled(enabled)
         return
     end
     db.intermission.enabled = enabled and true or false
-    -- `/gr inter on` IS THE MANUAL OVERRIDE (raid-lead decision): besides enabling
+    -- `/gideon inter on` IS THE MANUAL OVERRIDE (raid-lead decision): besides enabling
     -- the module it arms the auto-opening for the NEXT encounter, WHATEVER the
     -- boss, and that arm is consumed at the end of the encounter. Disabling clears
     -- it, so it can never fire later on.
@@ -1538,7 +1538,7 @@ function UI.IntermissionStatus()
     UI.Print(Locale.format("ui.bossLine", BossFilter.targetSummary(c), Locale.t(c.idlog and "ui.wordEnabled" or "ui.wordDisabled")))
 end
 
---- `/gr inter ping`: which ping to use and which key to press, plus the binding
+--- `/gideon inter ping`: which ping to use and which key to press, plus the binding
 --- names tried (that is exactly what the in-game confirmation has to check).
 function UI.IntermissionPrintPing()
     local c = config()
@@ -1575,7 +1575,7 @@ function UI.PrintPlan()
 end
 
 --- Re-applies every LANGUAGE-DEPENDENT label (panel chrome + composition
---- buttons). Called at initialization and after a language change (/gr lang):
+--- buttons). Called at initialization and after a language change (/gideon lang):
 --- the strings come from Core, so the UI only copies them.
 function UI.IntermissionApplyStaticText()
     local p = ensurePanel()

@@ -90,7 +90,7 @@ Textures.FILE_NAMES = { "1v3r.tga", "2v2r.tga", "3v1r.tga" }
 
 --[[ ------------------------------------------------- THE PLACEMENT ILLUSTRATION
 
-     The panel shown while the player PLACES it (`/gr inter place`, the PLACE
+     The panel shown while the player PLACES it (`/gideon inter place`, the PLACE
      button of the main panel) displays ONE thing and nothing else: the Gideon
      illustration the raid lead delivered. No button, no text, no composition -
      the picture IS the window, and it is the VISUAL REFERENCE of the size the

@@ -51,52 +51,52 @@ Locale.STRINGS = {
         fr = "Configuration reinitialisee.",
     },
     ["cmd.help"] = {
-        en = "Commands: /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
-            .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
+        en = "Commands: /gideon | /gideon plan | /gideon status | /gideon reset | /gideon lang [auto|en|fr]\n"
+            .. "  /gideon ping [anchors|color|none]"
+            .. "  /gideon inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
             .. "  (place = the panel shows the illustration and its small OK button; ok = save the position and close)\n"
-            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
-            .. "  /gr boss | /gr boss <id> | /gr boss name <text> | /gr boss list | /gr boss clear\n"
-            .. "  /gr idlog [on|off]\n"
-            .. "  /gr diag (health report: the 4 sound files, the target boss, the idlog, the ping)\n"
-            .. "  /gr style [1|shipped] (CARD STYLE of the intermission panel - one single style, persisted)\n"
-            .. "  /gr sim inter|group|groupe (rehearsal, YOU close it) | /gr sim ping (= /gr pinghelp) | /gr sim stop\n"
-            .. "  /gr sim style [1|shipped] (STYLE SHOWCASE: every font size, the palette, the guild card)\n"
-            .. "  /gr sim anim [on|off] (showcase animations: fade-in + border pulse, persisted)\n"
-            .. "  /gr lock | /gr unlock | /gr resetposition",
-        fr = "Commandes : /gr | /gr plan | /gr status | /gr reset | /gr lang [auto|en|fr]\n"
-            .. "  /gr ping [anchors|color|none]"
-            .. "  /gr inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
+            .. "  /gideon sound [on|off] | /gideon sound test 1v3r|2v2r|3v1r | /gideon sound test start\n"
+            .. "  /gideon boss | /gideon boss <id> | /gideon boss name <text> | /gideon boss list | /gideon boss clear\n"
+            .. "  /gideon idlog [on|off]\n"
+            .. "  /gideon diag (health report: the 4 sound files, the target boss, the idlog, the ping)\n"
+            .. "  /gideon style [1|shipped] (CARD STYLE of the intermission panel - one single style, persisted)\n"
+            .. "  /gideon sim inter|group|groupe (rehearsal, YOU close it) | /gideon sim ping (= /gideon pinghelp) | /gideon sim stop\n"
+            .. "  /gideon sim style [1|shipped] (STYLE SHOWCASE: every font size, the palette, the guild card)\n"
+            .. "  /gideon sim anim [on|off] (showcase animations: fade-in + border pulse, persisted)\n"
+            .. "  /gideon lock | /gideon unlock | /gideon resetposition",
+        fr = "Commandes : /gideon | /gideon plan | /gideon status | /gideon reset | /gideon lang [auto|en|fr]\n"
+            .. "  /gideon ping [anchors|color|none]"
+            .. "  /gideon inter [start|stop|place|ok|on|off|status|3V1R|2V2R|1V3R]\n"
             .. "  (place = le panneau affiche l'illustration et son petit bouton OK ; ok = enregistre la position et ferme)\n"
-            .. "  /gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r | /gr sound test start\n"
-            .. "  /gr boss | /gr boss <id> | /gr boss name <texte> | /gr boss list | /gr boss clear\n"
-            .. "  /gr idlog [on|off]\n"
-            .. "  /gr diag (bilan de sante : les 4 fichiers de son, le boss cible, l'idlog, le ping)\n"
-            .. "  /gr style [1|shipped] (STYLE DES ENCARTS du panneau d'intermission - un seul style, persiste)\n"
-            .. "  /gr sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gr sim ping (= /gr pinghelp)\n"
-            .. "  /gr sim stop\n"
-            .. "  /gr sim style [1|shipped] (VITRINE DE STYLE : toutes les tailles, la palette, l'encart de la guilde)\n"
-            .. "  /gr sim anim [on|off] (animations de la vitrine : fondu + pulsation, persiste)\n"
-            .. "  /gr lock | /gr unlock | /gr resetposition",
+            .. "  /gideon sound [on|off] | /gideon sound test 1v3r|2v2r|3v1r | /gideon sound test start\n"
+            .. "  /gideon boss | /gideon boss <id> | /gideon boss name <texte> | /gideon boss list | /gideon boss clear\n"
+            .. "  /gideon idlog [on|off]\n"
+            .. "  /gideon diag (bilan de sante : les 4 fichiers de son, le boss cible, l'idlog, le ping)\n"
+            .. "  /gideon style [1|shipped] (STYLE DES ENCARTS du panneau d'intermission - un seul style, persiste)\n"
+            .. "  /gideon sim inter|group|groupe (repetition, c'est TOI qui la fermes) | /gideon sim ping (= /gideon pinghelp)\n"
+            .. "  /gideon sim stop\n"
+            .. "  /gideon sim style [1|shipped] (VITRINE DE STYLE : toutes les tailles, la palette, l'encart de la guilde)\n"
+            .. "  /gideon sim anim [on|off] (animations de la vitrine : fondu + pulsation, persiste)\n"
+            .. "  /gideon lock | /gideon unlock | /gideon resetposition",
     },
     ["cmd.sim.help"] = {
-        en = "Simulation (alone, no boss, no raid): /gr sim inter (alias group, groupe) = the intermission "
-            .. "panel opens RIGHT AWAY, you click your composition and YOU close it (X or Close); /gr sim ping = "
-            .. "ping help window (how to bind a key per ping and how to ping yourself); /gr sim stop = close it; "
-            .. "/gr sim style [1|shipped] = the STYLE SHOWCASE (fonts, palette with hex codes, card states, the "
-            .. "guild card, the animations); /gr sim anim on|off = its animations.",
-        fr = "Simulation (seul, sans boss, sans raid) : /gr sim inter (alias group, groupe) = le panneau "
+        en = "Simulation (alone, no boss, no raid): /gideon sim inter (alias group, groupe) = the intermission "
+            .. "panel opens RIGHT AWAY, you click your composition and YOU close it (X or Close); /gideon sim ping = "
+            .. "ping help window (how to bind a key per ping and how to ping yourself); /gideon sim stop = close it; "
+            .. "/gideon sim style [1|shipped] = the STYLE SHOWCASE (fonts, palette with hex codes, card states, the "
+            .. "guild card, the animations); /gideon sim anim on|off = its animations.",
+        fr = "Simulation (seul, sans boss, sans raid) : /gideon sim inter (alias group, groupe) = le panneau "
             .. "d'intermission s'ouvre TOUT DE SUITE, tu cliques ta composition et c'est TOI qui le fermes "
-            .. "(croix ou Fermer) ; /gr sim ping = fenetre d'aide au ping (comment binder une touche par ping et "
-            .. "comment te pinger toi-meme) ; /gr sim stop = le fermer ; /gr sim style [1|shipped] = la VITRINE "
+            .. "(croix ou Fermer) ; /gideon sim ping = fenetre d'aide au ping (comment binder une touche par ping et "
+            .. "comment te pinger toi-meme) ; /gideon sim stop = le fermer ; /gideon sim style [1|shipped] = la VITRINE "
             .. "DE STYLE (polices, palette avec codes hexa, etats d'un encart, l'encart de la guilde, "
-            .. "animations) ; /gr sim anim on|off = ses animations.",
+            .. "animations) ; /gideon sim anim on|off = ses animations.",
     },
     -- Panel lock: the main panel is MOVABLE by default (in-game feedback); these
     -- three commands are the lock / unlock / reset entry points.
     ["cmd.panelLocked"] = {
-        en = "Panel locked: it can no longer be dragged (/gr unlock to move it again).",
-        fr = "Panneau verrouille : il ne peut plus etre deplace (/gr unlock pour le deplacer a nouveau).",
+        en = "Panel locked: it can no longer be dragged (/gideon unlock to move it again).",
+        fr = "Panneau verrouille : il ne peut plus etre deplace (/gideon unlock pour le deplacer a nouveau).",
     },
     ["cmd.panelUnlocked"] = {
         en = "Panel unlocked: drag it where you want, the position is saved automatically.",
@@ -135,8 +135,8 @@ Locale.STRINGS = {
             .. "ne detecte rien.",
     },
     ["cmd.lang.status"] = {
-        en = "Language: client detected = %s, effective = %s, preference = %s (/gr lang auto|en|fr to change).",
-        fr = "Langue : client detecte = %s, effective = %s, preference = %s (/gr lang auto|en|fr pour changer).",
+        en = "Language: client detected = %s, effective = %s, preference = %s (/gideon lang auto|en|fr to change).",
+        fr = "Langue : client detecte = %s, effective = %s, preference = %s (/gideon lang auto|en|fr pour changer).",
     },
     ["cmd.lang.updated"] = {
         en = "Language preference = %s, effective language = %s.",
@@ -151,8 +151,8 @@ Locale.STRINGS = {
         fr = "inconnue (GetLocale indisponible)",
     },
     ["cmd.ping.status"] = {
-        en = "Ping policy: %s - %s (/gr ping anchors|color|none to change).",
-        fr = "Politique de ping : %s - %s (/gr ping anchors|color|none pour changer).",
+        en = "Ping policy: %s - %s (/gideon ping anchors|color|none to change).",
+        fr = "Politique de ping : %s - %s (/gideon ping anchors|color|none pour changer).",
     },
     ["cmd.ping.updated"] = {
         en = "Ping policy = %s - %s",
@@ -170,11 +170,11 @@ Locale.STRINGS = {
     -- raid lead WHICH soundboard they heard (or did not hear).
     ["cmd.sound.status"] = {
         en = "Assignment sound: %s - one soundboard per composition (1V3R / 2V2R / 3V1R), played once "
-            .. "when you click your composition. /gr sound on|off to change it, /gr sound test 1v3r|2v2r|3v1r "
-            .. "to hear one now, /gr sound test start for the intermission start sound.",
+            .. "when you click your composition. /gideon sound on|off to change it, /gideon sound test 1v3r|2v2r|3v1r "
+            .. "to hear one now, /gideon sound test start for the intermission start sound.",
         fr = "Son d'assignation : %s - un son par composition (1V3R / 2V2R / 3V1R), joue une fois quand tu "
-            .. "cliques ta composition. /gr sound on|off pour changer, /gr sound test 1v3r|2v2r|3v1r pour en "
-            .. "ecouter un maintenant, /gr sound test start pour le son de debut d'intermission.",
+            .. "cliques ta composition. /gideon sound on|off pour changer, /gideon sound test 1v3r|2v2r|3v1r pour en "
+            .. "ecouter un maintenant, /gideon sound test start pour le son de debut d'intermission.",
     },
     ["cmd.sound.updated"] = {
         en = "Assignment sound = %s.",
@@ -195,8 +195,8 @@ Locale.STRINGS = {
             .. "bien ete remplace (meme nom, Ogg Vorbis) et que le volume du jeu est monte.",
     },
     ["cmd.sound.testDisabled"] = {
-        en = "Assignment sound is disabled: /gr sound on, then /gr sound test again.",
-        fr = "Le son d'assignation est desactive : /gr sound on, puis /gr sound test a nouveau.",
+        en = "Assignment sound is disabled: /gideon sound on, then /gideon sound test again.",
+        fr = "Le son d'assignation est desactive : /gideon sound on, puis /gideon sound test a nouveau.",
     },
     ["cmd.sound.failed"] = {
         en = "Sound %s could not be played (file missing or PlaySoundFile unavailable): the addon stays "
@@ -206,7 +206,7 @@ Locale.STRINGS = {
     },
     -- THE INTERMISSION START SOUND (the raid lead's own recording, played ONCE at
     -- the very beginning of every intermission - i.e. when the panel opens by
-    -- itself 2 s before the intermission - and once per `/gr sim inter`).
+    -- itself 2 s before the intermission - and once per `/gideon sim inter`).
     ["cmd.sound.testStart"] = {
         en = "Intermission start sound: %s should have played (once at the beginning of every intermission). "
             .. "If you heard nothing, check that the file is there (Sound/intermission-start.ogg, Ogg Vorbis) "
@@ -223,26 +223,26 @@ Locale.STRINGS = {
     -- which depends on the client language, hence EMPTY by default and never
     -- guessed). SAFE DEFAULT: an empty list opens NOTHING.
     ["cmd.boss.status"] = {
-        en = "Auto-open target boss: %s. Encounter id log: %s. /gr boss <id> sets it, /gr boss list shows it, "
-            .. "/gr boss clear removes it.",
-        fr = "Boss cible de l'ouverture auto : %s. Journal des ids d'encounter : %s. /gr boss <id> pour la "
-            .. "definir, /gr boss list pour l'afficher, /gr boss clear pour l'effacer.",
+        en = "Auto-open target boss: %s. Encounter id log: %s. /gideon boss <id> sets it, /gideon boss list shows it, "
+            .. "/gideon boss clear removes it.",
+        fr = "Boss cible de l'ouverture auto : %s. Journal des ids d'encounter : %s. /gideon boss <id> pour la "
+            .. "definir, /gideon boss list pour l'afficher, /gideon boss clear pour l'effacer.",
     },
     ["cmd.boss.target.none"] = {
         en = "NONE - SAFE DEFAULT: the panel will NOT open by itself",
         fr = "AUCUNE - DEFAUT SUR : le panneau ne s'ouvrira PAS tout seul",
     },
-    -- `/gr boss clear` is a DIFFERENT state from "no target at all": the player
+    -- `/gideon boss clear` is a DIFFERENT state from "no target at all": the player
     -- explicitly dropped the target, including the one the addon ships with. Saying
     -- so avoids reading a deliberate choice as a lost configuration.
     ["cmd.boss.target.cleared"] = {
-        en = "NONE - cleared ON PURPOSE (/gr boss clear): the panel will NOT open by itself",
-        fr = "AUCUNE - effacee EXPRES (/gr boss clear) : le panneau ne s'ouvrira PAS tout seul",
+        en = "NONE - cleared ON PURPOSE (/gideon boss clear): the panel will NOT open by itself",
+        fr = "AUCUNE - effacee EXPRES (/gideon boss clear) : le panneau ne s'ouvrira PAS tout seul",
     },
-    -- WHERE the effective target comes from (`/gr boss`, `/gr boss list`, `/gr diag`):
+    -- WHERE the effective target comes from (`/gideon boss`, `/gideon boss list`, `/gideon diag`):
     -- a save that was never configured gets the target DELIVERED with the addon
     -- (encounter id + the two names), a player who added ids gets both, and an
-    -- explicit `/gr boss clear` drops the delivered one.
+    -- explicit `/gideon boss clear` drops the delivered one.
     ["cmd.boss.source.default"] = {
         en = "Target source: the default DELIVERED with the addon (no player ever added anything).",
         fr = "Origine de la cible : le defaut LIVRE avec l'addon (aucun joueur n'a rien ajoute).",
@@ -252,16 +252,17 @@ Locale.STRINGS = {
         fr = "Origine de la cible : le defaut livre avec l'addon PLUS les entrees ajoutees par un joueur.",
     },
     ["cmd.boss.source.own"] = {
-        en = "Target source: ONLY the entries added by a player (the delivered default was dropped by " .. "/gr boss clear).",
-        fr = "Origine de la cible : SEULEMENT les entrees ajoutees par un joueur (le defaut livre a ete " .. "retire par /gr boss clear).",
+        en = "Target source: ONLY the entries added by a player (the delivered default was dropped by " .. "/gideon boss clear).",
+        fr = "Origine de la cible : SEULEMENT les entrees ajoutees par un joueur (le defaut livre a ete "
+            .. "retire par /gideon boss clear).",
     },
     ["cmd.boss.source.cleared"] = {
-        en = "Target source: cleared ON PURPOSE (/gr boss clear): the panel will NOT open by itself until "
-            .. "/gr boss <id> names a target again.",
-        fr = "Origine de la cible : effacee EXPRES (/gr boss clear) : le panneau ne s'ouvrira PAS tout seul "
-            .. "tant que /gr boss <id> ne nomme pas une cible.",
+        en = "Target source: cleared ON PURPOSE (/gideon boss clear): the panel will NOT open by itself until "
+            .. "/gideon boss <id> names a target again.",
+        fr = "Origine de la cible : effacee EXPRES (/gideon boss clear) : le panneau ne s'ouvrira PAS tout seul "
+            .. "tant que /gideon boss <id> ne nomme pas une cible.",
     },
-    -- Provenance of ONE entry of `/gr boss list`.
+    -- Provenance of ONE entry of `/gideon boss list`.
     ["cmd.boss.sourceDefault"] = {
         en = "addon default",
         fr = "defaut de l'addon",
@@ -270,7 +271,7 @@ Locale.STRINGS = {
         en = "added by you",
         fr = "ajoute par toi",
     },
-    -- THE TARGET THE ADDON SHIPS WITH: printed by `/gr boss` and `/gr diag` so the
+    -- THE TARGET THE ADDON SHIPS WITH: printed by `/gideon boss` and `/gideon diag` so the
     -- raid lead always sees what a fresh guild member gets WITHOUT typing anything.
     -- %s = the encounter id(s), %s = the name(s) (the French one keeps its accent).
     ["cmd.boss.delivered"] = {
@@ -291,38 +292,38 @@ Locale.STRINGS = {
     },
     ["cmd.boss.unknown"] = {
         en = "Unknown encounter id '%s': a POSITIVE INTEGER is expected, the id ENCOUNTER_START reports "
-            .. "(/gr idlog on captures it in game). Nothing was saved.",
+            .. "(/gideon idlog on captures it in game). Nothing was saved.",
         fr = "Id d'encounter inconnu '%s' : un ENTIER POSITIF est attendu, l'id que rapporte ENCOUNTER_START "
-            .. "(/gr idlog on le capture en jeu). Rien n'a ete enregistre.",
+            .. "(/gideon idlog on le capture en jeu). Rien n'a ete enregistre.",
     },
     ["cmd.boss.nameAdded"] = {
         en = "Target encounter name '%s' added. Auto-open target: %s",
         fr = "Nom d'encounter cible '%s' ajoute. Cible de l'ouverture auto : %s",
     },
     ["cmd.boss.nameUnknown"] = {
-        en = "Empty encounter name '%s': write the exact name your client displays (/gr idlog on shows it), or "
-            .. "use /gr boss <id> instead.",
-        fr = "Nom d'encounter vide '%s' : ecris le nom exact affiche par ton client (/gr idlog on l'affiche), "
-            .. "ou utilise plutot /gr boss <id>.",
+        en = "Empty encounter name '%s': write the exact name your client displays (/gideon idlog on shows it), or "
+            .. "use /gideon boss <id> instead.",
+        fr = "Nom d'encounter vide '%s' : ecris le nom exact affiche par ton client (/gideon idlog on l'affiche), "
+            .. "ou utilise plutot /gideon boss <id>.",
     },
     -- Printed when a pull is refused because the player CLEARED the target on purpose
-    -- (`/gr boss clear`): short, actionable, and the delivered default is named so the
+    -- (`/gideon boss clear`): short, actionable, and the delivered default is named so the
     -- id can be typed back as-is.
     ["cmd.boss.clearedHint"] = {
-        en = "Auto-open target cleared on purpose (/gr boss clear): the panel does not open by itself. "
-            .. "/gr boss 3445 puts the target of the addon back, /gr boss <id> names another one, /gr inter on "
+        en = "Auto-open target cleared on purpose (/gideon boss clear): the panel does not open by itself. "
+            .. "/gideon boss 3445 puts the target of the addon back, /gideon boss <id> names another one, /gideon inter on "
             .. "opens the panel for the NEXT encounter.",
-        fr = "Cible de l'ouverture auto effacee expres (/gr boss clear) : le panneau ne s'ouvre pas tout "
-            .. "seul. /gr boss 3445 remet la cible de l'addon, /gr boss <id> en nomme une autre, /gr inter on "
+        fr = "Cible de l'ouverture auto effacee expres (/gideon boss clear) : le panneau ne s'ouvre pas tout "
+            .. "seul. /gideon boss 3445 remet la cible de l'addon, /gideon boss <id> en nomme une autre, /gideon inter on "
             .. "ouvre le panneau au PROCHAIN encounter.",
     },
     ["cmd.boss.cleared"] = {
         en = "Auto-open target cleared: the default DELIVERED with the addon is dropped too, so the panel "
-            .. "will NOT open by itself any more. /gr boss <id> names a target again (the delivered id can "
-            .. "be typed back: /gr boss 3445), /gr inter on opens the panel on the next encounter.",
+            .. "will NOT open by itself any more. /gideon boss <id> names a target again (the delivered id can "
+            .. "be typed back: /gideon boss 3445), /gideon inter on opens the panel on the next encounter.",
         fr = "Cible de l'ouverture auto effacee : le defaut LIVRE avec l'addon est retire lui aussi, donc "
-            .. "le panneau ne s'ouvrira plus tout seul. /gr boss <id> nomme une cible a nouveau (l'id livre "
-            .. "peut etre retape : /gr boss 3445), /gr inter on ouvre le panneau au prochain encounter.",
+            .. "le panneau ne s'ouvrira plus tout seul. /gideon boss <id> nomme une cible a nouveau (l'id livre "
+            .. "peut etre retape : /gideon boss 3445), /gideon inter on ouvre le panneau au prochain encounter.",
     },
     ["cmd.boss.list.ids"] = {
         en = "Auto-open target ids: %s",
@@ -330,16 +331,16 @@ Locale.STRINGS = {
     },
     ["cmd.boss.list.names"] = {
         en = "Auto-open target names (SECONDARY criterion - the id decides; the addon DELIVERS the English "
-            .. "and French names of the target boss, and `/gr boss name <text>` adds the exact text YOUR "
+            .. "and French names of the target boss, and `/gideon boss name <text>` adds the exact text YOUR "
             .. "client displays): %s",
         fr = "Noms cibles de l'ouverture auto (critere SECONDAIRE - c'est l'id qui decide ; l'addon LIVRE "
-            .. "les noms anglais et francais du boss cible, et `/gr boss name <texte>` ajoute le texte exact "
+            .. "les noms anglais et francais du boss cible, et `/gideon boss name <texte>` ajoute le texte exact "
             .. "affiche par TON client) : %s",
     },
     ["cmd.boss.list.override"] = {
-        en = "Manual override: %s (/gr inter on arms the panel for the NEXT encounter, whatever the boss; it "
+        en = "Manual override: %s (/gideon inter on arms the panel for the NEXT encounter, whatever the boss; it "
             .. "is consumed at the end of that encounter).",
-        fr = "Override manuel : %s (/gr inter on arme le panneau pour le PROCHAIN encounter, quel que soit le "
+        fr = "Override manuel : %s (/gideon inter on arme le panneau pour le PROCHAIN encounter, quel que soit le "
             .. "boss ; il est consomme a la fin de cet encounter).",
     },
     ["cmd.boss.list.seen"] = {
@@ -368,35 +369,35 @@ Locale.STRINGS = {
     ["cmd.boss.noTarget"] = {
         en = "No target boss configured: the intermission panel will NOT open by itself (SAFE DEFAULT - a "
             .. "panel that does not open is better than a panel on the wrong boss). The addon DELIVERS a "
-            .. "target (encounter id 3445, Entombed Sentinels) unless it was cleared with /gr boss clear, and "
-            .. "/gr boss <id> names one (the real id is measured in game with /gr idlog on). /gr inter on "
+            .. "target (encounter id 3445, Entombed Sentinels) unless it was cleared with /gideon boss clear, and "
+            .. "/gideon boss <id> names one (the real id is measured in game with /gideon idlog on). /gideon inter on "
             .. "opens the panel for the NEXT encounter, whatever the boss.",
         fr = "Aucun boss cible configure : le panneau d'intermission ne s'ouvrira PAS tout seul (DEFAUT SUR - "
             .. "mieux vaut un panneau qui ne s'ouvre pas qu'un panneau sur le mauvais boss). L'addon LIVRE "
-            .. "une cible (id d'encounter 3445, Entombed Sentinels) sauf si elle a ete effacee avec /gr boss "
-            .. "clear, et /gr boss <id> en nomme une (l'id reel se mesure en jeu avec /gr idlog on). /gr inter "
+            .. "une cible (id d'encounter 3445, Entombed Sentinels) sauf si elle a ete effacee avec /gideon boss "
+            .. "clear, et /gideon boss <id> en nomme une (l'id reel se mesure en jeu avec /gideon idlog on). /gideon inter "
             .. "on ouvre le panneau au PROCHAIN encounter, quel que soit le boss.",
     },
     ["cmd.boss.notTarget"] = {
-        en = "Encounter %s is NOT the configured target: the panel stays closed. /gr boss <id> to change the "
-            .. "target (the id just reported can be copied), /gr inter on to open the panel for the next "
+        en = "Encounter %s is NOT the configured target: the panel stays closed. /gideon boss <id> to change the "
+            .. "target (the id just reported can be copied), /gideon inter on to open the panel for the next "
             .. "encounter.",
-        fr = "L'encounter %s n'est PAS la cible configuree : le panneau reste ferme. /gr boss <id> pour "
-            .. "changer la cible (l'id qui vient d'etre affiche peut etre recopie), /gr inter on pour ouvrir "
+        fr = "L'encounter %s n'est PAS la cible configuree : le panneau reste ferme. /gideon boss <id> pour "
+            .. "changer la cible (l'id qui vient d'etre affiche peut etre recopie), /gideon inter on pour ouvrir "
             .. "le panneau au prochain encounter.",
     },
     ["cmd.boss.notTargetNoId"] = {
         en = "This encounter is NOT the configured target (no usable id was read on it): the panel stays "
-            .. "closed. /gr idlog on shows what ENCOUNTER_START reports, /gr boss <id> sets the target, /gr "
+            .. "closed. /gideon idlog on shows what ENCOUNTER_START reports, /gideon boss <id> sets the target, /gideon "
             .. "inter on opens the panel for the next encounter.",
         fr = "Cet encounter n'est PAS la cible configuree (aucun id exploitable n'a ete lu) : le panneau "
-            .. "reste ferme. /gr idlog on affiche ce que rapporte ENCOUNTER_START, /gr boss <id> definit la "
-            .. "cible, /gr inter on ouvre le panneau au prochain encounter.",
+            .. "reste ferme. /gideon idlog on affiche ce que rapporte ENCOUNTER_START, /gideon boss <id> definit la "
+            .. "cible, /gideon inter on ouvre le panneau au prochain encounter.",
     },
     ["cmd.boss.unreadable"] = {
-        en = "The encounter id could not be read (secret value?): no automatic opening. /gr inter on opens the "
+        en = "The encounter id could not be read (secret value?): no automatic opening. /gideon inter on opens the "
             .. "panel for the next encounter.",
-        fr = "L'id de l'encounter n'a pas pu etre lu (valeur secrete ?) : aucune ouverture automatique. /gr "
+        fr = "L'id de l'encounter n'a pas pu etre lu (valeur secrete ?) : aucune ouverture automatique. /gideon "
             .. "inter on ouvre le panneau au prochain encounter.",
     },
     ["cmd.boss.overrideArmed"] = {
@@ -406,9 +407,9 @@ Locale.STRINGS = {
             .. "(consomme a la fin de cet encounter).",
     },
     ["cmd.boss.overrideUsed"] = {
-        en = "Encounter started: the MANUAL OVERRIDE (/gr inter on) opens the panel for it, whatever the boss; "
+        en = "Encounter started: the MANUAL OVERRIDE (/gideon inter on) opens the panel for it, whatever the boss; "
             .. "it is consumed at the end of this encounter.",
-        fr = "Combat commence : l'OVERRIDE MANUEL (/gr inter on) ouvre le panneau pour cet encounter, quel "
+        fr = "Combat commence : l'OVERRIDE MANUEL (/gideon inter on) ouvre le panneau pour cet encounter, quel "
             .. "que soit le boss ; il est consomme a la fin de ce combat.",
     },
     ["cmd.boss.overrideConsumed"] = {
@@ -418,11 +419,11 @@ Locale.STRINGS = {
     ["cmd.idlog.status"] = {
         en = "Encounter id log: %s. When on, every ENCOUNTER_START prints 'encounter seen: id=<id> "
             .. "name=<name> difficulty=<d> group=<n>' ('unreadable' when a value cannot be read) and the last "
-            .. "%d encounters are memorized in the SavedVariables (/gr boss list).",
+            .. "%d encounters are memorized in the SavedVariables (/gideon boss list).",
         fr = "Journal des ids d'encounter : %s. Quand il est actif, chaque ENCOUNTER_START affiche "
             .. "'encounter vu : id=<id> name=<nom> difficulty=<d> group=<n>' ('illisible' quand une valeur ne "
             .. "peut pas etre lue) et les %d derniers encounters sont memorises dans les SavedVariables "
-            .. "(/gr boss list).",
+            .. "(/gideon boss list).",
     },
     ["cmd.idlog.updated"] = {
         en = "Encounter id log = %s.",
@@ -433,7 +434,7 @@ Locale.STRINGS = {
         fr = "Valeur inconnue '%s' : valeurs acceptees on, off.",
     },
 
-    -- ------------------------------------------------------------- /gr diag ---
+    -- ------------------------------------------------------------- /gideon diag ---
     -- THE HEALTH REPORT, in ONE command: are the four sound files really loaded and
     -- playable, what is the effective auto-open target, is the idlog on, which ping
     -- policy is active. READ-ONLY: nothing is written, nothing is sent, no macro, no
@@ -489,11 +490,11 @@ Locale.STRINGS = {
     ["cmd.diag.caveat"] = {
         en = "careful: ALL FOUR files came back as not playable. Before hunting four files, check that the "
             .. "Master channel really accepts a playback (put the master volume back above 0 and hear one "
-            .. "with /gr sound test 1v3r): a channel that refuses everything answers 'not playable' even for "
+            .. "with /gideon sound test 1v3r): a channel that refuses everything answers 'not playable' even for "
             .. "a file that is there.",
         fr = "attention : les QUATRE fichiers reviennent comme non jouables. Avant de chercher quatre "
             .. "fichiers, verifie que le canal Master accepte vraiment une lecture (remonte le volume "
-            .. "general au-dessus de 0 et ecoutes-en un avec /gr sound test 1v3r) : un canal qui refuse tout "
+            .. "general au-dessus de 0 et ecoutes-en un avec /gideon sound test 1v3r) : un canal qui refuse tout "
             .. "repond 'non jouable' meme pour un fichier present.",
     },
     ["cmd.diag.gate.probe"] = {
@@ -505,23 +506,23 @@ Locale.STRINGS = {
     ["cmd.diag.gate.soundOn"] = {
         en = "the audio check did NOT run: the game sound is ON, and this diagnostic NEVER plays a sound (no "
             .. "noise during a fight). To check the four files WITHOUT noise: set the master volume to 0 "
-            .. "(Options > Sound, or /console Sound_MasterVolume 0), run /gr diag again, then put it back "
-            .. "(/console Sound_MasterVolume 1). To HEAR a file on purpose: /gr sound test 1v3r|2v2r|3v1r|start.",
+            .. "(Options > Sound, or /console Sound_MasterVolume 0), run /gideon diag again, then put it back "
+            .. "(/console Sound_MasterVolume 1). To HEAR a file on purpose: /gideon sound test 1v3r|2v2r|3v1r|start.",
         fr = "le test audio n'a PAS tourne : le son du jeu est ACTIF, et ce diagnostic ne joue JAMAIS de son "
             .. "(aucun bruit pendant un combat). Pour verifier les quatre fichiers SANS bruit : mets le "
-            .. "volume general a 0 (Options > Son, ou /console Sound_MasterVolume 0), relance /gr diag, puis "
+            .. "volume general a 0 (Options > Son, ou /console Sound_MasterVolume 0), relance /gideon diag, puis "
             .. "remets-le (/console Sound_MasterVolume 1). Pour ENTENDRE un fichier expres : "
-            .. "/gr sound test 1v3r|2v2r|3v1r|start.",
+            .. "/gideon sound test 1v3r|2v2r|3v1r|start.",
     },
     ["cmd.diag.gate.soundOff"] = {
         en = "the audio check did NOT run: the sound is OFF (or unreadable) in this client, and a DISABLED "
             .. "channel answers 'nothing will play' even for a file that is really there - the verdict would "
-            .. "be a lie. Turn the sound on (Ctrl+S, or Options > Sound) and run /gr diag again, or hear the "
-            .. "files on purpose with /gr sound test 1v3r|2v2r|3v1r|start.",
+            .. "be a lie. Turn the sound on (Ctrl+S, or Options > Sound) and run /gideon diag again, or hear the "
+            .. "files on purpose with /gideon sound test 1v3r|2v2r|3v1r|start.",
         fr = "le test audio n'a PAS tourne : le son est COUPE (ou illisible) dans ce client, et un canal "
             .. "DESACTIVE repond 'rien ne sera joue' meme pour un fichier bien present - le verdict serait un "
-            .. "mensonge. Remets le son (Ctrl+S, ou Options > Son) et relance /gr diag, ou ecoute les "
-            .. "fichiers expres avec /gr sound test 1v3r|2v2r|3v1r|start.",
+            .. "mensonge. Remets le son (Ctrl+S, ou Options > Son) et relance /gideon diag, ou ecoute les "
+            .. "fichiers expres avec /gideon sound test 1v3r|2v2r|3v1r|start.",
     },
     ["cmd.diag.reminders"] = {
         en = "reminder: a sound file added AFTER the client started is NOT loaded before a RESTART, and a "
@@ -533,12 +534,14 @@ Locale.STRINGS = {
             .. "tests/spec/sound_spec.lua).",
     },
     ["cmd.diag.howToTest"] = {
-        en = "to hear a file on purpose: /gr sound test 1v3r | 2v2r | 3v1r | start - those DO play a sound, " .. "/gr diag never does.",
-        fr = "pour entendre un fichier expres : /gr sound test 1v3r | 2v2r | 3v1r | start - eux JOUENT un " .. "son, /gr diag jamais.",
+        en = "to hear a file on purpose: /gideon sound test 1v3r | 2v2r | 3v1r | start - those DO play a sound, "
+            .. "/gideon diag never does.",
+        fr = "pour entendre un fichier expres : /gideon sound test 1v3r | 2v2r | 3v1r | start - eux JOUENT un "
+            .. "son, /gideon diag jamais.",
     },
 
     -- -------------------------------------------------------------- ping policy
-    -- One line per policy, used by /gr ping and by /gr inter status. The policy
+    -- One line per policy, used by /gideon ping and by /gideon inter status. The policy
     -- is NOT displayed permanently on screen any more: it only decides WHO has
     -- to ping (by default the 1V3R ANCHOR alone).
     ["pingMode.anchors"] = {
@@ -570,7 +573,7 @@ Locale.STRINGS = {
         en = "PLACE INTERMISSION PANEL",
         fr = "PLACER LE PANNEAU",
     },
-    -- Two SIMULATION entries, also reachable by command (/gr sim inter, /gr sim
+    -- Two SIMULATION entries, also reachable by command (/gideon sim inter, /gideon sim
     -- ping): a rehearsal alone, with no boss and no raid.
     ["panel.simInterButton"] = {
         en = "SIM: INTERMISSION GROUP",
@@ -592,8 +595,8 @@ Locale.STRINGS = {
         fr = "DEVERROUILLER",
     },
     ["panel.lockedHint"] = {
-        en = "Panel locked: /gr unlock (or the UNLOCK PANEL button) to move it.",
-        fr = "Panneau verrouille : /gr unlock (ou le bouton DEVERROUILLER) pour le deplacer.",
+        en = "Panel locked: /gideon unlock (or the UNLOCK PANEL button) to move it.",
+        fr = "Panneau verrouille : /gideon unlock (ou le bouton DEVERROUILLER) pour le deplacer.",
     },
     ["status.noAssignment"] = {
         en = "no assignment (%s)",
@@ -647,8 +650,8 @@ Locale.STRINGS = {
         fr = "Panneau Intermission (Entombed Sentinels)",
     },
     ["ui.disabled"] = {
-        en = "Intermission Coach disabled (/gr inter on to enable it).",
-        fr = "Intermission Coach desactive (/gr inter on pour l'activer).",
+        en = "Intermission Coach disabled (/gideon inter on to enable it).",
+        fr = "Intermission Coach desactive (/gideon inter on pour l'activer).",
     },
     ["ui.started"] = {
         en = "Intermission started: %d s of visibility, then the room goes dark.",
@@ -723,15 +726,15 @@ Locale.STRINGS = {
         fr = "planning : %d intermission(s), le panneau s'ouvre %d s avant chacune",
     },
     ["ui.soundLine"] = {
-        en = "assignment sound: %s (one soundboard per composition, /gr sound on|off)",
-        fr = "son d'assignation : %s (un son par composition, /gr sound on|off)",
+        en = "assignment sound: %s (one soundboard per composition, /gideon sound on|off)",
+        fr = "son d'assignation : %s (un son par composition, /gideon sound on|off)",
     },
-    -- WHICH BOSS opens the panel by itself (`/gr inter status`): the auto-open
+    -- WHICH BOSS opens the panel by itself (`/gideon inter status`): the auto-open
     -- target of the allow-list and the state of the idlog. The safe default (no
     -- target) reads as is: NOTHING opens by itself.
     ["ui.bossLine"] = {
-        en = "auto-open target: %s (encounter id log: %s, /gr boss)",
-        fr = "cible de l'ouverture auto : %s (journal des ids d'encounter : %s, /gr boss)",
+        en = "auto-open target: %s (encounter id log: %s, /gideon boss)",
+        fr = "cible de l'ouverture auto : %s (journal des ids d'encounter : %s, /gideon boss)",
     },
 
     -- -------------------------------------------- placement mode (before pull)
@@ -741,7 +744,7 @@ Locale.STRINGS = {
     -- The raid lead asked for the panel to show the ILLUSTRATION and nothing
     -- else, so the whole block was DELETED (with ui.panelTitle and ui.ok): a
     -- string that no longer exists can not come back on screen by accident.
-    -- The placement is validated by `/gr inter ok` (ui.setupDone says so).
+    -- The placement is validated by `/gideon inter ok` (ui.setupDone says so).
 
     -- ------------------------------------------- intermission headlines/lines
     -- The panel shows the ESSENTIAL only: state, role, PING: YES/NO and ONE
@@ -1087,18 +1090,18 @@ Locale.STRINGS = {
             .. "orbes. Ici il n'y a pas de boss : ferme ce panneau toi-meme (croix ou Fermer) quand tu as fini.",
     },
     ["sim.notOpen"] = {
-        en = "the rehearsal is not open any more: start it again with /gr sim inter",
-        fr = "la repetition n'est plus ouverte : relance-la avec /gr sim inter",
+        en = "the rehearsal is not open any more: start it again with /gideon sim inter",
+        fr = "la repetition n'est plus ouverte : relance-la avec /gideon sim inter",
     },
     ["sim.refused.live"] = {
         en = "Simulation refused: the real flow is running (intermission in progress or ENCOUNTER_START "
-            .. "timeline armed). Finish it first (/gr inter stop).",
+            .. "timeline armed). Finish it first (/gideon inter stop).",
         fr = "Simulation refusee : le flux reel tourne (intermission en cours ou planning ENCOUNTER_START "
-            .. "arme). Termine-le d'abord (/gr inter stop).",
+            .. "arme). Termine-le d'abord (/gideon inter stop).",
     },
     ["sim.refused.running"] = {
-        en = "Refused: a simulation is already running (/gr sim stop).",
-        fr = "Refuse : une simulation tourne deja (/gr sim stop).",
+        en = "Refused: a simulation is already running (/gideon sim stop).",
+        fr = "Refuse : une simulation tourne deja (/gideon sim stop).",
     },
     ["sim.stoppedByEncounter"] = {
         en = "Encounter started: the simulation is stopped. No boss was simulated.",
@@ -1355,13 +1358,13 @@ Locale.STRINGS = {
         fr = "6 - ANIMATIONS",
     },
     ["showcase.animLine"] = {
-        en = "showcase animations: %s (fade-in of the panel + pulse of the first card border) - " .. "/gr sim anim on|off",
+        en = "showcase animations: %s (fade-in of the panel + pulse of the first card border) - " .. "/gideon sim anim on|off",
         fr = "animations de la vitrine : %s (fondu d'apparition du panneau + pulsation de la bordure du "
-            .. "premier encart) - /gr sim anim on|off",
+            .. "premier encart) - /gideon sim anim on|off",
     },
     ["showcase.animNote"] = {
-        en = "They only ever run HERE: no animation is wired into the combat panel (/gr inter, /gr sim inter).",
-        fr = "Elles ne tournent QUE ici : aucune animation n'est branchee sur le panneau de combat (/gr inter, /gr sim inter).",
+        en = "They only ever run HERE: no animation is wired into the combat panel (/gideon inter, /gideon sim inter).",
+        fr = "Elles ne tournent QUE ici : aucune animation n'est branchee sur le panneau de combat (/gideon inter, /gideon sim inter).",
     },
     ["showcase.opened"] = {
         en = "SIMULATION (no boss, no raid): STYLE SHOWCASE open. Wheel = scroll, click a composition.",
@@ -1372,8 +1375,8 @@ Locale.STRINGS = {
         fr = "Vitrine de style fermee.",
     },
     ["showcase.notOpen"] = {
-        en = "the style showcase is not open (/gr sim style).",
-        fr = "la vitrine de style n'est pas ouverte (/gr sim style).",
+        en = "the style showcase is not open (/gideon sim style).",
+        fr = "la vitrine de style n'est pas ouverte (/gideon sim style).",
     },
     ["showcase.animUpdated"] = {
         en = "Showcase animations: %s (persisted).",
@@ -1454,16 +1457,16 @@ Locale.STRINGS = {
         fr = "style inconnu : %s (l'encart de la guilde est le seul style : attendu 1 ou shipped)",
     },
     ["cmd.style.help"] = {
-        en = "/gr style [1|shipped]: style of the COMBAT intermission panel - ONE single style, nothing to choose (persisted)",
-        fr = "/gr style [1|shipped] : style du panneau d'intermission en COMBAT - UN SEUL style, rien a choisir (persiste)",
+        en = "/gideon style [1|shipped]: style of the COMBAT intermission panel - ONE single style, nothing to choose (persisted)",
+        fr = "/gideon style [1|shipped] : style du panneau d'intermission en COMBAT - UN SEUL style, rien a choisir (persiste)",
     },
     ["cmd.sim.style"] = {
-        en = "/gr sim style [1|shipped]: opens the STYLE SHOWCASE (simulation only, no boss)",
-        fr = "/gr sim style [1|shipped] : ouvre la VITRINE DE STYLE (simulation seulement, sans boss)",
+        en = "/gideon sim style [1|shipped]: opens the STYLE SHOWCASE (simulation only, no boss)",
+        fr = "/gideon sim style [1|shipped] : ouvre la VITRINE DE STYLE (simulation seulement, sans boss)",
     },
     ["cmd.sim.anim"] = {
-        en = "/gr sim anim on|off: showcase animations (fade-in + pulse), persisted",
-        fr = "/gr sim anim on|off : animations de la vitrine (fondu + pulsation), persiste",
+        en = "/gideon sim anim on|off: showcase animations (fade-in + pulse), persisted",
+        fr = "/gideon sim anim on|off : animations de la vitrine (fondu + pulsation), persiste",
     },
     ["cmd.sim.animState"] = {
         en = "showcase animations: %s (persisted, default on)",
@@ -1474,8 +1477,8 @@ Locale.STRINGS = {
         fr = "style inconnu : %s (l'encart de la guilde est le seul style : attendu 1 ou shipped)",
     },
     ["cmd.sim.animUsage"] = {
-        en = "usage: /gr sim anim on|off (unknown value refused)",
-        fr = "usage : /gr sim anim on|off (valeur inconnue refusee)",
+        en = "usage: /gideon sim anim on|off (unknown value refused)",
+        fr = "usage : /gideon sim anim on|off (valeur inconnue refusee)",
     },
 }
 

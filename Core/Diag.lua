@@ -1,7 +1,7 @@
 --[[--------------------------------------------------------------------------
     GideonRaid / Core / Diag.lua
 
-    HEALTH REPORT OF THE ADDON (`/gr diag`) - PURE LOGIC (Lua 5.1). This file
+    HEALTH REPORT OF THE ADDON (`/gideon diag`) - PURE LOGIC (Lua 5.1). This file
     touches NO WoW API, plays NOTHING, reads no CVar and no SavedVariables: it runs
     as-is under busted and under lua5.1 outside the client. Everything it needs is
     INJECTED by the rendering layer (UI/Panel.lua), which alone is allowed to call
@@ -30,8 +30,8 @@
         0 (so the playback is mathematically inaudible: the raid hears nothing);
       - in every other case the probe is NOT started and the report says so, with
         the exact procedure to make the check possible (mute the master volume,
-        run `/gr diag`, restore it) or to hear the files on purpose
-        (`/gr sound test 1v3r|2v2r|3v1r|start`, which DOES play a sound).
+        run `/gideon diag`, restore it) or to hear the files on purpose
+        (`/gideon sound test 1v3r|2v2r|3v1r|start`, which DOES play a sound).
 
     The gate is PURE: `Diag.probeGate(cvars)` receives the raw CVar strings read by
     the rendering layer and returns an ASCII decision. That is why the whole rule
@@ -255,7 +255,7 @@ function Diag.gateLine(gate)
     return Locale.t("cmd.diag.gate.soundOff")
 end
 
---- THE REPORT of `/gr diag`: PURE and TOTAL - every value it displays is INJECTED
+--- THE REPORT of `/gideon diag`: PURE and TOTAL - every value it displays is INJECTED
 --- by the rendering layer (which alone reads the SavedVariables, the CVars and the
 --- client), so the whole content is provable out of game.
 --- @param context table|nil {

@@ -3,12 +3,12 @@
 
     SONDES D'ASSIGNATION (demande du raid lead) : UN son par composition
     canonique (1V3R / 2V2R / 3V1R), joue UNE SEULE FOIS quand le joueur declare
-    sa composition - flux reel comme repetition `/gr sim inter`.
+    sa composition - flux reel comme repetition `/gideon sim inter`.
 
     Trois familles de verifications, toutes HORS JEU :
 
       1. Core/Sound.lua (PUR) : table etat -> fichier, chemins client, resolveur
-         STRICT de `/gr sound on|off`, resolveur TOTAL de la preference
+         STRICT de `/gideon sound on|off`, resolveur TOTAL de la preference
          persistee, et la garde « un seul son par assignation » ;
       2. les FICHIERS et le PACKAGING : les trois chemins sont listes dans
          GideonRaid.toc (le client ne charge pas un son non liste), les trois
@@ -323,7 +323,7 @@ end)
 -- ---------------------------------------------------------------------------
 -- 3. Cablage : commandes, flux reel, repetition, robustesse
 -- ---------------------------------------------------------------------------
-describe("Sound : preference persistee et commandes /gr sound", function()
+describe("Sound : preference persistee et commandes /gideon sound", function()
     local ns
 
     before_each(function()
@@ -349,10 +349,10 @@ describe("Sound : preference persistee et commandes /gr sound", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("sound")
         assert.is_true(contains(messages(), "Assignment sound: enabled"))
-        assert.is_true(contains(messages(), "/gr sound test 1v3r|2v2r|3v1r"))
+        assert.is_true(contains(messages(), "/gideon sound test 1v3r|2v2r|3v1r"))
     end)
 
-    it("/gr sound off puis on persiste la valeur et l'affiche", function()
+    it("/gideon sound off puis on persiste la valeur et l'affiche", function()
         _G.SlashCmdList["GIDEONRAID"]("sound off")
         assert.is_false(_G.GideonRaidDB.intermission.soundEnabled)
         assert.is_true(contains(messages(), "Assignment sound = disabled"))
@@ -364,7 +364,7 @@ describe("Sound : preference persistee et commandes /gr sound", function()
         assert.is_true(contains(messages(), "Assignment sound = enabled"))
     end)
 
-    it("REFUSE une valeur inconnue sans rien persister (meme mecanique que /gr lang)", function()
+    it("REFUSE une valeur inconnue sans rien persister (meme mecanique que /gideon lang)", function()
         _G.SlashCmdList["GIDEONRAID"]("sound off")
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("sound yes")
@@ -382,7 +382,7 @@ describe("Sound : preference persistee et commandes /gr sound", function()
         assert.is_true(contains(messages(), "Assignment sound: enabled"))
     end)
 
-    it("/gr sound test joue le son demande et dit lequel", function()
+    it("/gideon sound test joue le son demande et dit lequel", function()
         _G.SlashCmdList["GIDEONRAID"]("sound test 2v2r")
         assert.are.equal(1, #stub.sounds)
         assert.are.equal("Interface\\AddOns\\GideonRaid\\Sound\\assign-2v2r.ogg", stub.sounds[1].path)
@@ -395,23 +395,23 @@ describe("Sound : preference persistee et commandes /gr sound", function()
         assert.are.equal(3, #stub.sounds)
     end)
 
-    it("/gr sound test refuse un etat inconnu SANS jouer, et respecte la preference off", function()
+    it("/gideon sound test refuse un etat inconnu SANS jouer, et respecte la preference off", function()
         _G.SlashCmdList["GIDEONRAID"]("sound test bidon")
         assert.are.equal(0, #stub.sounds, "aucun son ne doit partir")
         assert.is_true(contains(messages(), "Unknown sound 'bidon'"))
         _G.SlashCmdList["GIDEONRAID"]("sound test")
-        assert.is_true(contains(messages(), "Assignment sound: enabled"), "/gr sound test seul rappelle l'etat")
+        assert.is_true(contains(messages(), "Assignment sound: enabled"), "/gideon sound test seul rappelle l'etat")
         _G.SlashCmdList["GIDEONRAID"]("sound off")
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("sound test 3v1r")
         assert.are.equal(0, #stub.sounds)
-        assert.is_true(contains(messages(), "disabled: /gr sound on"))
+        assert.is_true(contains(messages(), "disabled: /gideon sound on"))
     end)
 
-    it("documente /gr sound dans l'aide", function()
+    it("documente /gideon sound dans l'aide", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("inconnu")
-        assert.is_true(contains(messages(), "/gr sound [on|off] | /gr sound test 1v3r|2v2r|3v1r"))
+        assert.is_true(contains(messages(), "/gideon sound [on|off] | /gideon sound test 1v3r|2v2r|3v1r"))
     end)
 
     it("dit si PlaySoundFile ne peut pas jouer le fichier (sans lever)", function()
@@ -471,7 +471,7 @@ describe("Sound : le son part au clic, une seule fois", function()
     it("AUCUN son ne part tout seul : ouverture, re-rendu et fermeture sont silencieux", function()
         -- Regle en jeu (raid lead) : « le son ne doit s'activer seulement quand on
         -- clique sur un des boutons ». Le son de debut d'intermission reste dans le
-        -- paquet (et /gr sound test start le joue a la demande) mais PLUS AUCUNE
+        -- paquet (et /gideon sound test start le joue a la demande) mais PLUS AUCUNE
         -- lecture automatique n'existe.
         pullTargetBoss()
         stub.fireTickers(450) -- ouverture automatique avant la 1re intermission
@@ -553,7 +553,7 @@ describe("Sound : le son part au clic, une seule fois", function()
         assert.are.equal(0, #startSounds())
     end)
 
-    it("repetition /gr sim inter : silencieuse, puis le son du bouton clique", function()
+    it("repetition /gideon sim inter : silencieuse, puis le son du bouton clique", function()
         _G.SlashCmdList["GIDEONRAID"]("sim inter")
         local panel = _G.GideonRaidIntermissionPanel
         assert.is_true(panel:IsShown())
@@ -591,7 +591,7 @@ describe("Sound : le son part au clic, une seule fois", function()
         for index = 1, #ns.Layout.INTERMISSION_CHOICE_ORDER do
             assert.is_false(panel.buttons[index]:IsShown(), "les images disparaissent apres le clic")
         end
-        -- /gr inter status rapporte l'etat du reglage.
+        -- /gideon inter status rapporte l'etat du reglage.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         _G.SlashCmdList["GIDEONRAID"]("inter status")
         assert.is_true(contains(messages(), "assignment sound: disabled"))

@@ -15,9 +15,9 @@
          12.x leve au moindre acces : une valeur illisible ne correspond a RIEN) ;
       2. le CABLAGE (stub) : le DEFAUT LIVRE (encounter id 3445 + les deux noms, il
          ouvre le panneau sans qu'aucun joueur ne tape une commande), la
-         persistance des commandes (`/gr boss <id>`, `/gr boss list`,
-         `/gr boss clear`, refus sans rien ecrire), l'IDLOG (`/gr idlog on|off`)
-         qui MESURE l'id reel du boss en jeu, et l'override manuel `/gr inter on`
+         persistance des commandes (`/gideon boss <id>`, `/gideon boss list`,
+         `/gideon boss clear`, refus sans rien ecrire), l'IDLOG (`/gideon idlog on|off`)
+         qui MESURE l'id reel du boss en jeu, et l'override manuel `/gideon inter on`
          (un encounter, consomme a la fin).
 
     L'id de la CIBLE est MESURE EN JEU (raid lead, 2026-09-24, pull heroique 20
@@ -26,7 +26,7 @@
     (Config.DEFAULT_BOSS_IDS), avec les DEUX noms du boss (anglais officiel +
     francais du client du raid lead) comme filet SECONDAIRE. DEUX etats ne sont
     JAMAIS confondus : « jamais configure » (le defaut livre s'applique) et
-    « vide explicitement par /gr boss clear » (rien ne s'ouvre, et le defaut livre
+    « vide explicitement par /gideon boss clear » (rien ne s'ouvre, et le defaut livre
     ne revient pas tout seul : c'est le marqueur `bossTargetCleared`).
 ----------------------------------------------------------------------------]]
 --
@@ -55,7 +55,7 @@ local function probeBlindOn(n)
 end
 
 --- L'id du boss CIBLE du harness : un entier POSITIF, tel que le rapporte
---- `ENCOUNTER_START` arg1 (l'id reel viendra de `/gr idlog on` en jeu).
+--- `ENCOUNTER_START` arg1 (l'id reel viendra de `/gideon idlog on` en jeu).
 local TARGET_ID = 2594
 local OTHER_ID = 9999
 local TARGET_NAME = "Entombed Sentinels"
@@ -426,10 +426,10 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         stub.fireTickers(2000)
         assert.is_false(panel():IsShown(), "BUG CRITIQUE : le panneau s'ouvre sur n'importe quel boss")
         assert.is_true(contains(messages(), "is NOT the configured target"), messages())
-        assert.is_true(contains(messages(), "/gr boss <id>"), messages())
+        assert.is_true(contains(messages(), "/gideon boss <id>"), messages())
     end)
 
-    it("/gr boss 3445 (l'id du defaut livre) est IDEMPOTENT : le panneau reste ouvert", function()
+    it("/gideon boss 3445 (l'id du defaut livre) est IDEMPOTENT : le panneau reste ouvert", function()
         slash("boss " .. tostring(DELIVERED_ID))
         assert.are.same({ DELIVERED_ID }, _G.GideonRaidDB.intermission.bossIds, "l'ajout du joueur est persiste")
         -- Rejouer la MEME commande ne cree aucun doublon (idempotent).
@@ -446,21 +446,21 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         -- Rien a signaler : la cible existe (elle est livree), donc pas d'avertissement.
         assert.is_false(contains(messages(), "No target boss configured"), messages())
 
-        -- `/gr boss` montre la cible EFFECTIVE et son ORIGINE, plus le defaut livre.
+        -- `/gideon boss` montre la cible EFFECTIVE et son ORIGINE, plus le defaut livre.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss")
         assert.is_true(contains(messages(), "3445"), messages())
         assert.is_true(contains(messages(), "delivered with the addon"), messages())
         assert.is_true(contains(messages(), "Encounter id log: disabled"), messages())
 
-        -- `/gr boss list` dit d'ou chaque entree vient.
+        -- `/gideon boss list` dit d'ou chaque entree vient.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss list")
         assert.is_true(contains(messages(), "Auto-open target ids: 3445 (addon default)"), messages())
         assert.is_true(contains(messages(), "Target source: the default DELIVERED with the addon"), messages())
     end)
 
-    it("CLEAR EXPLICITE : /gr boss clear neutralise le defaut livre (les deux etats sont distincts)", function()
+    it("CLEAR EXPLICITE : /gideon boss clear neutralise le defaut livre (les deux etats sont distincts)", function()
         -- Un joueur efface la cible expres : le defaut livre ne doit PAS revenir.
         slash("boss clear")
         assert.is_true(_G.GideonRaidDB.intermission.bossTargetCleared, "l'effacement explicite doit etre marque")
@@ -475,9 +475,9 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         stub.fireTickers(2000)
         assert.is_false(panel():IsShown(), "efface = aucune ouverture, meme sur le boss du defaut livre")
         assert.is_true(contains(messages(), "cleared on purpose"), messages())
-        assert.is_true(contains(messages(), "/gr boss 3445"), messages())
+        assert.is_true(contains(messages(), "/gideon boss 3445"), messages())
 
-        -- ... et `/gr boss list` le dit AUSSI.
+        -- ... et `/gideon boss list` le dit AUSSI.
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss list")
         assert.is_true(contains(messages(), "Auto-open target ids: none"), messages())
@@ -514,8 +514,8 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_false(contains(messages(), "No target boss configured"), messages())
     end)
 
-    -- ----------------------------------------------------------- /gr boss ---
-    it("/gr boss <id> persiste la cible et /gr boss l'affiche", function()
+    -- ----------------------------------------------------------- /gideon boss ---
+    it("/gideon boss <id> persiste la cible et /gideon boss l'affiche", function()
         slash("boss " .. tostring(TARGET_ID))
         assert.are.same({ TARGET_ID }, _G.GideonRaidDB.intermission.bossIds, "la cible doit etre persistee")
         assert.is_true(contains(messages(), "Target encounter id 2594 added"), messages())
@@ -528,7 +528,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_false(contains(messages(), "No target boss configured"), messages())
     end)
 
-    it("/gr boss <id> : le BON boss ouvre le panneau (planning arme + ouverture)", function()
+    it("/gideon boss <id> : le BON boss ouvre le panneau (planning arme + ouverture)", function()
         slash("boss " .. tostring(TARGET_ID))
         _G.DEFAULT_CHAT_FRAME.messages = {}
         fire("ENCOUNTER_START", BOSS_ARGS[1], BOSS_ARGS[2], BOSS_ARGS[3], BOSS_ARGS[4])
@@ -538,14 +538,14 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(panel():IsShown(), "le boss cible doit ouvrir le panneau")
     end)
 
-    it("/gr boss <id> : un AUTRE boss n'arme rien et ne desarme pas le reste", function()
+    it("/gideon boss <id> : un AUTRE boss n'arme rien et ne desarme pas le reste", function()
         slash("boss " .. tostring(TARGET_ID))
         _G.DEFAULT_CHAT_FRAME.messages = {}
         fire("ENCOUNTER_START", OTHER_ID, "Some Other Boss", 16, 20)
         stub.fireTickers(2000)
         assert.is_false(panel():IsShown())
         assert.is_true(contains(messages(), "is NOT the configured target"), messages())
-        assert.is_true(contains(messages(), "/gr boss <id>"), messages())
+        assert.is_true(contains(messages(), "/gideon boss <id>"), messages())
         -- ... et le boss CIBLE ouvre toujours (le refus n'a rien casse).
         fire("ENCOUNTER_END")
         fire("ENCOUNTER_START", TARGET_ID, TARGET_NAME, 16, 20)
@@ -553,7 +553,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(panel():IsShown())
     end)
 
-    it("/gr boss refuse une valeur inconnue SANS rien persister", function()
+    it("/gideon boss refuse une valeur inconnue SANS rien persister", function()
         for _, bad in ipairs({ "abc", "0", "-3", "12.5", "1e3" }) do
             _G.DEFAULT_CHAT_FRAME.messages = {}
             slash("boss " .. bad)
@@ -569,7 +569,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.are.same({ TARGET_ID }, _G.GideonRaidDB.intermission.bossIds)
     end)
 
-    it("/gr boss list montre les deux listes, l'override et les encounters vus", function()
+    it("/gideon boss list montre les deux listes, l'override et les encounters vus", function()
         slash("boss " .. tostring(TARGET_ID))
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss list")
@@ -584,7 +584,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(contains(messages(), "Auto-open target ids: none"), messages())
     end)
 
-    it("/gr boss clear revient au defaut sur (aucune ouverture)", function()
+    it("/gideon boss clear revient au defaut sur (aucune ouverture)", function()
         slash("boss " .. tostring(TARGET_ID))
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss clear")
@@ -597,7 +597,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_false(panel():IsShown(), "efface = plus aucune ouverture automatique")
     end)
 
-    it("/gr boss name <texte> : le critere SECONDAIRE, ecrit tel quel", function()
+    it("/gideon boss name <texte> : le critere SECONDAIRE, ecrit tel quel", function()
         slash("boss name Entombed Sentinels")
         assert.are.same({ "entombed sentinels" }, _G.GideonRaidDB.intermission.bossNames)
         assert.is_true(contains(messages(), "Target encounter name 'entombed sentinels' added"), messages())
@@ -606,7 +606,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(panel():IsShown(), "le nom est compare sans tenir compte de la casse")
     end)
 
-    it("/gr boss name sans texte : refuse, rien n'est persiste", function()
+    it("/gideon boss name sans texte : refuse, rien n'est persiste", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("boss name")
         assert.is_true(contains(lastMessage(), "Empty encounter name"), tostring(lastMessage()))
@@ -614,7 +614,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
     end)
 
     -- ------------------------------------------------------------ IDLOG ---
-    it("/gr idlog on|off se persiste et refuse une valeur inconnue", function()
+    it("/gideon idlog on|off se persiste et refuse une valeur inconnue", function()
         slash("idlog on")
         assert.is_true(_G.GideonRaidDB.intermission.idlog)
         assert.is_true(contains(messages(), "Encounter id log = enabled"), messages())
@@ -632,10 +632,10 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("idlog")
         assert.is_true(contains(messages(), "Encounter id log: disabled"), messages())
-        assert.is_true(contains(messages(), "/gr boss list"), messages())
+        assert.is_true(contains(messages(), "/gideon boss list"), messages())
     end)
 
-    it("/gr idlog on : CHAQUE encounter est affiche ET memorise (mesure de l'id reel)", function()
+    it("/gideon idlog on : CHAQUE encounter est affiche ET memorise (mesure de l'id reel)", function()
         slash("idlog on")
         _G.DEFAULT_CHAT_FRAME.messages = {}
         fire("ENCOUNTER_START", TARGET_ID, TARGET_NAME, 16, 20)
@@ -669,7 +669,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
     end)
 
     -- -------------------------------------------------- OVERRIDE MANUEL ---
-    it("/gr inter on : override MANUEL, un encounter quel que soit le boss", function()
+    it("/gideon inter on : override MANUEL, un encounter quel que soit le boss", function()
         slash("inter on")
         assert.is_true(_G.GideonRaidDB.intermission.enabled)
         assert.is_true(_G.GideonRaidDB.intermission.overrideEncounter)
@@ -699,7 +699,7 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
         assert.is_true(contains(messages(), "is NOT the configured target"), messages())
     end)
 
-    it("/gr inter off desarme aussi l'override (rien ne peut s'ouvrir plus tard)", function()
+    it("/gideon inter off desarme aussi l'override (rien ne peut s'ouvrir plus tard)", function()
         slash("inter on")
         slash("inter off")
         assert.is_false(_G.GideonRaidDB.intermission.enabled)
@@ -739,12 +739,12 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
     end)
 
     -- ------------------------------------------------------------- AIDE ---
-    it("documente /gr boss et /gr idlog dans l'aide et dans /gr inter status", function()
+    it("documente /gideon boss et /gideon idlog dans l'aide et dans /gideon inter status", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("inconnu")
-        assert.is_true(contains(messages(), "/gr boss <id>"), messages())
-        assert.is_true(contains(messages(), "/gr idlog [on|off]"), messages())
-        assert.is_true(contains(messages(), "/gr sound test start"), messages())
+        assert.is_true(contains(messages(), "/gideon boss <id>"), messages())
+        assert.is_true(contains(messages(), "/gideon idlog [on|off]"), messages())
+        assert.is_true(contains(messages(), "/gideon sound test start"), messages())
 
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("inter status")
@@ -764,9 +764,9 @@ describe("BossFilter : le panneau ne s'ouvre plus sur n'importe quel boss", func
 end)
 
 -- ===========================================================================
--- 3. /gr sound test start (le son de DEBUT d'intermission, a la demande)
+-- 3. /gideon sound test start (le son de DEBUT d'intermission, a la demande)
 -- ===========================================================================
-describe("BossFilter : /gr sound test start", function()
+describe("BossFilter : /gideon sound test start", function()
     before_each(function()
         _G.GideonRaid = nil
         _G.GideonRaidDB = nil
@@ -792,7 +792,7 @@ describe("BossFilter : /gr sound test start", function()
         assert.is_true(contains(messages(), "Intermission start sound: intermission-start.ogg"), messages())
     end)
 
-    it("respecte /gr sound off et un etat inconnu reste refuse", function()
+    it("respecte /gideon sound off et un etat inconnu reste refuse", function()
         _G.SlashCmdList["GIDEONRAID"]("sound off")
         _G.SlashCmdList["GIDEONRAID"]("sound test start")
         assert.are.equal(0, #stub.sounds, "son coupe = silence, meme pour un test")

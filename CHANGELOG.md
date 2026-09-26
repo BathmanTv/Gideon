@@ -4,6 +4,25 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.5] - 2026-09-25
+
+**The base command is now `/gideon`. `/gr` is gone: it steals the group-chat
+shortcut.**
+
+### Changed
+
+- The addon registers **`/gideon`** (and the long form `/gideonraid`) and nothing
+  else. `/gr` is **no longer registered**: the raid lead uses it to talk to his group
+  in game — *"the /gr to open it is really annoying, I use it to talk to my group"* —
+  and an addon answering a chat shortcut is a bug. Every command moved to the new
+  name (`/gideon inter start`, `/gideon sim style`, `/gideon boss 3445`,
+  `/gideon diag`, ...); sub-commands and behaviour are unchanged.
+- The in-game help, the keybinding label, every message and every document follow the
+  new name. The `.toc` still lists the same files (the version keeps coming from the
+  git tag).
+- **Reading this file**: entries **older than 0.13.5** spell the commands `/gr …`,
+  because that is what shipped then. Read them as `/gideon …`.
+
 ## [0.13.4] - 2026-09-25
 
 **The style gallery is retired: there is now ONE card style, and it carries the

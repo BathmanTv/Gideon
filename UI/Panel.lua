@@ -360,7 +360,7 @@ local function ensurePanel()
     panel:SetClampedToScreen(true)
     -- DRAGGING. The panel is movable BY DEFAULT (GideonRaidDB.lockPanel = false):
     -- in-game feedback showed that a panel the player cannot move is unusable.
-    -- /gr lock (or the LOCK PANEL button) freezes the position; /gr unlock frees
+    -- /gideon lock (or the LOCK PANEL button) freezes the position; /gideon unlock frees
     -- it again. The position is saved on every drag stop.
     panel:SetScript("OnDragStart", function(self)
         if UI.IsPanelLocked() then
@@ -402,7 +402,7 @@ local function ensurePanel()
 
     -- LOCK / UNLOCK of the panels: the label always names the ACTION the click
     -- performs (LOCK PANEL when the panel is movable, UNLOCK PANEL when it is
-    -- frozen). Same mechanism as /gr lock and /gr unlock.
+    -- frozen). Same mechanism as /gideon lock and /gideon unlock.
     panel.lock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     panel.lock:SetScript("OnClick", function()
         UI.SetPanelLocked(not UI.IsPanelLocked())
@@ -416,8 +416,8 @@ local function ensurePanel()
         UI.IntermissionSetup()
     end)
 
-    -- The two SIMULATION entries (also reachable through /gr sim inter and
-    -- /gr sim ping): rehearse ALONE, with no boss and no raid. The core logic
+    -- The two SIMULATION entries (also reachable through /gideon sim inter and
+    -- /gideon sim ping): rehearse ALONE, with no boss and no raid. The core logic
     -- lives in Core/Simulation.lua; this layer only calls it.
     panel.simInter = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     panel.simInter:SetScript("OnClick", function()
@@ -482,7 +482,7 @@ function UI.SavePanelPosition()
     return _G.GideonRaidDB.panelPosition
 end
 
---- Locks / unlocks the panels (/gr lock, /gr unlock, the LOCK PANEL button).
+--- Locks / unlocks the panels (/gideon lock, /gideon unlock, the LOCK PANEL button).
 --- The choice is PERSISTED: it survives a /reload. The panel positions are kept.
 --- @param locked boolean
 --- @return boolean|nil effective value (nil when nothing could be written)
@@ -499,7 +499,7 @@ function UI.SetPanelLocked(locked)
     return value
 end
 
---- `/gr resetposition`: brings the main panel, the intermission panel and the
+--- `/gideon resetposition`: brings the main panel, the intermission panel and the
 --- ping-training frame back to the center of the screen, and persists it.
 function UI.ResetPositions()
     local db = _G.GideonRaidDB
@@ -574,7 +574,7 @@ function UI.Refresh()
     local assignment = ns.Config.getAssignment()
     -- The ping policy is deliberately NOT displayed permanently: it only decides
     -- WHO has to ping (by default the 1V3R ANCHOR). It stays available through
-    -- /gr ping and /gr inter status.
+    -- /gideon ping and /gideon inter status.
     local intermission = ns.Config.resolveIntermission(_G.GideonRaidDB and _G.GideonRaidDB.intermission)
 
     if _G.GideonRaidDB and type(_G.GideonRaidDB.scale) == "number" then
@@ -620,7 +620,7 @@ function UI.PrintStatus()
 end
 
 --- ---------------------------------------------------------------------------
---- /gr diag - HEALTH REPORT OF THE ADDON (read-only)
+--- /gideon diag - HEALTH REPORT OF THE ADDON (read-only)
 ---
 --- ONE command that answers "is the addon healthy right now?" before a pull: the
 --- four sound files (loaded and playable?), the EFFECTIVE auto-open target and
@@ -630,7 +630,7 @@ end
 ---
 --- NO NOISE, EVER: the audio probe is started ONLY when Core/Diag's silence gate
 --- proves it cannot be heard (Master channel ENABLED + volume exactly 0). With the
---- sound on, `/gr diag` plays NOTHING and says so, with the exact procedure to make
+--- sound on, `/gideon diag` plays NOTHING and says so, with the exact procedure to make
 --- the check possible - an addon must never make noise in a raid.
 --- ---------------------------------------------------------------------------
 
@@ -709,7 +709,7 @@ function UI.DiagSoundProbe()
     return { gate = gate, results = results }
 end
 
---- `/gr diag`: the whole HEALTH REPORT in one command (see the block above).
+--- `/gideon diag`: the whole HEALTH REPORT in one command (see the block above).
 --- READ-ONLY: it writes nothing in the SavedVariables, sends nothing, pings
 --- nothing and - unless the client is already muted - plays nothing.
 --- @return table the lines printed (also handed back for the tests)
@@ -737,7 +737,7 @@ end
 function UI.Initialize()
     ensurePanel()
     -- The persisted position is applied as soon as the panel exists: the player
-    -- finds their panel where they left it, at the first /gr of the session.
+    -- finds their panel where they left it, at the first /gideon of the session.
     UI.ApplyPanelPosition()
     -- Labels + disposition come from Core/Layout.lua (nothing is hard-coded here).
     UI.ApplyStaticText()

@@ -150,7 +150,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
 
     it("garde la DECISION d'ouverture auto dans Core/, sous pcall, bornee", function()
         -- Le panneau ne doit plus s'ouvrir sur n'importe quel boss : la decision
-        -- (allow-list d'ids d'encounter, `/gr boss <id>`) vit dans
+        -- (allow-list d'ids d'encounter, `/gideon boss <id>`) vit dans
         -- Core/BossFilter.lua, qui lit chaque argument de l'evenement SOUS pcall
         -- (une valeur SECRETE leve au moindre acces) et dont la liste VIDE
         -- n'ouvre rien (defaut sur).
@@ -170,7 +170,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         -- REGLE EN JEU (decision du raid lead) : plus AUCUN son ne part tout seul.
         -- Le son de debut d'intermission n'est plus joue a l'ouverture du panneau :
         -- la table pure et la regle « une seule lecture » restent dans
-        -- Core/Sound.lua (elles servent la commande explicite /gr sound test start),
+        -- Core/Sound.lua (elles servent la commande explicite /gideon sound test start),
         -- mais UI/Intermission.lua ne doit plus APPELER la lecture automatique.
         local core = stripComments(readFile("Core/Sound.lua"))
         assert.is_truthy(core:find("takeIntermissionStart", 1, true) ~= nil, "Core/Sound.lua doit porter la regle du son de debut")
@@ -189,7 +189,7 @@ describe("garde anti-API-interdite (fichiers charges par le client)", function()
         assert.is_truthy(guard:find("pcall", 1, true) ~= nil, "tout appel audio de UI/ doit etre sous pcall")
     end)
 
-    it("garde /gr diag : le controle audio passe par la PORTE DU SILENCE de Core/", function()
+    it("garde /gideon diag : le controle audio passe par la PORTE DU SILENCE de Core/", function()
         -- PlaySoundFile est appele par le diagnostic pour SAVOIR si un fichier est
         -- charge (il renvoie false/nil quand il ne sera pas joue). Comme cet appel
         -- EST une lecture audio, il est interdit de le lancer quand le joueur entend

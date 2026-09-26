@@ -15,7 +15,7 @@
     fight is running) and NOTHING in the combat path ever calls it.
 
     IT EXISTS IN SIMULATION ONLY:
-      - `/gr sim style` opens it, `/gr sim style 1` (or `shipped`) is accepted,
+      - `/gideon sim style` opens it, `/gideon sim style 1` (or `shipped`) is accepted,
         anything else is refused;
       - it REFUSES to open while a real intermission is running, exactly like a
         rehearsal does (UI.IntermissionRealFlowBusy);
@@ -25,7 +25,7 @@
       - its two animations (a fade-in of the panel and a discreet pulse of the
         border of one example card) only ever run HERE, are bounded by
         Core/Layout.fadeAlpha / Layout.pulseAlpha, and are stopped by
-        `/gr sim anim off` (persisted) - no animation is wired into the combat
+        `/gideon sim anim off` (persisted) - no animation is wired into the combat
         panel at all.
 ----------------------------------------------------------------------------]]
 local _, ns = ...
@@ -38,7 +38,7 @@ local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before UI/Showcase
 
 local UI = ns.UI
 
---- THE SHOWCASE FRAME (one, built on the first `/gr sim style`).
+--- THE SHOWCASE FRAME (one, built on the first `/gideon sim style`).
 local showcase
 --- The PREVIEW style (what the examples are drawn with) - Core's names only, and
 --- never nil once the showcase has been opened.
@@ -78,7 +78,7 @@ local function config()
 end
 
 --- Writes ONE field of the persisted intermission block, creating it when the
---- player has no save yet (exactly like GideonRaid.lua does for /gr sound).
+--- player has no save yet (exactly like GideonRaid.lua does for /gideon sound).
 --- @param key string
 --- @param value any
 local function persist(key, value)
@@ -456,7 +456,7 @@ function UI.ShowcaseRefresh()
     return layout
 end
 
---- OPENS the style showcase (`/gr sim style`, and `/gr sim style 1|shipped`).
+--- OPENS the style showcase (`/gideon sim style`, and `/gideon sim style 1|shipped`).
 --- REFUSED while a real fight is running or a timeline is armed: the showcase is a
 --- SIMULATION surface, and nothing in it may ever appear during an intermission.
 --- @param raw string|nil style written by the player (the delivered card only)
@@ -508,9 +508,9 @@ function UI.ShowcaseClose()
     return wasShown
 end
 
---- `/gr sim anim on|off` (and `/gr sim anim` alone, which recalls the setting):
+--- `/gideon sim anim on|off` (and `/gideon sim anim` alone, which recalls the setting):
 --- the two showcase animations, PERSISTED. An unknown value is REFUSED (nothing
---- is written, nothing is guessed): same mechanics as `/gr sound on|off`.
+--- is written, nothing is guessed): same mechanics as `/gideon sound on|off`.
 --- @param raw string|nil
 --- @return boolean|nil the accepted value
 function UI.ShowcaseAnimationsCommand(raw)

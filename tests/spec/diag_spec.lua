@@ -1,7 +1,7 @@
 --[[--------------------------------------------------------------------------
     tests/spec/diag_spec.lua   (busted)
 
-    `/gr diag` : LE BILAN DE SANTE DE L'ADDON EN UNE COMMANDE.
+    `/gideon diag` : LE BILAN DE SANTE DE L'ADDON EN UNE COMMANDE.
 
     Ce que ces tests verrouillent, HORS JEU :
 
@@ -10,7 +10,7 @@
          (`probeGate` : le controle audio ne tourne que si le client est deja
          silencieux), le verdict d'une sonde (`willPlay` booleen de
          PlaySoundFile) et le rapport ligne par ligne ;
-      2. le CABLAGE (stub) : `/gr diag` lit deux CVars du client, MAIS ne joue
+      2. le CABLAGE (stub) : `/gideon diag` lit deux CVars du client, MAIS ne joue
          aucun son quand le son du jeu est actif (aucun bruit en raid), ne joue
          RIEN non plus quand le son est coupe (le verdict serait un mensonge), et
          joue les quatre fichiers DE MANIERE INAUDIBLE (volume general a 0, canal
@@ -52,7 +52,7 @@ end
 -- ===========================================================================
 -- 1. LOGIQUE PURE : Core/Diag.lua
 -- ===========================================================================
-describe("/gr diag : le rapport de sante (logique pure)", function()
+describe("/gideon diag : le rapport de sante (logique pure)", function()
     local ns = wowenv.loadCore()
     local Diag = ns.Diag
     local Sound = ns.Sound
@@ -162,7 +162,7 @@ describe("/gr diag : le rapport de sante (logique pure)", function()
         assert.are.equal(0, countOf(text, "[OK]"), text)
         assert.is_true(contains(text, "the audio check did NOT run"), text)
         assert.is_true(contains(text, "/console Sound_MasterVolume 0"), text)
-        assert.is_true(contains(text, "/gr sound test"), text)
+        assert.is_true(contains(text, "/gideon sound test"), text)
         -- Le rappel qui evite de croire a un bug apres l'ajout d'un fichier.
         assert.is_true(contains(text, "before a RESTART"), text)
     end)
@@ -217,9 +217,9 @@ describe("/gr diag : le rapport de sante (logique pure)", function()
 end)
 
 -- ===========================================================================
--- 2. LE CABLAGE : /gr diag dans le client (stub), SANS AUCUN BRUIT
+-- 2. LE CABLAGE : /gideon diag dans le client (stub), SANS AUCUN BRUIT
 -- ===========================================================================
-describe("/gr diag : le cablage (lecture seule, et muet)", function()
+describe("/gideon diag : le cablage (lecture seule, et muet)", function()
     local ns
 
     before_each(function()
@@ -410,9 +410,9 @@ describe("/gr diag : le cablage (lecture seule, et muet)", function()
         assert.is_false(_G.GideonRaidIntermissionPanel:IsShown())
     end)
 
-    it("/gr diag est annonce dans l'aide (/gr help)", function()
+    it("/gideon diag est annonce dans l'aide (/gideon help)", function()
         _G.DEFAULT_CHAT_FRAME.messages = {}
         slash("help")
-        assert.is_true(contains(messages(), "/gr diag"), messages())
+        assert.is_true(contains(messages(), "/gideon diag"), messages())
     end)
 end)

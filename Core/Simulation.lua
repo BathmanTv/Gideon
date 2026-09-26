@@ -9,14 +9,14 @@
     WHY: the raid lead must be able to REHEARSE ALONE, with no boss and no raid.
     Two entries, both reachable from the main panel and from the chat:
 
-      1. "INTERMISSION GROUP" (`/gr sim inter`) - `newRun` / `closeRun`: the
+      1. "INTERMISSION GROUP" (`/gideon sim inter`) - `newRun` / `closeRun`: the
          intermission panel opens RIGHT AWAY (fourth in-game test: the former 3 s
          delay is gone) and NOTHING closes it by itself: the PLAYER closes it
          (close cross or Close button). One single rehearsal, no automatic
          relaunch. While it runs, the panel shows the SIMULATION banner and a
          rehearsal headline instead of the combat countdown, because there is no
          orb to read and no clock (see `forRehearsal`).
-      2. "PING HELP" (`/gr sim ping`) - `pingHelpView`: a SHORT information
+      2. "PING HELP" (`/gideon sim ping`) - `pingHelpView`: a SHORT information
          window that says HOW to bind the ping keys and WHAT to do during the
          boss ("when the panel says PING: YES, ping YOURSELF"). The former guided
          sequence (countdown, three announced pings, "ping placed" button) is
@@ -69,10 +69,10 @@ Simulation.PING_SEQUENCE = { "Warning", "OnMyWay", "Assist" }
 
 --- Phases of the intermission rehearsal.
 ---   OPEN : the panel is on screen and stays there until the player closes it;
----   DONE : the player closed it (or `/gr sim stop`).
+---   DONE : the player closed it (or `/gideon sim stop`).
 Simulation.RUN_PHASE = { OPEN = "OPEN", DONE = "DONE" }
 
---- Accepted sub-commands of /gr sim (and their aliases). An unknown value is
+--- Accepted sub-commands of /gideon sim (and their aliases). An unknown value is
 --- REFUSED by resolveCommand (nil), never guessed.
 Simulation.COMMANDS = {
     inter = "inter",
@@ -100,7 +100,7 @@ Simulation.OPTION_COMMANDS = { style = true, anim = true }
 local PHASE_OPEN = Simulation.RUN_PHASE.OPEN
 local PHASE_DONE = Simulation.RUN_PHASE.DONE
 
---- Pure resolution of a /gr sim sub-command: "inter" (aliases group, groupe),
+--- Pure resolution of a /gideon sim sub-command: "inter" (aliases group, groupe),
 --- "ping", "stop". Anything else (unknown word, empty string, number, table)
 --- returns nil: the caller refuses it, nothing is guessed.
 --- @param raw string|nil
@@ -116,7 +116,7 @@ function Simulation.resolveCommand(raw)
     return Simulation.COMMANDS[wanted]
 end
 
---- Parses the WHOLE argument of /gr sim: the sub-command ALONE.
+--- Parses the WHOLE argument of /gideon sim: the sub-command ALONE.
 --- The rehearsal takes no option any more (it opens right away and the player
 --- closes it), so a trailing token is REFUSED with an explicit message: a
 --- hand-typed `cycles=3` must never look accepted.
@@ -140,8 +140,8 @@ function Simulation.parseCommand(raw)
         -- The option is handed back RAW: `style` may name a candidate (validated by
         -- the caller against Core/Layout.BUTTON_STYLES), `anim` an on/off switch
         -- (validated by the caller through Core/Sound).
-        -- An EMPTY option is not an error either: `/gr sim style` alone opens the
-        -- showcase, and `/gr sim anim` alone recalls the current setting.
+        -- An EMPTY option is not an error either: `/gideon sim style` alone opens the
+        -- showcase, and `/gideon sim anim` alone recalls the current setting.
         return mode, { argument = (rest ~= nil and rest ~= "") and rest or nil }, nil
     end
     if rest ~= nil and rest ~= "" then
@@ -202,13 +202,13 @@ function Simulation.newRun(options)
     }
 end
 
---- Is the rehearsal over (closed by the player, or stopped by /gr sim stop)?
+--- Is the rehearsal over (closed by the player, or stopped by /gideon sim stop)?
 function Simulation.runFinished(run)
     return type(run) == "table" and run.phase == PHASE_DONE
 end
 
 --- The PLAYER closes the rehearsal: the close cross, the Close button or
---- `/gr sim stop`. The only way a rehearsal ends: nothing times it out.
+--- `/gideon sim stop`. The only way a rehearsal ends: nothing times it out.
 --- Idempotent (a second close changes nothing and is not an error).
 --- @return table|nil run, string|nil error
 function Simulation.closeRun(run)

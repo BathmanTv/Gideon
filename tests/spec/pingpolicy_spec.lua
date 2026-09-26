@@ -9,7 +9,7 @@
       - 2V2R = MILIEU (MID)    : milieu / sous le boss, s'apparie a un 2V2R ;
       - 3V1R = CHASSEUR (CHASER) : fonce sur un ping, ne ping pas.
     La politique de ping est CONFIGURABLE (GideonRaidDB.intermission.pingMode,
-    commande /gr ping) :
+    commande /gideon ping) :
       - "anchors" (defaut) : seule l'ANCRE ping (~8 pings par raid au lieu de ~20) ;
       - "color"            : chaque etat ping son propre ping ;
       - "none"             : personne ne ping, on joue en positions.
@@ -19,7 +19,7 @@
     affiche QUEL ping utiliser et, si le joueur a bindi une touche, LAQUELLE
     presser (touche lue par la couche de rendu, injectee ici).
 
-    La logique testee ici est PURE (Core/), puis le cablage en jeu (/gr ping).
+    La logique testee ici est PURE (Core/), puis le cablage en jeu (/gideon ping).
 ----------------------------------------------------------------------------]]
 --
 local stub = require("tests.support.wowapi_stub")
@@ -213,7 +213,7 @@ describe("Ping : politiques (logique pure)", function()
             assert.is_false(contains(text, "ANCHORS:"), mode)
             assert.is_false(contains(text, "COLOR:"), mode)
         end
-        -- La politique reste interrogeable a la demande (/gr ping).
+        -- La politique reste interrogeable a la demande (/gideon ping).
         assert.matches("ANCHORS", I.pingPolicyLine("anchors"))
     end)
 end)
@@ -242,7 +242,7 @@ describe("Ping : configuration persistee", function()
     end)
 end)
 
-describe("Ping : commande en jeu /gr ping", function()
+describe("Ping : commande en jeu /gideon ping", function()
     local ns
 
     before_each(function()
@@ -271,7 +271,7 @@ describe("Ping : commande en jeu /gr ping", function()
 
     --- L'etat de combat d'une composition, tel que Core le calcule (le panneau de
     --- combat n'affiche PLUS la consigne de ping : elle reste disponible ici, dans
-    --- le snapshot lu par /gr inter ping et par le kit de diagnostic).
+    --- le snapshot lu par /gideon inter ping et par le kit de diagnostic).
     local function snapFor(stateKey, pingMode)
         local state = ns.Intermission.newState()
         ns.Intermission.start(state, { leadSeconds = 0, visibilitySeconds = 3, durationSeconds = 20 })
@@ -283,16 +283,16 @@ describe("Ping : commande en jeu /gr ping", function()
         return table.concat(_G.DEFAULT_CHAT_FRAME.messages, "\n")
     end
 
-    it("/gr ping affiche la politique courante et sa regle", function()
+    it("/gideon ping affiche la politique courante et sa regle", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping")
         local text = messages()
         assert.matches("Ping policy: anchors", text)
         assert.matches("only the 1V3R anchors ping", text)
-        assert.matches("/gr ping anchors|color|none", text)
+        assert.matches("/gideon ping anchors|color|none", text)
     end)
 
-    it("/gr ping color persiste la politique et le panneau ne dit plus rien", function()
+    it("/gideon ping color persiste la politique et le panneau ne dit plus rien", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping color")
         assert.are.equal("color", _G.GideonRaidDB.intermission.pingMode)
@@ -313,7 +313,7 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.is_true(contains(snap.actionLine, "PING (Assist)"))
     end)
 
-    it("/gr ping none persistee : Core ne fait plus pinger personne", function()
+    it("/gideon ping none persistee : Core ne fait plus pinger personne", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping none")
         assert.are.equal("none", _G.GideonRaidDB.intermission.pingMode)
@@ -330,7 +330,7 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.is_true(contains(snap.actionLine, "STAY WHERE YOU ARE"))
     end)
 
-    it("/gr ping avec une valeur inconnue est refuse et ne persiste rien", function()
+    it("/gideon ping avec une valeur inconnue est refuse et ne persiste rien", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("ping magenta")
         assert.are.equal("anchors", _G.GideonRaidDB.intermission.pingMode)
@@ -357,7 +357,7 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.is_true(contains(snap.actionLine, "PING (On My Way)"))
     end)
 
-    it("/gr inter status rappelle la politique de ping et le planning", function()
+    it("/gideon inter status rappelle la politique de ping et le planning", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter status")
         local text = messages()
@@ -365,7 +365,7 @@ describe("Ping : commande en jeu /gr ping", function()
         assert.matches("schedule: 4 intermission", text)
     end)
 
-    it("/gr inter ping dit quel ping et quelle touche (et ce qui a ete essaye)", function()
+    it("/gideon inter ping dit quel ping et quelle touche (et ce qui a ete essaye)", function()
         stub.mainFrame():Fire("ADDON_LOADED", "GideonRaid")
         _G.SlashCmdList["GIDEONRAID"]("inter ping")
         assert.matches("No composition declared yet", messages())

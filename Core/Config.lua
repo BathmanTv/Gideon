@@ -16,11 +16,11 @@ local Locale = assert(ns.Locale, "Core/Locale.lua must be loaded before Core/Con
 
 --- Core/Sound.lua is loaded BEFORE this file by the .toc: it owns the pure table
 --- "canonical state -> soundboard file", the one-playback-per-assignment gate
---- and the BOUNDED resolvers of the assignment-sound preference (/gr sound).
+--- and the BOUNDED resolvers of the assignment-sound preference (/gideon sound).
 local Sound = assert(ns.Sound, "Core/Sound.lua must be loaded before Core/Config.lua")
 
 --- Core/BossFilter.lua is loaded BEFORE this file by the .toc: it owns the
---- allow-list of encounter ids (PRIMARY criterion, `/gr boss <id>`) and of names
+--- allow-list of encounter ids (PRIMARY criterion, `/gideon boss <id>`) and of names
 --- (SECONDARY, language dependent), the bounded resolvers of the auto-open filter
 --- and the SAFE DEFAULT (an empty list opens nothing).
 local BossFilter = assert(ns.BossFilter, "Core/BossFilter.lua must be loaded before Core/Config.lua")
@@ -61,11 +61,11 @@ Config.MAX_SCHEDULE_ENTRIES = 12
 --- ENCOUNTER ID OF THE TARGET BOSS, DELIVERED WITH THE ADDON (raid-lead decision):
 --- the intermission panel opens on this boss for EVERY player of the guild, with no
 --- command to type. MEASURED IN GAME by the raid lead on 2026-09-24, heroic pull
---- with 20 players (`/gr idlog on`):
+--- with 20 players (`/gideon idlog on`):
 ---   encounter seen: id=3445  name=Sentinelles inhumées  difficulty=15  group=20
 --- `ENCOUNTER_START` arg1 is an INTEGER, identical on every client whatever the
 --- game language: it is the PRIMARY criterion of the auto-open filter
---- (`Core/BossFilter.lua`, `/gr boss <id>` adds more ids).
+--- (`Core/BossFilter.lua`, `/gideon boss <id>` adds more ids).
 Config.DEFAULT_BOSS_IDS = { 3445 }
 
 --- NAMES OF THE TARGET BOSS, as a SECONDARY criterion (a SAFETY NET: the id above
@@ -77,7 +77,7 @@ Config.DEFAULT_BOSS_IDS = { 3445 }
 ---     measured in game on 2026-09-24 (cf. Config.DEFAULT_BOSS_IDS). THE ACCENT IS
 ---     PART OF THE STRING: this file is UTF-8 and the name is compared
 ---     case-insensitively as-is, never translated nor re-accented.
---- `/gr boss name <text>` adds more names.
+--- `/gideon boss name <text>` adds more names.
 Config.DEFAULT_BOSS_NAMES = { "Entombed Sentinels", "Sentinelles inhumées" }
 
 --- The DIFFICULTY IDS of the target boss, documented for the raid lead. The addon
@@ -128,7 +128,7 @@ Config.DEFAULTS = {
     autoShow = true,
     scale = 1.0,
     -- The main panel is MOVABLE BY DEFAULT (in-game feedback: a panel the player
-    -- cannot move is unusable). /gr lock freezes it, /gr unlock frees it again.
+    -- cannot move is unusable). /gideon lock freezes it, /gideon unlock frees it again.
     -- Any other value than a boolean counts as "not locked".
     lockPanel = false,
     -- Language preference of the player: "auto" (follow the client), "en", "fr".
@@ -165,13 +165,13 @@ function Config.defaultIntermission()
         -- Pre-computed intermission schedule, in seconds since ENCOUNTER_START.
         scheduleSeconds = Config.defaultScheduleSeconds(),
         -- Ping policy (see Config.PING_MODES): the raid-lead decision, persisted
-        -- and changeable in game with /gr ping anchors|color|none.
+        -- and changeable in game with /gideon ping anchors|color|none.
         pingMode = Config.DEFAULT_PING_MODE,
-        -- CARD STYLE of this panel (raid-lead picker, `/gr style [1|shipped]`): the
+        -- CARD STYLE of this panel (raid-lead picker, `/gideon style [1|shipped]`): the
         -- guild card by default, and the ONLY style there is. Core/Layout.
         -- BUTTON_STYLES owns the styles, this field only NAMES the one in use.
         style = Config.DEFAULT_STYLE,
-        -- STYLE SHOWCASE (`/gr sim style`): the style its examples are drawn with -
+        -- STYLE SHOWCASE (`/gideon sim style`): the style its examples are drawn with -
         -- the guild card (there is no candidate left), and its two animations. The
         -- animations are ON by default (the raid lead asked to SEE them) and only
         -- an explicit false stops them.
@@ -179,7 +179,7 @@ function Config.defaultIntermission()
         showcaseAnimations = true,
         -- ASSIGNMENT SOUNDBOARD (see Core/Sound.lua): enabled by default, one
         -- sound per canonical state, played ONCE when the player declares their
-        -- composition. /gr sound on|off, /gr sound test 1v3r|2v2r|3v1r.
+        -- composition. /gideon sound on|off, /gideon sound test 1v3r|2v2r|3v1r.
         soundEnabled = Sound.DEFAULT_ENABLED,
         -- AUTO-OPEN FILTER (see Core/BossFilter.lua): WHICH boss may open the
         -- panel by itself. The DELIVERED default (Config.DEFAULT_BOSS_IDS /
@@ -187,22 +187,22 @@ function Config.defaultIntermission()
         -- target boss) applies as soon as the player has NOT explicitly cleared the
         -- target, so the panel opens on Entombed Sentinels for the whole guild with
         -- no command typed at all.
-        -- These two lists hold ONLY what a PLAYER added (`/gr boss <id>`, `/gr boss
+        -- These two lists hold ONLY what a PLAYER added (`/gideon boss <id>`, `/gideon boss
         -- name <text>`); the EFFECTIVE target (delivered default + these entries)
         -- is computed at read time by Config.resolveIntermission.
         bossIds = {},
         bossNames = {},
-        -- `/gr boss clear` MARKER. An exact `true` means the player EXPLICITLY
+        -- `/gideon boss clear` MARKER. An exact `true` means the player EXPLICITLY
         -- emptied the target, so the DELIVERED default must NOT come back: only
         -- what the player adds afterwards counts (an explicit clear always wins
         -- over the delivered default). An ABSENT field (a fresh install, an older
         -- SavedVariables) is `false`: never configured = the delivered default
         -- applies.
         bossTargetCleared = false,
-        -- `/gr idlog on|off`: prints and memorizes the encounters seen, which is
+        -- `/gideon idlog on|off`: prints and memorizes the encounters seen, which is
         -- how the real id of the target boss is captured in game.
         idlog = false,
-        -- MANUAL OVERRIDE (`/gr inter on`): arms the panel for the NEXT encounter
+        -- MANUAL OVERRIDE (`/gideon inter on`): arms the panel for the NEXT encounter
         -- whatever the boss; consumed at the end of that encounter.
         overrideEncounter = false,
         -- The last encounters seen by the idlog (newest first, bounded).
@@ -314,7 +314,7 @@ end
 ---   - a SavedVariables written by an older version carries `lockPanel = true`
 ---     (the old hard-coded default, which no player could change: no command
 ---     existed then), and no `panelSchema` marker. It is unlocked ONCE, then the
----     player's own choice (/gr lock, /gr unlock, the panel button) is preserved;
+---     player's own choice (/gideon lock, /gideon unlock, the panel button) is preserved;
 ---   - a value that is not a boolean never raises: it counts as "not locked".
 --- The panel positions are created fresh (never aliased between characters).
 function Config.ensureDB(db)
@@ -455,7 +455,7 @@ function Config.recordDecision(db, record)
 end
 
 --- Publishes ONE encounter observation into the SavedVariables (the IDLOG,
---- `/gr idlog on`): `db.intermission.seenEncounters` keeps the LAST observations,
+--- `/gideon idlog on`): `db.intermission.seenEncounters` keeps the LAST observations,
 --- NEWEST FIRST, bounded to `BossFilter.MAX_SEEN`. This is the field the raid
 --- lead reads back after a pull to get the REAL encounter id of the target boss -
 --- nothing is invented, nothing is sent.
@@ -476,7 +476,7 @@ function Config.recordSeen(db, entry)
     return stored
 end
 
---- Raw text of the DELIVERED default target, for the chat (`/gr boss`, `/gr diag`):
+--- Raw text of the DELIVERED default target, for the chat (`/gideon boss`, `/gideon diag`):
 --- "3445" and "Entombed Sentinels, Sentinelles inhumées". NO display literal here:
 --- the labels around these strings come from Core/Locale.lua.
 --- @param list table|nil list of ids or names
@@ -512,13 +512,13 @@ function Config.resolveIntermission(raw)
     -- AUTO-OPEN FILTER - THE EFFECTIVE TARGET, resolved FIRST and even when the
     -- whole block is absent, because it is what the panel opens on: the DELIVERED
     -- default of the addon (`Config.DEFAULT_BOSS_IDS` / `Config.DEFAULT_BOSS_NAMES`)
-    -- added to the entries a player typed (`/gr boss <id>`, `/gr boss name <text>`),
-    -- UNLESS the player explicitly cleared the target (`/gr boss clear` sets
+    -- added to the entries a player typed (`/gideon boss <id>`, `/gideon boss name <text>`),
+    -- UNLESS the player explicitly cleared the target (`/gideon boss clear` sets
     -- `bossTargetCleared`, which drops the delivered default). Nothing is invented
     -- here: every value comes from the constants above or from the SavedVariables.
     --   out.bossIds / out.bossNames ......... EFFECTIVE target (what decides)
     --   out.bossIdsOwn / out.bossNamesOwn ... what the PLAYER added (provenance)
-    --   out.bossTargetCleared ............... explicit `/gr boss clear` marker
+    --   out.bossTargetCleared ............... explicit `/gideon boss clear` marker
     --   out.bossTargetSource ................ where the target comes from
     local target = BossFilter.resolveTarget(raw, {
         ids = Config.DEFAULT_BOSS_IDS,
@@ -588,14 +588,14 @@ function Config.resolveIntermission(raw)
     -- ON). Same rule as the sound preference, mirrored from
     -- Layout.animationsEnabled (asserted equal by tests/spec/showcase_spec.lua).
     out.showcaseAnimations = raw.showcaseAnimations ~= false
-    -- THE PREVIEW STYLE OF THE SHOWCASE (`/gr sim style <n>`): transient by nature,
+    -- THE PREVIEW STYLE OF THE SHOWCASE (`/gideon sim style <n>`): transient by nature,
     -- but persisted like the rest of the panel preferences so a /reload does not
     -- send the raid lead back to square one.
     out.showcaseStyle = Config.resolveStyleName(raw.showcaseStyle)
 
     -- AUTO-OPEN FILTER: the EFFECTIVE allow-lists were computed at the very top of
     -- this function (delivered default + the entries of the player, or the entries
-    -- of the player alone after an explicit `/gr boss clear`): nothing to redo here,
+    -- of the player alone after an explicit `/gideon boss clear`): nothing to redo here,
     -- and nothing is ever invented.
     -- IDLOG: only an exact `true` turns it on (it WRITES on every encounter).
     out.idlog = BossFilter.enabledOf(raw.idlog)
