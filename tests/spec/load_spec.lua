@@ -130,7 +130,7 @@ describe("chargement de l'addon", function()
         assert.is_true(_G.GideonRaidDB.enabled)
         assert.is_table(_G.GideonRaidCharDB)
         assert.is_table(_G.GideonRaidDB.intermission)
-        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, _G.GideonRaidDB.intermission.scheduleSeconds)
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, _G.GideonRaidDB.intermission.scheduleSeconds)
         assert.are.equal(2, _G.GideonRaidDB.intermission.leadSeconds)
         -- Plus aucun champ de macro dans les defaults.
         assert.is_nil(_G.GideonRaidDB.intermission.macroTargetToken)
@@ -410,12 +410,12 @@ describe("chargement de l'addon", function()
         local panel = _G.GideonRaidIntermissionPanel
         stub.fireTickers(450) -- 1re intermission, panneau ouvert
         assert.is_true(panel:IsShown())
-        stub.fireTickers(255) -- fin de l'intermission (20 s) : ferme
+        stub.fireTickers(255) -- fin de l'intermission (16 s) : ferme
         assert.is_false(panel:IsShown())
-        -- La 2e intermission du planning est a 148,9 s : ouverture a 146,9 s.
+        -- La 2e intermission du planning est a 150,2 s : ouverture a 148,2 s.
         stub.fireTickers(740) -- 144,5 s : encore ferme
         assert.is_false(panel:IsShown())
-        stub.fireTickers(25) -- 147,0 s : reouverture automatique
+        stub.fireTickers(40) -- 148,5 s : reouverture automatique
         assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
         assert.is_true(panel.buttons[1]:IsShown())
         assert.is_false(panel.word:IsShown())
@@ -531,7 +531,7 @@ describe("chargement de l'addon", function()
         -- et se ROUVRE a l'intermission suivante.
         stub.fireTickers(260)
         assert.is_false(panel:IsShown())
-        stub.fireTickers(760)
+        stub.fireTickers(790) -- 150,0 s : la 2e intermission (150,2 s) approche
         assert.is_true(panel:IsShown(), "reouverture automatique a l'intermission suivante")
         assert.is_true(panel.buttons[1]:IsShown())
         assert.is_false(panel.word:IsShown())
@@ -1394,7 +1394,7 @@ describe("fermeture bornee du panneau d'intermission", function()
         assert.is_false(panel:IsShown())
         local unfreeze = freezeIntermission()
         -- 2e intermission : le panneau se rouvre et disparait ENCORE tout seul.
-        stub.fireTickers(765)
+        stub.fireTickers(790) -- 149,5 s : la 2e intermission (150,2 s) approche
         assert.is_true(panel:IsShown())
         stub.fireTickers(100)
         assert.is_true(panel:IsShown(), "le delai repart de zero a chaque intermission")

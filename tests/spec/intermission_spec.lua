@@ -469,9 +469,9 @@ describe("Intermission : planning des intermissions (machine pure)", function()
     local I, Config = ns.Intermission, ns.Config
 
     it("porte le planning pre-calcule du raid lead, dans l'ordre", function()
-        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, I.SCHEDULE_SECONDS)
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, I.SCHEDULE_SECONDS)
         local schedule = I.validateSchedule(nil)
-        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, schedule)
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, schedule)
         assert.are.same(Config.DEFAULT_SCHEDULE_SECONDS, I.SCHEDULE_SECONDS)
     end)
 
@@ -1117,7 +1117,7 @@ describe("Config : bloc intermission", function()
         assert.are.equal(2.0, resolved.scale)
         assert.are.equal(3, resolved.visibilitySeconds)
         assert.are.equal(2, resolved.leadSeconds)
-        assert.are.same({ 46.3, 148.9, 251.5, 353.2 }, resolved.scheduleSeconds)
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, resolved.scheduleSeconds)
         assert.are.equal(0, resolved.position.x)
         -- Un bloc absent est cree frais, et jamais partage avec les defaults.
         local db2 = Config.ensureDB({})
@@ -1146,9 +1146,50 @@ describe("Config : bloc intermission", function()
         })
         assert.is_true(c.enabled)
         assert.are.equal(1.0, c.scale)
-        assert.are.equal(20, c.durationSeconds)
+        assert.are.equal(16, c.durationSeconds)
         assert.are.equal(2, c.leadSeconds)
         assert.are.same({ 30 }, c.scheduleSeconds)
+    end)
+
+    -- MIGRATION DES TIMINGS : les valeurs livrees ont ete re-mesurees sur le
+    -- journal du raid lead (2026-09-26). Un addon DEJA installe garde ses
+    -- SavedVariables, donc sans migration seules les installations neuves
+    -- verraient les nouveaux horaires.
+    it("migre le planning que l'addon livrait AVANT vers les timings re-mesures", function()
+        local db = {
+            intermission = {
+                scheduleSeconds = { 46.3, 148.9, 251.5, 353.2 },
+                durationSeconds = 20,
+                pingMode = "none",
+                position = { point = "TOPLEFT", relativePoint = "TOPLEFT", x = 12, y = -34 },
+            },
+            intermissionSchema = 1,
+        }
+        local out = Config.ensureDB(db)
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, out.intermission.scheduleSeconds)
+        assert.are.equal(16, out.intermission.durationSeconds)
+        -- Le RESTE du bloc est preserve (position du panneau, politique de ping).
+        assert.are.equal("none", out.intermission.pingMode)
+        assert.are.equal(12, out.intermission.position.x)
+        assert.are.equal(Config.TIMING_SCHEMA, out.intermissionSchema)
+    end)
+
+    it("ne touche JAMAIS a un planning qui n'est pas celui qu'il avait livre", function()
+        local db = {
+            intermission = { scheduleSeconds = { 50, 160 }, durationSeconds = 12, pingMode = "color" },
+            intermissionSchema = 1,
+        }
+        local out = Config.ensureDB(db)
+        assert.are.same({ 50, 160 }, out.intermission.scheduleSeconds)
+        assert.are.equal(12, out.intermission.durationSeconds)
+        assert.are.equal("color", out.intermission.pingMode)
+    end)
+
+    it("une installation neuve recoit directement les timings mesures", function()
+        local out = Config.ensureDB({})
+        assert.are.same({ 46.3, 150.2, 255.7, 357.3 }, out.intermission.scheduleSeconds)
+        assert.are.equal(16, out.intermission.durationSeconds)
+        assert.are.equal(Config.TIMING_SCHEMA, out.intermissionSchema)
     end)
 
     it("accepte une valeur explicite valide", function()
@@ -1342,11 +1383,11 @@ describe("Intermission : filet de fermeture borne du panneau", function()
 
     it("le delai par defaut couvre TOUTE la fenetre reelle, plus une marge", function()
         -- Valeur par defaut MESUREE sur les timings reels du boss cible :
-        -- 2 s de lead + 3 s de visibilite + 20 s de duree = 25 s de fenetre.
+        -- 2 s de lead + 3 s de visibilite + 16 s de duree = 21 s de fenetre.
         local defaults = Config.defaultIntermission()
         assert.are.equal(Config.DEFAULT_AUTO_CLOSE_SECONDS, defaults.autoCloseSeconds)
         local resolved = Config.resolveIntermission({})
-        assert.are.equal(25, window(resolved))
+        assert.are.equal(21, window(resolved))
         assert.is_true(
             resolved.autoCloseSeconds >= window(resolved) + Intermission.AUTO_CLOSE_MARGIN_SECONDS,
             "le filet doit couvrir la fenetre reelle"

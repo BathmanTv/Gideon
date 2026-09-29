@@ -4,6 +4,41 @@ All notable changes to GideonRaid are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/); this project
 uses semantic-ish versioning driven by git tags (`vX.Y.Z`).
 
+## [0.13.7] - 2026-09-26
+
+**The panel opens at the right moment, and it leaves the screen 4 s sooner.**
+
+### Changed
+
+- **Timings RE-MEASURED on the raid lead's own log** (report `JNTHdDVgwYK7XfAk`,
+  34 pulls of Entombed Sentinels; an intermission starts when **Helical Toxins
+  1284590** lands on the raid). Medians: **46.32 / 150.24 / 255.71 / 357.27 s**
+  since the pull, against 46.3 / 148.9 / 251.5 / 353.2 before: from the second
+  intermission on, the panel opened **1.3 to 4.2 s too early** - the in-game report
+  "the window appears at the wrong time". The first intermission is deterministic
+  (0.4 s of spread over 34 pulls); the next ones drift with the pace of the pull
+  (+/-6 s), and no addon may read the fight to correct itself in 12.x, so the
+  delivered schedule follows the MEDIAN.
+- **`durationSeconds` 20 -> 16 s.** The panel now closes 16 s after the
+  intermission starts. The real intermission lasts **13.55 s in median** (64
+  occurrences), so 20 s left the panel **6.5 s on screen once the mechanic was
+  over** - the in-game report "it opens from time to time during the fight". Total
+  on-screen time: 18 s (2 s of lead + 16 s) instead of 22 s.
+- **Timing MIGRATION (`Config.TIMING_SCHEMA`)**: an addon that is already installed
+  keeps its SavedVariables, so without a migration the new timings would only ever
+  reach fresh installations. The migration replaces ONLY the values the addon itself
+  delivered before; a schedule computed by GIDEON out of game, or adjusted by hand,
+  is never touched - and the rest of the block (position, ping policy, style,
+  enabled) is preserved.
+- Measurement method, table, spread and the recipe to re-measure after a balance
+  patch: new section **10** of `docs/INTERMISSION-COACH.md`.
+
+### Notes
+
+- `leadSeconds` (2 s) and `visibilitySeconds` (3 s) are unchanged. The schedule
+  follows the median, so the lead is the only knob trading "never late" against "not
+  too early": give the raid lead's observation and it moves.
+
 ## [0.13.6] - 2026-09-26
 
 **The addon no longer calls a single RESTRICTED API. That popup in game was ours.**

@@ -543,7 +543,7 @@ describe("Sound : le son part au clic, une seule fois", function()
         assert.are.equal(1, #assignSounds())
         stub.fireTickers(260) -- fin de l'intermission : fermeture automatique
         assert.is_false(panel:IsShown())
-        stub.fireTickers(760) -- 2e intermission : reouverture
+        stub.fireTickers(790) -- 2e intermission (150,2 s) : reouverture
         assert.is_true(panel:IsShown())
         buttonFor(panel, "3V1R"):Click() -- la MEME composition, nouvelle intermission
         assert.are.equal(2, #assignSounds())

@@ -170,7 +170,7 @@ player is the one who places it.
    which does not open is better than a panel that opens on the wrong boss. `/gideon
    diag` tells you where the target comes from;
 3. pull the boss: `ENCOUNTER_START` starts the **pre-computed schedule**
-   (46.3 s, then 148.9 / 251.5 / 353.2 s) **only when the encounter is the
+   (46.3 s, then 150.2 / 255.7 / 357.3 s, measured on 34 pulls) **only when the encounter is the
    configured target**. The event arguments are read **once, under `pcall`**, and
    only to compare the encounter id (and the optional name): they drive nothing
    else, and a value that cannot be read (a *secret* value in 12.x) is never a

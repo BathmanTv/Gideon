@@ -45,11 +45,20 @@ Config.PING_MODES = { "anchors", "color", "none" }
 Config.DEFAULT_PING_MODE = "anchors"
 
 --- Pre-computed intermission timeline, in SECONDS SINCE ENCOUNTER_START (the pull
---- is the time origin). Values measured on the real encounter by the raid lead:
---- the first intermission lands ~46 s after the pull, then every ~102.6 s.
+--- is the time origin). RE-MEASURED on the raid lead's own log (report
+--- JNTHdDVgwYK7XfAk, 34 pulls of Entombed Sentinels, intermission = the first
+--- Helical Toxins (1284590) landing on the raid) - medians, and the spread is in
+--- docs/INTERMISSION-COACH.md section "Timing measured in game":
+---   intermission 1: 46.32 s (34 pulls, 46.11-46.50 - 0.4 s of spread)
+---   intermission 2: 150.24 s (19 pulls, 145.48-157.40)
+---   intermission 3: 255.71 s (8 pulls, 253.23-261.29)
+---   intermission 4: 357.27 s (3 pulls, 355.32-367.18)
+--- The FIRST one is deterministic (every ~46.3 s); the following ones drift with
+--- the pull's pace, so a fixed schedule can only follow the median. The previous
+--- values (148.9 / 251.5 / 353.2) opened the panel 1.3 to 4.2 s TOO EARLY.
 --- Prepared by hand and persisted: GIDEON can overwrite it out of game.
 --- https://warcraft.wiki.gg/wiki/ENCOUNTER_START (arguments never read).
-Config.DEFAULT_SCHEDULE_SECONDS = { 46.3, 148.9, 251.5, 353.2 }
+Config.DEFAULT_SCHEDULE_SECONDS = { 46.3, 150.2, 255.7, 357.3 }
 
 --- How many seconds BEFORE each intermission the panel opens by itself.
 Config.DEFAULT_LEAD_SECONDS = 2
@@ -107,7 +116,7 @@ Config.POSITION_POINTS = {
 
 --- Default of the BOUNDED auto-close safety delay (seconds), MEASURED on the
 --- real timings of the target boss: 2 s of lead (the panel opens before the
---- intermission) + 3 s of visibility + 20 s of intermission = a 25 s window,
+--- intermission) + 3 s of visibility + 16 s of intermission = a 21 s window,
 --- plus a 5 s margin. MIRROR of Intermission.DEFAULT_AUTO_CLOSE_SECONDS and of
 --- Intermission.AUTO_CLOSE_MARGIN_SECONDS (tests/spec/intermission_spec.lua
 --- asserts the two modules agree, so they can never drift apart).
@@ -122,6 +131,19 @@ Config.MAX_AUTO_CLOSE_SECONDS = 300
 --- SavedVariables schema of the PANEL preferences (position + lock). Bumped when
 --- a migration has to run once: see Config.ensureDB.
 Config.PANEL_SCHEMA = 1
+
+--- The schedule and the panel duration AS THEY WERE DELIVERED BEFORE the
+--- 2026-09-26 re-measurement (see docs/INTERMISSION-COACH.md section 10). They are
+--- only used by the timing migration below: a persisted value that is STILL one of
+--- these is the addon's own, not the player's.
+Config.PREVIOUS_SCHEDULE_SECONDS = { 46.3, 148.9, 251.5, 353.2 }
+Config.PREVIOUS_DURATION_SECONDS = 20
+
+--- Version of the TIMING block (schedule + lead/visibility/duration/auto-close).
+--- Bumped every time the DELIVERED timings change on the raid lead's measurements:
+--- an addon that is already installed keeps its SavedVariables, so without this
+--- migration the new timings would only ever reach fresh installations.
+Config.TIMING_SCHEMA = 2
 
 Config.DEFAULTS = {
     enabled = true,
@@ -153,11 +175,17 @@ function Config.defaultIntermission()
         -- reads the three choices before the orbs appear.
         leadSeconds = Config.DEFAULT_LEAD_SECONDS,
         visibilitySeconds = 3,
-        durationSeconds = 20,
+        -- ON-SCREEN TIME OF THE PANEL, in seconds AFTER the intermission starts (the
+        -- lead of 2 s comes on top). Measured duration of the real intermission:
+        -- median 13.55 s over 64 occurrences (7.8-28.2 s). It was 20 s, which left
+        -- the panel 6.5 s on screen AFTER the mechanic was over - reported in game
+        -- ("it opens during the fight"): 16 s puts the panel away ~2.5 s after the
+        -- median intermission ends.
+        durationSeconds = 16,
         -- BOUNDED AUTO-CLOSE (see Core/Intermission.newCloseGuard): the safety
         -- delay after which the panel is hidden even when the intermission clock
         -- never reached DONE. Measured on the real timings of the target boss
-        -- (2 s of lead + 3 s of visibility + 20 s of intermission = 25 s, plus a
+        -- (2 s of lead + 3 s of visibility + 16 s of intermission = 21 s, plus a
         -- 5 s margin). It is CONFIGURABLE (this field) and CLAMPED by
         -- resolveIntermission, so a hand-edited SavedVariables can neither make
         -- the panel vanish during a real intermission nor park it on screen.
@@ -344,7 +372,40 @@ function Config.ensureDB(db)
     if type(db.intermission) ~= "table" then
         db.intermission = Config.defaultIntermission()
     end
+    -- TIMING MIGRATION (see TIMING_SCHEMA). The delivered timings were re-measured
+    -- on the raid lead's log on 2026-09-26: an already-installed addon would keep
+    -- the old schedule for ever without this. ONLY the values the addon itself
+    -- delivered before are replaced - everything else in the block (position,
+    -- ping policy, style, enabled, scale) is left untouched.
+    if db.intermissionSchema ~= Config.TIMING_SCHEMA then
+        local delivered = Config.defaultIntermission()
+        if Config.isPreviousDeliveredSchedule(db.intermission.scheduleSeconds) then
+            db.intermission.scheduleSeconds = delivered.scheduleSeconds
+        end
+        if db.intermission.durationSeconds == Config.PREVIOUS_DURATION_SECONDS then
+            db.intermission.durationSeconds = delivered.durationSeconds
+        end
+        db.intermissionSchema = Config.TIMING_SCHEMA
+    end
     return db
+end
+
+--- True when a persisted schedule is EXACTLY the one the addon used to deliver.
+--- Only then may the timing migration replace it: a schedule produced by GIDEON out
+--- of game (see docs/INTERMISSION-COACH.md section 5) or adjusted by hand is never
+--- touched. Pure: no API, no clock.
+--- @param raw table|nil persisted scheduleSeconds
+--- @return boolean
+function Config.isPreviousDeliveredSchedule(raw)
+    if type(raw) ~= "table" or #raw ~= #Config.PREVIOUS_SCHEDULE_SECONDS then
+        return false
+    end
+    for index = 1, #Config.PREVIOUS_SCHEDULE_SECONDS do
+        if raw[index] ~= Config.PREVIOUS_SCHEDULE_SECONDS[index] then
+            return false
+        end
+    end
+    return true
 end
 
 --- Resolves the persisted language preference (GideonRaidDB.locale).

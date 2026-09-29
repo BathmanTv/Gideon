@@ -154,7 +154,7 @@ the panel**: it stays available on demand (`/gideon ping`, `/gideon inter status
 | c | pulls the boss | `ENCOUNTER_START` is the **starting gun of the pre-computed schedule**, but **only when the encounter is the configured target boss** (`/gideon boss <id>`; §2.8). The four event arguments are read **once, under `pcall`**, and only to compare the encounter id (and the optional name): they drive nothing else, and a value that cannot be read (a *secret* value in 12.x) is never a match. 1–2 s (**lead = 2 s by default**) before each intermission the panel **opens by itself** with the three choices, and the **intermission start sound** plays once (§2.7) |
 | d | clicks the composition seen above their head | state in very large type, role, `PING: YES/NO`, one action line. **The three composition buttons then disappear** — only the result and the **REDO** button stay, so a second click by accident is impossible; REDO brings the three choices back (empty state), as many times as needed |
 | e | — | at the end of the intermission the panel **closes by itself** |
-| f | next intermission | same cycle, **automatically** (schedule: 46.3 s, then 148.9 / 251.5 / 353.2 s after the pull) |
+| f | next intermission | same cycle, **automatically** (schedule: 46.3 s, then 150.2 / 255.7 / 357.3 s after the pull) |
 
 The schedule lives in `GideonRaidDB.intermission.scheduleSeconds` (sorted,
 bounded, 12 entries max) and can be replaced out of game. The state machine is
@@ -669,8 +669,8 @@ In `GideonRaidDB.intermission` (values resolved and clamped by
 | `scale` | `1.0` | panel scale (clamped 0.5 – 3.0) |
 | `leadSeconds` | `2` | the panel opens this many seconds BEFORE each intermission (clamped 0 – 10) |
 | `visibilitySeconds` | `3` | visibility window (clamped 1 – 10) |
-| `durationSeconds` | `20` | intermission duration, after which the panel closes itself (clamped, > visibility) |
-| `scheduleSeconds` | `{46.3, 148.9, 251.5, 353.2}` | **pre-computed intermission times**, in seconds since the pull (positive numbers only, sorted, 12 entries max) |
+| `durationSeconds` | `16` | on-screen time after the intermission starts, then the panel closes itself (clamped, > visibility) |
+| `scheduleSeconds` | `{46.3, 150.2, 255.7, 357.3}` | **pre-computed intermission times**, in seconds since the pull (positive numbers only, sorted, 12 entries max) |
 | `pingMode` | `"anchors"` | **ping policy**: `anchors` (only the `1V3R` anchors ping), `color` (every state pings its own ping), `none` (nobody pings) — see `/gideon ping`; an unknown value falls back to `"anchors"` |
 | `soundEnabled` | `true` | **soundboard preference**: `true` plays the sound of the declared composition and the intermission start sound once (see §2.7), `false` mutes both — see `/gideon sound on|off`; only an **exact `false`** mutes: an absent field (an older SavedVariables) or a hand-edited value falls back to the default |
 | `bossIds` | `{}` | **allow-list of encounter ids that may open the panel by itself** (`/gideon boss <id>`; §2.8). **EMPTY BY DEFAULT = NOTHING opens automatically** (safe default). Positive integers only, de-duplicated, sorted, 12 max |
@@ -972,10 +972,10 @@ they are kept here as a record and are no longer open questions.
    since patch 12.1** — does a ping stay visible on the frame long enough for a
    CHASER to run to it *after* the room darkens? See `docs/TESTPLAN.md` §3.5.
 3. **Exact intermission timings measured from `ENCOUNTER_START`**: the schedule
-   (46.3 s then 148.9 / 251.5 / 353.2 s) and the `leadSeconds = 2` are the raid
+   (46.3 s then 150.2 / 255.7 / 357.3 s) and the `leadSeconds = 2` are the raid
    lead's measurements; the diagnostic kit (`GideonDiagAddon`) records the
    decision timestamps, which is what validates or corrects them.
-4. **Real duration of an intermission** (`durationSeconds`, default 20 s): it
+4. **Real duration of an intermission** (`durationSeconds`, default 16 s): it
    decides when the panel closes by itself.
 5. The binding `GIDEONRAID_INTERMISSION` showing up in *Options > Keybindings*
    (an XML file cannot be tested outside the client) and the `header` behaviour.
@@ -1112,3 +1112,38 @@ they are kept here as a record and are no longer open questions.
       read *NOT playable [KO]* while the other three read *[OK]*, then restore the
       file and restart again. This is the only way to validate the negative case,
       and it costs one restart.
+
+## 10. Timing measured in game (source of the delivered schedule)
+
+Source: the raid lead's own log, report **JNTHdDVgwYK7XfAk** (34 pulls of Entombed
+Sentinels, 2026-09-26). Method: the intermission starts when **Helical Toxins
+(1284590)** lands on the raid, so the schedule is the timestamp of its first
+application on each pull, in seconds since `ENCOUNTER_START`.
+
+| Intermission | Median | Pulls | Min - Max | Spread |
+| --- | --- | --- | --- | --- |
+| 1 | **46.32 s** | 34 | 46.11 - 46.50 | 0.4 s |
+| 2 | **150.24 s** | 19 | 145.48 - 157.40 | 11.9 s |
+| 3 | **255.71 s** | 8 | 253.23 - 261.29 | 8.1 s |
+| 4 | **357.27 s** | 3 | 355.32 - 367.18 | 11.9 s |
+
+Length of an intermission (first application to the last one, i.e. until the raid
+has cleared its debuff): median **13.55 s**, 7.8 s to 28.2 s, over 64 occurrences.
+
+What those numbers decided:
+
+- the FIRST intermission is deterministic (0.4 s of spread): it is driven by the
+  boss, not by the raid. Every later one **drifts with the pace of the pull**
+  (+/-6 s on the second), and no addon may read the fight to correct itself in
+  12.x: the schedule therefore follows the MEDIAN, and the knob that trades
+  "never late" against "not too early" is `leadSeconds`;
+- the previous values (148.9 / 251.5 / 353.2 s) opened the panel **1.3 to 4.2 s too
+  early** from the second intermission on - the in-game report "the panel appears
+  at the wrong time";
+- `durationSeconds = 16` closes the panel 16 s after the intermission starts, about
+  2.5 s after the median intermission ends. It used to be 20 s, which left the
+  panel **6.5 s on screen after the mechanic** - the in-game report "it opens from
+  time to time during the fight".
+
+Re-measure after a balance patch or a big gear jump: same query
+(`ability.id = 1284590`, one fight per pull), new medians.

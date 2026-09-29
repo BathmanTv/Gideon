@@ -87,7 +87,7 @@ Intermission.SCHEMA_VERSION = 2
 Intermission.VISIBILITY_SECONDS = 3
 
 --- Default intermission duration when the prepared timeline does not provide one.
-Intermission.DEFAULT_DURATION_SECONDS = 20
+Intermission.DEFAULT_DURATION_SECONDS = 16
 
 --- How long the panel is shown BEFORE the intermission starts (lead time). The
 --- player reads the three choices and gets ready; the intermission clock itself
@@ -1215,8 +1215,9 @@ end
      `lead` seconds BEFORE each intermission of the schedule, close at the end of
      the intermission, and open again at the next one.
 
-     Timer values measured by the raid lead: 46.3 s for the first intermission,
-     then 148.9 / 251.5 / 353.2 s. They are PERSISTED (Config) and can be
+     Timer values measured on the raid lead's own log (medians over 34 pulls):
+     46.3 s for the first intermission, then 150.2 / 255.7 / 357.3 s. They are
+     PERSISTED (Config) and can be
      replaced out of game.
 ]]
 
